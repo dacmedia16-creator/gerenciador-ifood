@@ -193,6 +193,133 @@ export type Database = {
           },
         ]
       }
+      diagnosis_answers: {
+        Row: {
+          answer_type: string | null
+          answer_value: Json | null
+          created_at: string
+          id: string
+          question_key: string
+          session_id: string
+          step_key: string
+          store_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answer_type?: string | null
+          answer_value?: Json | null
+          created_at?: string
+          id?: string
+          question_key: string
+          session_id: string
+          step_key: string
+          store_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answer_type?: string | null
+          answer_value?: Json | null
+          created_at?: string
+          id?: string
+          question_key?: string
+          session_id?: string
+          step_key?: string
+          store_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnosis_answers_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "diagnosis_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      diagnosis_sessions: {
+        Row: {
+          completed_at: string | null
+          completion_percentage: number
+          created_at: string
+          current_step: number
+          generated_at: string | null
+          id: string
+          started_at: string
+          status: string
+          store_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completion_percentage?: number
+          created_at?: string
+          current_step?: number
+          generated_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          store_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completion_percentage?: number
+          created_at?: string
+          current_step?: number
+          generated_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          store_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      diagnosis_step_status: {
+        Row: {
+          completion_percentage: number
+          id: string
+          is_completed: boolean
+          missing_required_fields: Json
+          session_id: string
+          step_key: string
+          updated_at: string
+        }
+        Insert: {
+          completion_percentage?: number
+          id?: string
+          is_completed?: boolean
+          missing_required_fields?: Json
+          session_id: string
+          step_key: string
+          updated_at?: string
+        }
+        Update: {
+          completion_percentage?: number
+          id?: string
+          is_completed?: boolean
+          missing_required_fields?: Json
+          session_id?: string
+          step_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "diagnosis_step_status_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "diagnosis_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       diagnostics: {
         Row: {
           area: string
