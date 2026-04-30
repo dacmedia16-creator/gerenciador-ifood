@@ -159,6 +159,26 @@ export function runDiagnostics(input: {
     });
   }
 
+  // Competitividade de taxa de entrega
+  const competitorFees = competitors.map((c) => Number(c.delivery_fee)).filter((n) => !isNaN(n) && n > 0);
+  if (store.delivery_fee && competitorFees.length >= 2) {
+    const avgFee = competitorFees.reduce((a, b) => a + b, 0) / competitorFees.length;
+    if (Number(store.delivery_fee) > avgFee * 1.15) {
+      diags.push({
+        area: "Competitividade de taxa",
+        problem: `Taxa de entrega R$ ${store.delivery_fee} acima da média dos concorrentes (R$ ${avgFee.toFixed(2)})`,
+        evidence: `Sua taxa é ~${Math.round(((Number(store.delivery_fee) - avgFee) / avgFee) * 100)}% maior que a média do mercado`,
+        probable_cause: "Taxa fixa sem benchmark de mercado",
+        business_impact: "Cliente abandona checkout ao ver frete alto",
+        recommended_solution: "Reduzir taxa em pico ou oferecer frete grátis acima de um valor",
+        priority: "media",
+        practical_action: "Testar frete grátis acima de R$ 50 por 2 semanas",
+        suggested_deadline: "14 dias",
+        severity: "atencao",
+      });
+    }
+  }
+
   const negativeHits: Record<string, number> = {};
   reviews.forEach((r) => {
     const c = (r.comment || "").toLowerCase();
