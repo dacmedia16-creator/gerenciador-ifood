@@ -10,7 +10,19 @@ import { LoadingState } from "@/components/LoadingState";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-const STATUSES = ["pendente", "em andamento", "concluido"];
+// 5 status do ciclo de aprendizado (alinhados a record-feedback / recommendation_history).
+const STATUSES = ["pendente", "em_andamento", "aplicada", "ignorada", "rejeitada"] as const;
+const STATUS_LABEL: Record<string, string> = {
+  pendente: "Pendente",
+  em_andamento: "Em andamento",
+  aplicada: "Aplicada",
+  ignorada: "Ignorada",
+  rejeitada: "Rejeitada",
+  // legados das ações criadas antes da unificação
+  "em andamento": "Em andamento",
+  concluido: "Aplicada",
+};
+const TERMINAL = new Set(["aplicada", "ignorada", "rejeitada"]);
 
 export default function ActionPlan() {
   const { id } = useParams();
@@ -19,25 +31,37 @@ export default function ActionPlan() {
   const [outcomeFor, setOutcomeFor] = useState<any>(null);
   const [outcome, setOutcome] = useState<string>("positivo");
   const [comment, setComment] = useState("");
+  const [pendingStatus, setPendingStatus] = useState<string>("aplicada");
 
   const change = async (action: any, status: string) => {
+    // Atualiza a UI imediatamente
     const { error } = await supabase.from("action_plans").update({ status }).eq("id", action.id);
     if (error) return toast.error(error.message);
-    toast.success("Status atualizado");
-    if (status === "concluido") {
+
+    // Estados terminais → abre dialog para coletar feedback (e dispara record-feedback)
+    if (TERMINAL.has(status)) {
       setOutcomeFor(action);
-      setOutcome("positivo");
+      setPendingStatus(status);
+      setOutcome(status === "aplicada" ? "positivo" : status === "rejeitada" ? "negativo" : "inconclusivo");
       setComment("");
+    } else {
+      // em_andamento / pendente: só sincroniza status no histórico, sem outcome
+      const recId = action.recommendation_id ?? null;
+      if (recId) {
+        await supabase.functions.invoke("record-feedback", {
+          body: { recommendation_id: recId, status },
+        });
+      }
+      toast.success("Status atualizado");
     }
     reload();
   };
 
   const submitOutcome = async () => {
     if (!outcomeFor) return;
-    // FK direta — sem busca por título.
     let recommendation_id: string | null = outcomeFor.recommendation_id ?? null;
 
-    // Fallback para ações antigas sem FK: busca por título (legado).
+    // Fallback legado: ações antigas sem FK → busca por título.
     if (!recommendation_id) {
       const { data: rec } = await supabase
         .from("recommendation_history")
@@ -51,17 +75,30 @@ export default function ActionPlan() {
     }
 
     if (recommendation_id) {
+      // Mapeia escolha de outcome para o vocabulário do record-feedback.
+      const generated_result =
+        pendingStatus === "aplicada"
+          ? outcome === "positivo" ? "sim" : outcome === "negativo" ? "nao" : "nao_sei"
+          : null;
+      const rating =
+        pendingStatus === "rejeitada" ? "errada"
+          : pendingStatus === "ignorada" ? "nao_util"
+          : null;
+
       await supabase.functions.invoke("record-feedback", {
         body: {
           recommendation_id,
-          applied: true,
-          generated_result: outcome === "positivo" ? "sim" : outcome === "negativo" ? "nao" : "nao_sei",
+          status: pendingStatus,
+          applied: pendingStatus === "aplicada" ? true : pendingStatus === "ignorada" ? false : null,
+          generated_result,
+          rating,
+          outcome_explanation: comment || null,
           comment,
         },
       });
-      toast.success("Resultado registrado — a IA vai aprender com isso.");
+      toast.success("Feedback registrado — a IA vai aprender com isso.");
     } else {
-      toast.info("Concluído (sem recomendação IA vinculada)");
+      toast.info("Status atualizado (sem recomendação IA vinculada)");
     }
     setOutcomeFor(null);
   };
@@ -80,14 +117,14 @@ export default function ActionPlan() {
         <h1 className="text-2xl font-bold">Plano de ação</h1>
         <select className="border rounded-md px-3 py-2 bg-background text-sm" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="todos">Todos</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-3 text-sm">
+      <div className="grid md:grid-cols-5 gap-3 text-sm">
         {STATUSES.map((s) => {
           const count = (actions || []).filter((a: any) => a.status === s).length;
-          return <Card key={s} className="p-4 shadow-card text-center"><p className="text-2xl font-bold">{count}</p><p className="text-muted-foreground capitalize">{s}</p></Card>;
+          return <Card key={s} className="p-4 shadow-card text-center"><p className="text-2xl font-bold">{count}</p><p className="text-muted-foreground text-xs">{STATUS_LABEL[s]}</p></Card>;
         })}
       </div>
 
@@ -110,7 +147,7 @@ export default function ActionPlan() {
                 </div>
               </div>
               <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
             </div>
           </Card>
@@ -120,22 +157,39 @@ export default function ActionPlan() {
       <Dialog open={!!outcomeFor} onOpenChange={(o) => !o && setOutcomeFor(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Como foi o resultado?</DialogTitle>
+            <DialogTitle>
+              {pendingStatus === "aplicada" && "Como foi o resultado?"}
+              {pendingStatus === "ignorada" && "Por que ignorou?"}
+              {pendingStatus === "rejeitada" && "Por que rejeitou?"}
+            </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{outcomeFor?.title}</p>
-          <div className="flex gap-2 flex-wrap">
-            {[
-              { v: "positivo", l: "Funcionou bem" },
-              { v: "neutro", l: "Sem mudança clara" },
-              { v: "negativo", l: "Não funcionou" },
-              { v: "inconclusivo", l: "Ainda cedo" },
-            ].map((o) => (
-              <Button key={o.v} size="sm" variant={outcome === o.v ? "default" : "outline"} onClick={() => setOutcome(o.v)}>
-                {o.l}
-              </Button>
-            ))}
-          </div>
-          <Textarea placeholder="O que aconteceu? (opcional)" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+          {pendingStatus === "aplicada" && (
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { v: "positivo", l: "Funcionou bem" },
+                { v: "neutro", l: "Sem mudança clara" },
+                { v: "negativo", l: "Não funcionou" },
+                { v: "inconclusivo", l: "Ainda cedo" },
+              ].map((o) => (
+                <Button key={o.v} size="sm" variant={outcome === o.v ? "default" : "outline"} onClick={() => setOutcome(o.v)}>
+                  {o.l}
+                </Button>
+              ))}
+            </div>
+          )}
+          <Textarea
+            placeholder={
+              pendingStatus === "aplicada"
+                ? "Explique em poucas palavras o que aconteceu (opcional)"
+                : pendingStatus === "rejeitada"
+                ? "Por que essa recomendação não faz sentido para a sua loja?"
+                : "Por que decidiu não aplicar agora?"
+            }
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            rows={3}
+          />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOutcomeFor(null)}>Pular</Button>
             <Button onClick={submitOutcome}>Registrar</Button>
