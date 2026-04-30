@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { answersAsMap, loadSession } from "./session";
 import { rulesFromAnswers, buildSevenDayPlan } from "./rules";
+import { evidencesFromAnswers } from "./evidences";
 import { buildJourney } from "./journey";
 import { classifyConversion, computeConversion, conversionLabel } from "./conversion";
 
@@ -150,6 +151,9 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
       average_delivery_time: num(delivery.real_time) ?? num(front.promised_delivery_time),
     });
   }
+
+  // Evidências estruturadas (fonte da verdade objetiva, consumidas pela IA)
+  const ruleEvidences = evidencesFromAnswers(map);
 
   // Diagnósticos
   let diagnostics = rulesFromAnswers(map);
