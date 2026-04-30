@@ -530,6 +530,87 @@ export type Database = {
         }
         Relationships: []
       }
+      prospects: {
+        Row: {
+          category: string | null
+          city: string | null
+          contacted_at: string | null
+          created_at: string
+          delivery_fee: number | null
+          delivery_time: number | null
+          generic_names: boolean | null
+          has_combos: boolean | null
+          has_coupons: boolean | null
+          has_photos: boolean | null
+          id: string
+          main_gap: string | null
+          name: string
+          neighborhood: string | null
+          notes: string | null
+          platform: string | null
+          potential_level: string | null
+          potential_score: number | null
+          price_range: string | null
+          rating: number | null
+          reviews_count: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          city?: string | null
+          contacted_at?: string | null
+          created_at?: string
+          delivery_fee?: number | null
+          delivery_time?: number | null
+          generic_names?: boolean | null
+          has_combos?: boolean | null
+          has_coupons?: boolean | null
+          has_photos?: boolean | null
+          id?: string
+          main_gap?: string | null
+          name: string
+          neighborhood?: string | null
+          notes?: string | null
+          platform?: string | null
+          potential_level?: string | null
+          potential_score?: number | null
+          price_range?: string | null
+          rating?: number | null
+          reviews_count?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          city?: string | null
+          contacted_at?: string | null
+          created_at?: string
+          delivery_fee?: number | null
+          delivery_time?: number | null
+          generic_names?: boolean | null
+          has_combos?: boolean | null
+          has_coupons?: boolean | null
+          has_photos?: boolean | null
+          id?: string
+          main_gap?: string | null
+          name?: string
+          neighborhood?: string | null
+          notes?: string | null
+          platform?: string | null
+          potential_level?: string | null
+          potential_score?: number | null
+          price_range?: string | null
+          rating?: number | null
+          reviews_count?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       report_templates: {
         Row: {
           created_at: string

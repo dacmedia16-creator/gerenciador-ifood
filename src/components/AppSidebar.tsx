@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator,
+  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator, Target, Clock,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -14,6 +14,7 @@ const general = [
   { title: "Dashboard", url: "/app/dashboard", icon: LayoutDashboard },
   { title: "Novo Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
   { title: "Lojas", url: "/app/stores", icon: Store },
+  { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
 ];
 
 const storeAnalysis = (id: string) => [
@@ -34,6 +35,7 @@ const storeOperations = (id: string) => [
   { title: "Expectativa × Entrega", url: `/app/stores/${id}/expectation`, icon: Eye },
   { title: "Concorrentes", url: `/app/stores/${id}/competitors`, icon: Users },
   { title: "Campanhas", url: `/app/stores/${id}/campaigns`, icon: Megaphone },
+  { title: "Melhor horário", url: `/app/stores/${id}/best-hours`, icon: Clock },
   { title: "Métricas", url: `/app/stores/${id}/metrics`, icon: BarChart3 },
 ];
 

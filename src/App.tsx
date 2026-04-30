@@ -29,6 +29,8 @@ import ReportTemplate from "./pages/app/ReportTemplate";
 import ProductNameAnalyzer from "./pages/app/ProductNameAnalyzer";
 import ExpectationVsDelivery from "./pages/app/ExpectationVsDelivery";
 import PricingSimulator from "./pages/app/PricingSimulator";
+import Prospects from "./pages/app/Prospects";
+import BestHours from "./pages/app/BestHours";
 import Onboarding from "./pages/app/Onboarding";
 import NewDiagnosis from "./pages/app/diagnosis/NewDiagnosis";
 import DiagnosisWizard from "./pages/app/diagnosis/DiagnosisWizard";
@@ -76,6 +78,8 @@ const App = () => (
               <Route path="stores/:id/product-names" element={<ProductNameAnalyzer />} />
               <Route path="stores/:id/expectation" element={<ExpectationVsDelivery />} />
               <Route path="stores/:id/pricing-simulator" element={<PricingSimulator />} />
+              <Route path="stores/:id/best-hours" element={<BestHours />} />
+              <Route path="prospects" element={<Prospects />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
