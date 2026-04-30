@@ -1,5 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { evidencesFromStoreData, mergeEvidences, type RuleEvidence } from "../_shared/evidences.ts";
+import {
+  loadStoreMemory,
+  loadPastRecommendations,
+  buildSearchText,
+  findSimilarCases,
+  findKnowledgeSnippets,
+  buildMetricsSnapshot,
+} from "../_shared/memory.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,16 +21,25 @@ const SYSTEM_PROMPT = `Você é um GESTOR DE DELIVERY EXPERIENTE atuando como co
 REGRAS INVIOLÁVEIS:
 1. Você SÓ pode comentar, priorizar e expandir as evidências fornecidas em RULE_EVIDENCES.
 2. PROIBIDO inventar problema que não esteja em RULE_EVIDENCES (cada problema TEM que referenciar um rule_id existente).
-3. PROIBIDO inventar números, percentuais ou métricas. Use APENAS valores que aparecem em current_value, reference_value ou evidence_data das evidências.
+3. PROIBIDO inventar números, percentuais ou métricas. Use APENAS valores que aparecem em current_value, reference_value, evidence_data ou STORE_MEMORY.
 4. PROIBIDO prometer resultado garantido ("vai aumentar 30%", "garante mais vendas", etc).
-5. Em cada texto, marque claramente:
-   - [FATO] quando a afirmação vem direto de uma evidência
-   - [HIPÓTESE] quando você está interpretando ou inferindo
-   - [RECOMENDAÇÃO] quando está sugerindo ação
-6. Quando a evidência tiver confidence = "baixa" ou missing_data presente, deixe claro: "falta dado: ...".
-7. Linguagem SIMPLES para dono de restaurante. Sem jargão de marketing.
-8. RAW_CONTEXT existe APENAS para você escrever melhor — não gere problema novo a partir dele.
-9. Se RULE_EVIDENCES estiver vazio, devolva apenas executive_summary curto explicando que faltam dados, e popule missing_data_for_better_diagnosis. Não invente problemas.
+5. Em cada texto, marque claramente: [FATO] (vem de evidência/memória), [HIPÓTESE] (interpretação), [RECOMENDAÇÃO] (sugestão).
+6. Quando a evidência tiver confidence "baixa" ou missing_data presente, deixa claro: "falta dado: ...".
+7. Linguagem SIMPLES para dono de restaurante. Sem jargão.
+8. RAW_CONTEXT existe APENAS para você escrever melhor — NÃO gere problema novo a partir dele.
+
+REGRAS DE APRENDIZADO (memória, casos e conhecimento):
+9. Toda recomendação em main_problems DEVE declarar source:
+   - "evidence" → vem direto de RULE_EVIDENCES (source_ref = rule_id).
+   - "store_history" → vem de PAST_RECOMMENDATIONS desta loja (source_ref = recommendation_id).
+   - "similar_case" → vem de SIMILAR_CASES (source_ref = case_id).
+   - "knowledge_base" → vem de KNOWLEDGE_SNIPPETS (source_ref = kb_id).
+10. Quando uma recomendação aparece em PAST_RECOMMENDATIONS com status "ignorada" OU outcome "negativo", NÃO repita — a menos que haja fato novo nas evidências; nesse caso, explique qual é o fato novo.
+11. Quando uma recomendação anterior está "aplicada" + outcome "positivo", parabenize e proponha o PRÓXIMO passo, não repita.
+12. Use STORE_MEMORY.recurring_problems para diferenciar problema novo de recorrente. Se for recorrente, mencione há quanto tempo persiste.
+13. Quando usar SIMILAR_CASES, cite brevemente o caso ("Loja parecida fez X e teve resultado Y").
+14. Quando usar KNOWLEDGE_SNIPPETS, mencione o título do tópico ("Princípio de combos: ...").
+15. Se RULE_EVIDENCES vazio, devolva apenas executive_summary curto + missing_data_for_better_diagnosis. Não invente.
 
 Você responde SEMPRE chamando a função consultive_diagnosis com TODOS os campos preenchidos.`;
 
@@ -30,23 +47,26 @@ const TOOL_SCHEMA = {
   type: "function",
   function: {
     name: "consultive_diagnosis",
-    description: "Diagnóstico consultivo ancorado em evidências do motor de regras",
+    description: "Diagnóstico consultivo ancorado em evidências, memória, casos e conhecimento",
     parameters: {
       type: "object",
       properties: {
-        executive_summary: { type: "string", description: "Resumo executivo em 3-5 linhas, em linguagem simples" },
+        executive_summary: { type: "string" },
+        overall_score: { type: "number" },
         main_problems: {
           type: "array",
           items: {
             type: "object",
             properties: {
-              rule_id: { type: "string", description: "OBRIGATÓRIO: deve existir em RULE_EVIDENCES" },
+              rule_id: { type: "string" },
               title: { type: "string" },
-              why_it_matters: { type: "string", description: "Explicar com [FATO]/[HIPÓTESE]/[RECOMENDAÇÃO]" },
-              evidence_cited: { type: "string", description: "Citação curta do dado real (ex: 'Nota 4.2 vs 4.5 ideal')" },
+              why_it_matters: { type: "string" },
+              evidence_cited: { type: "string" },
               confidence: { type: "string", enum: ["alta", "media", "baixa"] },
+              source: { type: "string", enum: ["evidence", "store_history", "similar_case", "knowledge_base"] },
+              source_ref: { type: "string" },
             },
-            required: ["rule_id", "title", "why_it_matters", "evidence_cited", "confidence"],
+            required: ["rule_id", "title", "why_it_matters", "evidence_cited", "confidence", "source", "source_ref"],
             additionalProperties: false,
           },
         },
@@ -91,25 +111,34 @@ const TOOL_SCHEMA = {
             additionalProperties: false,
           },
         },
-        do_not_do_now: {
+        do_not_do_now: { type: "array", items: { type: "string" } },
+        avoided_repetitions: {
           type: "array",
-          items: { type: "string" },
-          description: "Lista do que NÃO fazer agora e por quê",
+          description: "Recomendações que NÃO foram repetidas porque já tinham sido ignoradas/falharam",
+          items: {
+            type: "object",
+            properties: {
+              recommendation_id: { type: "string" },
+              reason: { type: "string" },
+            },
+            required: ["recommendation_id", "reason"],
+            additionalProperties: false,
+          },
         },
         missing_data_for_better_diagnosis: { type: "array", items: { type: "string" } },
         disclaimers: { type: "array", items: { type: "string" } },
-        overall_score: { type: "number", description: "Score 0-100 baseado nas evidências" },
       },
       required: [
         "executive_summary",
+        "overall_score",
         "main_problems",
         "priority_ranking",
         "plan_7_days",
         "plan_30_days",
         "do_not_do_now",
+        "avoided_repetitions",
         "missing_data_for_better_diagnosis",
         "disclaimers",
-        "overall_score",
       ],
       additionalProperties: false,
     },
@@ -123,8 +152,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -138,8 +166,7 @@ Deno.serve(async (req) => {
     const { data: claims, error: claimsErr } = await supabase.auth.getClaims(token);
     if (claimsErr || !claims?.claims) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -148,8 +175,7 @@ Deno.serve(async (req) => {
     const model: string = body?.model ?? "google/gemini-2.5-pro";
     if (!storeId) {
       return new Response(JSON.stringify({ error: "storeId é obrigatório" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -164,12 +190,11 @@ Deno.serve(async (req) => {
 
     if (storeR.error || !storeR.data) {
       return new Response(JSON.stringify({ error: "Loja não encontrada" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 1) Evidências calculadas a partir do banco
+    // ===== Camada 1: evidências (motor de regras) =====
     const storeEvidences = evidencesFromStoreData({
       store: storeR.data,
       metrics: metricsR.data ?? [],
@@ -177,13 +202,27 @@ Deno.serve(async (req) => {
       reviews: reviewsR.data ?? [],
       competitors: competitorsR.data ?? [],
     });
-
-    // 2) Evidências do funil (relatório mais recente)
     const funnelEvidences: RuleEvidence[] = (reportR.data?.report_data as any)?.rule_evidences ?? [];
-
-    // 3) Merge — funil tem prioridade
     const ruleEvidences = mergeEvidences(funnelEvidences, storeEvidences);
     const validRuleIds = new Set(ruleEvidences.map((e) => e.rule_id));
+
+    // ===== Camada 2: memória da loja =====
+    const storeMemory = await loadStoreMemory(supabase, storeId);
+    const pastRecs = await loadPastRecommendations(supabase, storeId, 90);
+    const validRecIds = new Set(pastRecs.map((r) => r.id));
+
+    // ===== Camada 3: RAG (casos e conhecimento) =====
+    const searchText = buildSearchText(ruleEvidences);
+    const areas = Array.from(new Set(ruleEvidences.map((e) => e.area)));
+    const [similarCases, kbSnippets] = await Promise.all([
+      findSimilarCases(supabase, searchText, 3),
+      findKnowledgeSnippets(supabase, searchText, areas.length ? areas : null, 5),
+    ]);
+    const validCaseIds = new Set(similarCases.map((c: any) => c.id));
+    const validKbIds = new Set(kbSnippets.map((k: any) => k.id));
+
+    // ===== Snapshot de métricas para gravar como "antes" =====
+    const metricsSnapshot = buildMetricsSnapshot(storeR.data, metricsR.data?.[0]);
 
     const rawContext = {
       loja: {
@@ -200,38 +239,43 @@ Deno.serve(async (req) => {
         cancellation_rate: storeR.data.cancellation_rate,
       },
       produtos_amostra: (productsR.data ?? []).slice(0, 10).map((p: any) => ({
-        name: p.name,
-        sale_price: p.sale_price,
-        margin: p.estimated_margin,
-        sales: p.sales_quantity,
-        has_photo: p.has_photo,
+        name: p.name, sale_price: p.sale_price, margin: p.estimated_margin,
+        sales: p.sales_quantity, has_photo: p.has_photo,
       })),
       avaliacoes_amostra: (reviewsR.data ?? []).slice(0, 10),
       concorrentes: (competitorsR.data ?? []).slice(0, 5),
     };
 
-    const userPrompt = `RULE_EVIDENCES (fonte da verdade — só comente o que estiver aqui):
+    const userPrompt = `RULE_EVIDENCES (fonte da verdade objetiva):
 ${JSON.stringify(ruleEvidences, null, 2)}
 
-RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo a partir daqui):
+STORE_MEMORY (perfil + recorrência + métricas 7/14/30d):
+${JSON.stringify(storeMemory ?? { aviso: "memória vazia — primeira análise" }, null, 2)}
+
+PAST_RECOMMENDATIONS (últimos 90 dias com status e outcome):
+${JSON.stringify(pastRecs, null, 2)}
+
+SIMILAR_CASES (top ${similarCases.length} de lojas parecidas):
+${JSON.stringify(similarCases, null, 2)}
+
+KNOWLEDGE_SNIPPETS (top ${kbSnippets.length} da base de conhecimento):
+${JSON.stringify(kbSnippets, null, 2)}
+
+RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo daqui):
 ${JSON.stringify(rawContext, null, 2)}
 
-Devolva o diagnóstico consultivo via tool calling.`;
+Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em cada main_problem.`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY não configurada" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
         messages: [
@@ -244,67 +288,61 @@ Devolva o diagnóstico consultivo via tool calling.`;
     });
 
     if (!aiRes.ok) {
-      if (aiRes.status === 429) {
-        return new Response(JSON.stringify({ error: "Muitas requisições à IA. Tente novamente em alguns minutos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (aiRes.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos na sua workspace." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      if (aiRes.status === 429) return new Response(JSON.stringify({ error: "Muitas requisições à IA. Tente novamente em alguns minutos." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (aiRes.status === 402) return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos na sua workspace." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const t = await aiRes.text();
       console.error("AI gateway error", aiRes.status, t);
-      return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const aiJson = await aiRes.json();
     const toolCall = aiJson?.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall?.function?.arguments) {
       console.error("No tool call", JSON.stringify(aiJson));
-      return new Response(JSON.stringify({ error: "IA não retornou diagnóstico estruturado" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({ error: "IA não retornou diagnóstico estruturado" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     let diagnosis: any;
-    try {
-      diagnosis = JSON.parse(toolCall.function.arguments);
-    } catch (e) {
-      console.error("parse error", e);
-      return new Response(JSON.stringify({ error: "Resposta da IA inválida" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    try { diagnosis = JSON.parse(toolCall.function.arguments); }
+    catch (e) { console.error("parse error", e); return new Response(JSON.stringify({ error: "Resposta da IA inválida" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
 
-    // ===== Validação anti-alucinação =====
+    // ===== Validação anti-alucinação estendida =====
     const before = {
       problems: diagnosis.main_problems?.length ?? 0,
       ranking: diagnosis.priority_ranking?.length ?? 0,
       plan7: diagnosis.plan_7_days?.length ?? 0,
       plan30: diagnosis.plan_30_days?.length ?? 0,
+      avoided: diagnosis.avoided_repetitions?.length ?? 0,
     };
-    diagnosis.main_problems = (diagnosis.main_problems ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
+
+    const isValidSource = (p: any) => {
+      if (!validRuleIds.has(p.rule_id)) return false;
+      if (p.source === "store_history" && !validRecIds.has(p.source_ref)) return false;
+      if (p.source === "similar_case" && !validCaseIds.has(p.source_ref)) return false;
+      if (p.source === "knowledge_base" && !validKbIds.has(p.source_ref)) return false;
+      // source = "evidence" → source_ref deve ser o próprio rule_id
+      if (p.source === "evidence" && p.source_ref !== p.rule_id) {
+        // tolerar — apenas normaliza
+        p.source_ref = p.rule_id;
+      }
+      return true;
+    };
+
+    diagnosis.main_problems = (diagnosis.main_problems ?? []).filter(isValidSource);
     diagnosis.priority_ranking = (diagnosis.priority_ranking ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
     diagnosis.plan_7_days = (diagnosis.plan_7_days ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
     diagnosis.plan_30_days = (diagnosis.plan_30_days ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
+    diagnosis.avoided_repetitions = (diagnosis.avoided_repetitions ?? []).filter((a: any) => validRecIds.has(a.recommendation_id));
 
     const dropped = {
       problems: before.problems - diagnosis.main_problems.length,
       ranking: before.ranking - diagnosis.priority_ranking.length,
       plan7: before.plan7 - diagnosis.plan_7_days.length,
       plan30: before.plan30 - diagnosis.plan_30_days.length,
+      avoided: before.avoided - diagnosis.avoided_repetitions.length,
     };
-    if (dropped.problems || dropped.ranking || dropped.plan7 || dropped.plan30) {
-      console.warn("Itens descartados por rule_id inválido", dropped);
+    if (Object.values(dropped).some((n) => n > 0)) {
+      console.warn("Itens descartados por referência inválida", dropped);
     }
 
     const enriched = {
@@ -312,9 +350,12 @@ Devolva o diagnóstico consultivo via tool calling.`;
       generated_at: new Date().toISOString(),
       model,
       rule_evidences_used: ruleEvidences,
+      similar_cases_used: similarCases,
+      knowledge_snippets_used: kbSnippets,
       validation: { dropped },
     };
 
+    // ===== Persistência =====
     const baseData = (reportR.data?.report_data as any) ?? {};
     const merged = { ...baseData, ai_consult: enriched };
 
@@ -326,14 +367,59 @@ Devolva o diagnóstico consultivo via tool calling.`;
       report_data: merged,
     }).select("id").single();
 
-    return new Response(JSON.stringify({ diagnosis: enriched, report_id: inserted?.id }), {
+    const newReportId = inserted?.id ?? null;
+
+    // Grava cada main_problem em recommendation_history
+    if (diagnosis.main_problems?.length) {
+      const rows = diagnosis.main_problems.map((p: any) => ({
+        store_id: storeId,
+        report_id: newReportId,
+        rule_id: p.rule_id,
+        recommendation: p.title,
+        expected_impact: p.why_it_matters?.slice(0, 500),
+        source: p.source,
+        source_ref: p.source_ref,
+        status: "pendente",
+        metrics_before: metricsSnapshot,
+      }));
+      const { error: rhErr } = await supabase.from("recommendation_history").insert(rows);
+      if (rhErr) console.warn("rec_history insert failed", rhErr);
+    }
+
+    // Grava 1 training_example via service role (RLS bloqueia usuário)
+    try {
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      await adminClient.from("training_examples").insert({
+        store_id: storeId,
+        report_id: newReportId,
+        input_payload: {
+          rule_evidences: ruleEvidences,
+          store_memory: storeMemory,
+          past_recommendations_count: pastRecs.length,
+          similar_cases_count: similarCases.length,
+          knowledge_snippets_count: kbSnippets.length,
+        },
+        ai_response: diagnosis,
+      });
+
+      // Dispara update-store-memory em background
+      adminClient.functions.invoke("update-store-memory", { body: { storeId } }).catch((e) => {
+        console.warn("update-store-memory invoke failed", e);
+      });
+    } catch (e) {
+      console.warn("training_examples / memory update failed", e);
+    }
+
+    return new Response(JSON.stringify({ diagnosis: enriched, report_id: newReportId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("ai-consult error", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
