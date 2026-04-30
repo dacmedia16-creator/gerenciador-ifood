@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { answersAsMap, loadSession } from "./session";
-import { rulesFromAnswers } from "./rules";
+import { rulesFromAnswers, buildSevenDayPlan } from "./rules";
+import { buildJourney } from "./journey";
+import { classifyConversion, computeConversion, conversionLabel } from "./conversion";
 
 const yes = (v: any) => v === true || v === "sim" || v === "yes";
 const num = (v: any) => {

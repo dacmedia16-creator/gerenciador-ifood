@@ -1,4 +1,5 @@
 import type { Diagnostic } from "@/lib/diagnostics/engine";
+import { classifyConversion, computeConversion } from "./conversion";
 
 type AnswersByStep = Record<string, Record<string, any>>;
 
@@ -7,8 +8,8 @@ const num = (v: any): number | null => {
   const n = Number(v);
   return isNaN(n) ? null : n;
 };
-
 const yes = (v: any) => v === true || v === "sim" || v === "yes";
+const wordsCount = (s?: string) => (s || "").trim().split(/\s+/).filter(Boolean).length;
 
 export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
   const diags: Diagnostic[] = [];
@@ -23,7 +24,9 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
   const competitors: any[] = answers.competitors?.items || [];
   const loyalty = answers.loyalty || {};
   const ads = answers.ads || {};
+  const conversion = answers.conversion || {};
 
+  // === Reputação ===
   const rating = num(front.rating) ?? num(reviews.avg_rating);
   if (rating != null && rating < 4.5) {
     diags.push({
@@ -40,12 +43,29 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
+  const reviewsCount = num(front.reviews_count);
+  if (reviewsCount != null && reviewsCount < 150) {
+    diags.push({
+      area: "Reputação / Volume social",
+      problem: `Apenas ${reviewsCount} avaliações — baixo volume aparente`,
+      evidence: `<150 avaliações reduz prova social e ranking`,
+      probable_cause: "Falta de pedido ativo de avaliação após entrega",
+      business_impact: "Cliente novo desconfia e algoritmo não impulsiona",
+      recommended_solution: "Inserir mensagem na embalagem pedindo avaliação + cupom de retorno",
+      priority: "media",
+      practical_action: "Adicionar adesivo/card 'Avalie a gente no iFood'",
+      suggested_deadline: "15 dias",
+      severity: "atencao",
+    });
+  }
+
+  // === Tempo de entrega ===
   const promised = num(front.promised_delivery_time) ?? num(delivery.promised_time);
-  if (promised != null && promised > 45) {
+  if (promised != null && promised > 35) {
     diags.push({
       area: "Tempo de entrega",
       problem: `Tempo prometido alto: ${promised} min`,
-      evidence: `Promessa de ${promised}min vs. ideal <40min`,
+      evidence: `Promessa de ${promised}min vs. ideal ≤35min em raio próximo`,
       probable_cause: "Operação interna lenta ou raio muito grande",
       business_impact: "Cliente desiste no checkout em favor de concorrente mais rápido",
       recommended_solution: "Reduzir raio, otimizar produção e separar pedidos por horário de pico",
@@ -56,6 +76,7 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
+  // === Cancelamentos ===
   const cancelRate = num(delivery.cancellation_rate);
   if (cancelRate != null && cancelRate > 5) {
     diags.push({
@@ -72,7 +93,60 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
-  // Margem dos produtos cadastrados
+  // === Conversão ===
+  const visits = num(conversion.visits);
+  const orders = num(conversion.orders);
+  const convRate = num(conversion.conversion_rate) ?? computeConversion(visits, orders);
+  const convLevel = classifyConversion(convRate);
+  if (convLevel === "critico") {
+    diags.push({
+      area: "Conversão",
+      problem: `Conversão crítica: ${convRate}% (<7%)`,
+      evidence: `${visits ?? "?"} visitas → ${orders ?? "?"} pedidos`,
+      probable_cause: "Vitrine, fotos, preço ou taxa de entrega afastando o cliente",
+      business_impact: "Loja recebe tráfego, mas perde quase todos antes do pedido",
+      recommended_solution: "Revisar capa, top fotos, combo no topo, cupom de 1ª compra e taxa de entrega",
+      priority: "alta",
+      practical_action: "Testar combo principal no topo + cupom 1ª compra por 14 dias",
+      suggested_deadline: "14 dias",
+      severity: "critico",
+    });
+  } else if (convLevel === "atencao") {
+    diags.push({
+      area: "Conversão",
+      problem: `Conversão abaixo do ideal: ${convRate}% (7–11,9%)`,
+      evidence: `${visits ?? "?"} visitas → ${orders ?? "?"} pedidos`,
+      probable_cause: "Cardápio sem combos atrativos ou nomes/descrições fracas",
+      business_impact: "Margem de melhoria grande — pequenos ajustes geram +30% pedidos",
+      recommended_solution: "Reescrever nomes dos top 5 e criar 2 combos com cross-sell",
+      priority: "media",
+      practical_action: "Ajustar nomes + descrições + 2 combos novos",
+      suggested_deadline: "21 dias",
+      severity: "atencao",
+    });
+  }
+
+  // === Produtos sem foto (>30%) ===
+  const noPhotoMenu = num(menu.without_photo);
+  const totalMenu = num(menu.products_total) ?? products.length;
+  const noPhotoProd = products.filter((p) => p.has_photo === false || p.has_photo === "nao").length;
+  const noPhoto = (noPhotoMenu ?? 0) + noPhotoProd;
+  if (totalMenu && noPhoto / totalMenu > 0.3) {
+    diags.push({
+      area: "Cardápio / Fotos",
+      problem: `${noPhoto} produtos sem foto (${Math.round((noPhoto / totalMenu) * 100)}%)`,
+      evidence: `Mais de 30% do cardápio sem imagem`,
+      probable_cause: "Cardápio incompleto ou desatualizado",
+      business_impact: "Reduz conversão em até 30% — cliente não compra o que não vê",
+      recommended_solution: "Fotografar todos os produtos com fundo neutro e boa iluminação",
+      priority: "alta",
+      practical_action: "Sessão de fotos em lote dos 10 mais vendidos",
+      suggested_deadline: "15 dias",
+      severity: "atencao",
+    });
+  }
+
+  // === Margem média ===
   const margins = products
     .map((p) => {
       const sale = num(p.sale_price);
@@ -100,27 +174,67 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
-  // Fotos
-  const noPhotoMenu = num(menu.without_photo);
-  const totalMenu = num(menu.products_total) ?? products.length;
-  const noPhotoProd = products.filter((p) => p.has_photo === false || p.has_photo === "nao").length;
-  const noPhoto = (noPhotoMenu ?? 0) + noPhotoProd;
-  if (totalMenu && noPhoto / totalMenu > 0.4) {
+  // === Top vendas com baixa margem (<20%) ===
+  const topSold = [...products]
+    .filter((p) => num(p.sales_quantity) != null && Number(p.sales_quantity) > 0)
+    .sort((a, b) => Number(b.sales_quantity) - Number(a.sales_quantity))
+    .slice(0, 3);
+  const lowMarginAlert = topSold.some((p) => {
+    const sale = num(p.sale_price);
+    if (!sale) return false;
+    const cost = (num(p.food_cost) ?? 0) + (num(p.packaging_cost) ?? 0) + (sale * (num(p.platform_fee_percent) ?? 0)) / 100;
+    return (sale - cost) / sale < 0.2;
+  });
+  if (lowMarginAlert) {
     diags.push({
-      area: "Cardápio / Fotos",
-      problem: `${noPhoto} produtos sem foto (${Math.round((noPhoto / totalMenu) * 100)}%)`,
-      evidence: `Mais de 40% do cardápio sem imagem`,
-      probable_cause: "Cardápio incompleto ou desatualizado",
-      business_impact: "Reduz conversão em até 30% — cliente não compra o que não vê",
-      recommended_solution: "Fotografar todos os produtos com fundo neutro e boa iluminação",
+      area: "Lucro vs. volume",
+      problem: "Produto campeão de venda com margem abaixo de 20%",
+      evidence: `Top ${topSold.length} mais vendidos analisados`,
+      probable_cause: "Precificação não acompanhou custos ou taxa da plataforma",
+      business_impact: "Quanto mais vende, menos lucra — armadilha de volume",
+      recommended_solution: "Reprecificar top vendidos ou trocar por combos com maior margem",
       priority: "alta",
-      practical_action: "Sessão de fotos em lote dos 10 mais vendidos",
-      suggested_deadline: "15 dias",
+      practical_action: "Subir preço do top 1 em 8% e medir impacto na demanda",
+      suggested_deadline: "14 dias",
+      severity: "critico",
+    });
+  }
+
+  // === Nome de produto genérico (<3 palavras) ===
+  const genericNames = products.filter((p) => p.name && wordsCount(p.name) < 3);
+  if (genericNames.length) {
+    diags.push({
+      area: "SEO interno do cardápio",
+      problem: `${genericNames.length} produto(s) com nome genérico (<3 palavras)`,
+      evidence: genericNames.slice(0, 3).map((p) => `"${p.name}"`).join(", "),
+      probable_cause: "Nome curto não comunica ingrediente, diferencial nem palavra-chave",
+      business_impact: "Pior posicionamento na busca interna e menor clique",
+      recommended_solution: "Reescrever no formato: Categoria + Ingrediente principal + Diferencial",
+      priority: "media",
+      practical_action: "Use o Analisador de Nome de Produto para gerar sugestões com IA",
+      suggested_deadline: "10 dias",
       severity: "atencao",
     });
   }
 
-  // Ticket médio sem combos
+  // === Descrição fraca (<80 chars) ===
+  const weakDesc = products.filter((p) => p.notes && String(p.notes).length > 0 && String(p.notes).length < 80);
+  if (weakDesc.length) {
+    diags.push({
+      area: "Descrição de produtos",
+      problem: `${weakDesc.length} produto(s) com descrição fraca (<80 caracteres)`,
+      evidence: "Descrições curtas reduzem conversão na tela do produto",
+      probable_cause: "Falta de detalhe sobre ingredientes, porção e diferencial",
+      business_impact: "Cliente abre, lê, fecha — sem adicionar ao carrinho",
+      recommended_solution: "Reescrever descrições com 80–200 caracteres incluindo ingrediente, porção e por que vale a pena",
+      priority: "media",
+      practical_action: "Reescrever os top 5 produtos primeiro",
+      suggested_deadline: "14 dias",
+      severity: "atencao",
+    });
+  }
+
+  // === Ticket médio sem combos ===
   const ticket = num(basic.average_ticket);
   if (ticket != null && ticket < 35 && !yes(menu.has_combos) && !yes(combos.combo_drink)) {
     diags.push({
@@ -137,7 +251,7 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
-  // Recompra
+  // === Recompra ===
   const noRebuy = !yes(loyalty.rebuy_strategy) && !yes(loyalty.next_purchase_coupon) && !yes(loyalty.loyalty_card);
   if (noRebuy) {
     diags.push({
@@ -154,24 +268,24 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
-  // ROI campanhas
+  // === Campanha com ROI negativo ===
   const roi = num(ads.ad_roi);
   if (yes(ads.advertises) && roi != null && roi < 1) {
     diags.push({
       area: "Anúncios e campanhas",
-      problem: `Anúncios com ROI negativo (${roi}x)`,
+      problem: `Campanha com ROI negativo (${roi}x) — promoção queima dinheiro`,
       evidence: "Investimento maior que retorno declarado",
-      probable_cause: "Segmentação ruim ou cupom muito agressivo",
+      probable_cause: "Segmentação ruim, cupom muito agressivo ou margem do produto baixa",
       business_impact: "Queima margem sem trazer cliente novo",
-      recommended_solution: "Pausar campanha atual e refazer mira",
-      priority: "media",
-      practical_action: "Encerrar e testar nova com público específico",
+      recommended_solution: "Pausar campanha atual, refazer mira e usar produto com margem ≥30%",
+      priority: "alta",
+      practical_action: "Encerrar campanha e testar nova com público novo + produto âncora rentável",
       suggested_deadline: "7 dias",
-      severity: "atencao",
+      severity: "critico",
     });
   }
 
-  // Concorrência
+  // === Concorrência ===
   const myFee = num(front.delivery_fee);
   const myTime = num(front.promised_delivery_time);
   const fasterCount = competitors.filter((c) => num(c.delivery_time) != null && myTime != null && Number(c.delivery_time) < myTime).length;
@@ -191,14 +305,40 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
-  // Reviews — keywords
-  const reviewText = (reviews.real_reviews || "") + " " + (reviews.main_complaints || "");
-  const lower = reviewText.toLowerCase();
+  // === Reviews — comida fria, foto enganosa ===
+  const reviewText = ((reviews.real_reviews || "") + " " + (reviews.main_complaints || "")).toLowerCase();
+  if (yes(reviews.complaint_cold) || reviewText.includes("frio") || reviewText.includes("comida fria")) {
+    diags.push({
+      area: "Embalagem e logística",
+      problem: "Reclamações de comida fria",
+      evidence: "Padrão detectado nas avaliações ou marcação direta",
+      probable_cause: "Embalagem inadequada, tempo de espera do entregador ou raio grande",
+      business_impact: "Cliente não recompra e ainda baixa a nota da loja",
+      recommended_solution: "Trocar embalagem por térmica + revisar tempo de preparo + reduzir raio nos picos",
+      priority: "alta",
+      practical_action: "Testar saco térmico e medir reclamações por 14 dias",
+      suggested_deadline: "21 dias",
+      severity: "critico",
+    });
+  }
+  if (reviewText.includes("foto enganosa") || reviewText.includes("não parece") || reviewText.includes("nao parece") || reviewText.includes("veio diferente") || reviewText.includes("porção pequena") || reviewText.includes("porcao pequena")) {
+    diags.push({
+      area: "Expectativa vs entrega",
+      problem: "Risco alto de baixa recompra: foto promete mais do que entrega",
+      evidence: "Reviews mencionam 'foto enganosa', 'veio diferente' ou 'porção pequena'",
+      probable_cause: "Fotos antigas, embalagem que deforma ou porção menor que o ilustrado",
+      business_impact: "Recompra próxima de zero + reclamações públicas",
+      recommended_solution: "Refotografar com a porção real e adicionar peso/quantidade na descrição",
+      priority: "alta",
+      practical_action: "Revisar top 5 fotos esta semana e atualizar descrições",
+      suggested_deadline: "10 dias",
+      severity: "critico",
+    });
+  }
   const hits: string[] = [];
-  if (yes(reviews.complaint_late) || lower.includes("atras")) hits.push("atraso");
-  if (yes(reviews.complaint_cold) || lower.includes("frio")) hits.push("comida fria");
-  if (yes(reviews.complaint_packaging) || lower.includes("embalagem")) hits.push("embalagem");
-  if (yes(reviews.complaint_wrong) || lower.includes("errado")) hits.push("pedido errado");
+  if (yes(reviews.complaint_late) || reviewText.includes("atras")) hits.push("atraso");
+  if (yes(reviews.complaint_wrong) || reviewText.includes("errado")) hits.push("pedido errado");
+  if (yes(reviews.complaint_packaging) || reviewText.includes("embalagem")) hits.push("embalagem");
   if (hits.length) {
     diags.push({
       area: "Experiência do cliente",
@@ -214,27 +354,20 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
-  // Top vendas com baixa margem
-  const lowMarginTop = products.filter((p) => num(p.sales_quantity) != null && Number(p.sales_quantity) > 0).slice().sort((a, b) => Number(b.sales_quantity) - Number(a.sales_quantity)).slice(0, 3);
-  const lowMarginAlert = lowMarginTop.some((p, i) => {
-    const sale = num(p.sale_price);
-    const cost = (num(p.food_cost) ?? 0) + (num(p.packaging_cost) ?? 0) + (sale ? (sale * (num(p.platform_fee_percent) ?? 0)) / 100 : 0);
-    return sale && (sale - cost) / sale < 0.2;
-  });
-  if (lowMarginAlert) {
-    diags.push({
-      area: "Lucro vs. volume",
-      problem: "Produtos campeões de venda têm margem abaixo de 20%",
-      evidence: "Top 3 mais vendidos analisados",
-      probable_cause: "Precificação não acompanhou custos ou taxa da plataforma",
-      business_impact: "Quanto mais vende, menos lucra — armadilha de volume",
-      recommended_solution: "Reprecificar top vendidos ou trocar por combos com maior margem",
-      priority: "alta",
-      practical_action: "Subir preço do top 1 em 8% e medir impacto na demanda",
-      suggested_deadline: "14 dias",
-      severity: "critico",
-    });
-  }
-
   return diags;
+}
+
+// Constrói o plano de 7 dias a partir dos diagnósticos priorizando críticos.
+export function buildSevenDayPlan(diagnostics: Diagnostic[]): { day: number; title: string; action: string; area: string }[] {
+  const sorted = [...diagnostics].sort((a, b) => {
+    const sev = (s: string) => (s === "critico" ? 0 : s === "atencao" ? 1 : 2);
+    return sev(a.severity) - sev(b.severity);
+  });
+  const top = sorted.slice(0, 7);
+  return top.map((d, i) => ({
+    day: i + 1,
+    title: d.recommended_solution.slice(0, 80),
+    action: d.practical_action,
+    area: d.area,
+  }));
 }
