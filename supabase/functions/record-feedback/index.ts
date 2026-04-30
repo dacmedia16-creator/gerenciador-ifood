@@ -4,6 +4,7 @@ import { buildCorsHeaders } from "../_shared/cors.ts";
 
 const RATINGS = new Set(["util","nao_util","errada","falta_contexto","dificil_executar"]);
 const RESULTS = new Set(["sim","nao","nao_sei"]);
+const STATUSES = new Set(["pendente","em_andamento","aplicada","ignorada","rejeitada"]);
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -40,6 +41,8 @@ Deno.serve(async (req) => {
     const applied: boolean | null = typeof body?.applied === "boolean" ? body.applied : null;
     const generated_result: string | null = body?.generated_result ?? null;
     const comment: string | null = body?.comment ?? null;
+    const status: string | null = body?.status ?? null;
+    const outcome_explanation: string | null = body?.outcome_explanation ?? null;
 
     if (rating && !RATINGS.has(rating)) {
       return new Response(JSON.stringify({ error: "rating inválido" }), {
@@ -51,21 +54,37 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (status && !STATUSES.has(status)) {
+      return new Response(JSON.stringify({ error: "status inválido" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    // Insere feedback
+    // Insere feedback bruto (uma linha por interação)
     const { error: fbErr } = await supabase.from("recommendation_feedback").insert({
-      recommendation_id, user_id: userId, rating, applied, generated_result, comment,
+      recommendation_id, user_id: userId, rating, applied, generated_result,
+      comment: outcome_explanation ? `${comment ?? ""}${comment ? " | " : ""}explicação: ${outcome_explanation}` : comment,
     });
     if (fbErr) throw fbErr;
 
-    // Atualiza status/outcome no histórico
+    // Atualiza status/outcome no histórico (status explícito tem prioridade)
     const update: any = {};
-    if (applied === true) { update.status = "aplicada"; update.applied_at = new Date().toISOString(); }
-    else if (applied === false && rating === "nao_util") update.status = "ignorada";
+    if (status) {
+      update.status = status;
+      if (status === "aplicada") update.applied_at = new Date().toISOString();
+    } else if (applied === true) {
+      update.status = "aplicada";
+      update.applied_at = new Date().toISOString();
+    } else if (applied === false && rating === "nao_util") {
+      update.status = "ignorada";
+    }
 
     if (generated_result === "sim") update.outcome = "positivo";
     else if (generated_result === "nao") update.outcome = "negativo";
     else if (rating === "errada") update.outcome = "negativo";
+
+    // Se rejeitada, marca outcome como negativo (usuário disse que não faz sentido)
+    if (status === "rejeitada" && !update.outcome) update.outcome = "negativo";
 
     if (Object.keys(update).length > 0) {
       update.outcome_measured_at = new Date().toISOString();
