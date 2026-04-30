@@ -8,6 +8,7 @@ import {
   findKnowledgeSnippets,
   buildMetricsSnapshot,
 } from "../_shared/memory.ts";
+import { applyDiagnosisValidation } from "../_shared/validate-diagnosis.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
