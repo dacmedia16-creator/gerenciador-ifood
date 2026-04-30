@@ -46,7 +46,7 @@ const Index = () => {
             <a href="#como-funciona" className="hover:text-white transition">Como funciona</a>
             <a href="#o-que-analisamos" className="hover:text-white transition">O que analisamos</a>
             <a href="#para-quem" className="hover:text-white transition">Para quem é</a>
-            <a href={CTA_PRIMARY} className="hover:text-white transition">Falar com especialista</a>
+            <Link to="/contato" className="hover:text-white transition">Contato</Link>
           </nav>
 
           <Button
