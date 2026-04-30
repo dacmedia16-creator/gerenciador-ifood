@@ -26,6 +26,9 @@ import Uploads from "./pages/app/Uploads";
 import ActionPlan from "./pages/app/ActionPlan";
 import Report from "./pages/app/Report";
 import ReportTemplate from "./pages/app/ReportTemplate";
+import ProductNameAnalyzer from "./pages/app/ProductNameAnalyzer";
+import ExpectationVsDelivery from "./pages/app/ExpectationVsDelivery";
+import PricingSimulator from "./pages/app/PricingSimulator";
 import Onboarding from "./pages/app/Onboarding";
 import NewDiagnosis from "./pages/app/diagnosis/NewDiagnosis";
 import DiagnosisWizard from "./pages/app/diagnosis/DiagnosisWizard";
@@ -70,6 +73,9 @@ const App = () => (
               <Route path="stores/:id/action-plan" element={<ActionPlan />} />
               <Route path="stores/:id/report" element={<Report />} />
               <Route path="stores/:id/report/template" element={<ReportTemplate />} />
+              <Route path="stores/:id/product-names" element={<ProductNameAnalyzer />} />
+              <Route path="stores/:id/expectation" element={<ExpectationVsDelivery />} />
+              <Route path="stores/:id/pricing-simulator" element={<PricingSimulator />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

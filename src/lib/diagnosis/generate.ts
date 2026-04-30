@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { answersAsMap, loadSession } from "./session";
-import { rulesFromAnswers } from "./rules";
+import { rulesFromAnswers, buildSevenDayPlan } from "./rules";
+import { buildJourney } from "./journey";
+import { classifyConversion, computeConversion, conversionLabel } from "./conversion";
 
 const yes = (v: any) => v === true || v === "sim" || v === "yes";
 const num = (v: any) => {
@@ -188,22 +190,56 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
   // Relatório consolidado
   const reviews = map.reviews || {};
   const loyalty = map.loyalty || {};
-  const ads = map.ads || {};
+  const conversionAns = map.conversion || {};
+  const finalQ = map.final_questions || {};
+  const journey = buildJourney(map);
+  const sevenDay = buildSevenDayPlan(diagnostics);
+  const convRate = num(conversionAns.conversion_rate) ?? computeConversion(num(conversionAns.visits), num(conversionAns.orders));
+  const convLevel = classifyConversion(convRate);
+
+  // Gargalo principal = jornada com pior status (crítico) mais cedo no funil
+  const stageOrder = ["ve_loja","entra_loja","clica_produto","adiciona_carrinho","compra","recebe","recompra"];
+  const main = [...journey].sort((a, b) => {
+    const sev = (s: string) => (s === "critico" ? 0 : s === "atencao" ? 1 : 2);
+    return sev(a.status) - sev(b.status) || stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage);
+  })[0];
+
   const reportData = {
-    questions: {
-      por_que_nao_entram: front.has_cover === false || front.has_logo === false
-        ? "Vitrine pouco atrativa: faltam capa/logo profissionais que chamem o clique."
-        : "Vitrine ok — investigar posicionamento na busca e categoria.",
-      por_que_nao_compram: (map.menu?.without_photo || 0) > 0
-        ? "Cardápio com produtos sem foto e descrição reduzem confiança e conversão."
-        : "Cardápio razoável — verificar preço percebido vs. concorrentes.",
-      por_que_compram_pouco: !yes(map.menu?.has_combos)
-        ? "Falta de combos e cross-sell mantém o ticket baixo."
-        : "Há combos — testar destacar mais e melhorar upsell.",
-      por_que_nao_voltam: !yes(loyalty.rebuy_strategy)
-        ? "Sem estratégia de recompra: cliente novo é caro e não volta sozinho."
-        : "Estratégia existe — medir taxa de recompra real.",
-      por_que_nao_lucram: "Margem média apertada e/ou campanhas com ROI baixo. Reprecificar top vendidos.",
+    conversion: {
+      visits: num(conversionAns.visits),
+      clicks: num(conversionAns.clicks),
+      orders: num(conversionAns.orders),
+      rate: convRate,
+      level: convLevel,
+      label: convLevel ? conversionLabel(convLevel) : null,
+    },
+    journey,
+    main_bottleneck: main ? { stage: main.stage, title: main.title, status: main.status, bottleneck: main.bottleneck } : null,
+    seven_day_plan: sevenDay,
+    next_best_action: sevenDay[0] ?? null,
+    six_questions: {
+      por_que_nao_entram: finalQ.q_nao_entram ||
+        (front.has_cover === false || front.has_logo === false
+          ? "Vitrine pouco atrativa: faltam capa/logo profissionais que chamem o clique."
+          : "Vitrine ok — investigar nota, tempo prometido e categoria."),
+      por_que_nao_clicam: finalQ.q_nao_clicam ||
+        ((map.menu?.without_photo || 0) > 0
+          ? "Produtos sem foto reduzem o clique drasticamente."
+          : "Cardápio com fotos — investigar ordem dos produtos e combos no topo."),
+      por_que_nao_compram: finalQ.q_nao_compram ||
+        (convLevel === "critico" || convLevel === "atencao"
+          ? `Conversão ${convRate}% indica preço/taxa/falta de combo no checkout.`
+          : "Conversão saudável — manter padrão e ampliar combos."),
+      por_que_compram_pouco: finalQ.q_compram_pouco ||
+        (!yes(map.menu?.has_combos)
+          ? "Falta de combos e cross-sell mantém o ticket baixo."
+          : "Há combos — destacar mais e melhorar upsell."),
+      por_que_nao_voltam: finalQ.q_nao_voltam ||
+        (!yes(loyalty.rebuy_strategy)
+          ? "Sem estratégia de recompra: cliente novo é caro e não volta sozinho."
+          : "Estratégia existe — medir taxa de recompra real."),
+      por_que_nao_lucram: finalQ.q_nao_lucram ||
+        "Margem média apertada e/ou campanhas com ROI baixo. Reprecificar top vendidos.",
     },
     answers_summary: map,
   };
@@ -214,11 +250,10 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
       store_id: storeId,
       title: `Diagnóstico — ${basic.name || "Loja"}`,
       executive_summary: `Diagnóstico gerado a partir do funil consultivo com ${diagnostics.length} problemas identificados.`,
-      general_score: null,
-      key_problems: diagnostics.slice(0, 5).map((d) => ({ area: d.area, problem: d.problem, severity: d.severity })),
-      recommendations: diagnostics.slice(0, 5).map((d) => d.recommended_solution),
-      report_data: reportData,
-    })
+      key_problems: diagnostics.slice(0, 5).map((d) => ({ area: d.area, problem: d.problem, severity: d.severity })) as any,
+      recommendations: diagnostics.slice(0, 5).map((d) => d.recommended_solution) as any,
+      report_data: reportData as any,
+    } as any)
     .select("id")
     .single();
 

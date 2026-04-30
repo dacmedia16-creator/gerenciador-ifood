@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles,
+  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -27,8 +27,11 @@ const storeAnalysis = (id: string) => [
 const storeOperations = (id: string) => [
   { title: "Cardápio", url: `/app/stores/${id}/menu`, icon: UtensilsCrossed },
   { title: "Produtos", url: `/app/stores/${id}/products`, icon: Package },
+  { title: "Nomes (SEO)", url: `/app/stores/${id}/product-names`, icon: Type },
   { title: "Margem & Preço", url: `/app/stores/${id}/pricing`, icon: DollarSign },
+  { title: "Simulador de preço", url: `/app/stores/${id}/pricing-simulator`, icon: Calculator },
   { title: "Avaliações", url: `/app/stores/${id}/reviews`, icon: Star },
+  { title: "Expectativa × Entrega", url: `/app/stores/${id}/expectation`, icon: Eye },
   { title: "Concorrentes", url: `/app/stores/${id}/competitors`, icon: Users },
   { title: "Campanhas", url: `/app/stores/${id}/campaigns`, icon: Megaphone },
   { title: "Métricas", url: `/app/stores/${id}/metrics`, icon: BarChart3 },
