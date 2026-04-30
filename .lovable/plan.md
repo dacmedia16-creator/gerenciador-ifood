@@ -1,42 +1,32 @@
-# Fix: `ai-consult` quebrado por `auth.getClaims is not a function`
+# Botão "Atualizar sistema" no Dashboard
 
-## Problema
+## O que faz
 
-A função `ai-consult` (linha 169 de `supabase/functions/ai-consult/index.ts`) chama:
+Adicionar um botão **"Atualizar sistema"** na barra superior do Dashboard. Ao clicar:
 
-```ts
-const { data: claims, error: claimsErr } = await supabase.auth.getClaims(token);
-```
+1. Limpa caches do navegador (Cache Storage API + `localStorage`/`sessionStorage` exceto a sessão de auth do Supabase).
+2. Desregistra Service Workers, se houver.
+3. Recarrega a página com bypass de cache (`location.reload()` + querystring `?v=timestamp` para invalidar HTML cacheado).
+4. Mostra toast "Sistema atualizado" antes do reload.
 
-O método `getClaims()` não existe na versão do `@supabase/supabase-js` carregada pelo edge runtime, então **toda execução cai no catch e retorna 500**. É a causa do toast "Edge Function returned a non-2xx status code" que aparece ao clicar em **Consultar Gestor IA**.
+Assim, depois de você publicar uma nova versão no Lovable, basta clicar nesse botão para forçar todos os clientes a baixarem a versão mais nova sem precisar pedir Ctrl+Shift+R aos usuários.
 
-Todas as outras funções do projeto (`record-feedback`, `measure-outcomes`, `update-store-memory`, etc.) já usam o padrão correto `auth.getUser(token)`. Apenas `ai-consult` está fora do padrão.
+## Implementação
 
-## Correção (1 arquivo, ~6 linhas)
+**Arquivos:**
 
-**`supabase/functions/ai-consult/index.ts`** — substituir o bloco de validação de JWT (linhas ~168-174) por:
+1. **Criar** `src/lib/system/refresh.ts` — função `refreshSystem()` reutilizável:
+   - `caches.keys()` → `caches.delete()` para todos.
+   - Limpa `localStorage`/`sessionStorage` preservando chaves que começam com `sb-` (sessão Supabase) para não deslogar.
+   - `navigator.serviceWorker.getRegistrations()` → `unregister()`.
+   - Redireciona para `window.location.pathname + "?v=" + Date.now()`.
 
-```ts
-const token = authHeader.replace("Bearer ", "");
-const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-if (userErr || !userData?.user) {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), {
-    status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-```
-
-Nada mais muda — `userData.user.id` não é usado adiante porque o ownership da loja é garantido pela RLS via `global.headers.Authorization` no cliente Supabase já criado nas linhas 162-166.
-
-## Validação pós-deploy
-
-1. Clicar em **Consultar Gestor IA** na tela de uma loja existente.
-2. Esperado: a resposta consultiva é renderizada (sem toast vermelho).
-3. Conferir em `supabase--edge_function_logs ai-consult` que não há mais `TypeError: supabase.auth.getClaims is not a function`.
-4. Rodar `supabase/functions/ai-consult/validation_test.ts` e `learning_test.ts` para garantir que os testes continuam verdes.
+2. **Editar** `src/pages/app/Dashboard.tsx`:
+   - Importar ícone `RefreshCw` do `lucide-react` e `refreshSystem`.
+   - Adicionar `<Button variant="outline" size="sm">` ao lado de "Loja" / "Novo Diagnóstico" com handler que chama `refreshSystem()`.
 
 ## Fora do escopo
 
-- Não alterar a lógica consultiva, anti-alucinação, RAG, logging estruturado nem o `diagnosis_cycle_id`.
-- Não tocar nas demais funções (já corretas).
-- Não mexer em RLS, schema ou frontend.
+- Não muda lógica de auth, Supabase ou edge functions.
+- Não adiciona Service Worker novo (apenas remove se existir).
+- Não exibe modal de confirmação (uso é frequente após publicar — toast já basta).
