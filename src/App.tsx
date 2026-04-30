@@ -25,6 +25,7 @@ import Metrics from "./pages/app/Metrics";
 import Uploads from "./pages/app/Uploads";
 import ActionPlan from "./pages/app/ActionPlan";
 import Report from "./pages/app/Report";
+import ReportTemplate from "./pages/app/ReportTemplate";
 import Onboarding from "./pages/app/Onboarding";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ const App = () => (
               <Route path="stores/:id/uploads" element={<Uploads />} />
               <Route path="stores/:id/action-plan" element={<ActionPlan />} />
               <Route path="stores/:id/report" element={<Report />} />
+              <Route path="stores/:id/report/template" element={<ReportTemplate />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
