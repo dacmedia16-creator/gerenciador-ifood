@@ -27,6 +27,58 @@ const TARGETS: Record<string, { key: string; better: "up" | "down" }> = {
 
 const THRESHOLD_PCT = 5;
 
+const LABEL_MAP: Record<string, string> = {
+  rating: "sua nota",
+  promised_delivery_time: "o tempo de entrega prometido",
+  cancellation_rate: "a taxa de cancelamento",
+  average_ticket: "o ticket médio",
+  orders: "o número de pedidos",
+  estimated_profit: "o lucro estimado",
+  revenue: "o faturamento",
+};
+
+// Lógica pura para classificar outcome + gerar explicação em pt-BR.
+// Exportada para testes unitários (sem depender de Supabase/HTTP).
+export function buildExplanation(opts: {
+  ruleId: string | null;
+  before: number | null | undefined;
+  after: number | null | undefined;
+}): { outcome: string; explanation: string; deltaPct: number | null; targetKey: string | null } {
+  const target = opts.ruleId ? TARGETS[opts.ruleId] : null;
+  if (!target) {
+    return {
+      outcome: "inconclusivo",
+      explanation: "Esta recomendação não tem métrica objetiva associada — peça feedback ao dono.",
+      deltaPct: null,
+      targetKey: null,
+    };
+  }
+  const before = Number(opts.before);
+  const after = Number(opts.after);
+  if (isNaN(before) || isNaN(after) || before === 0) {
+    return {
+      outcome: "inconclusivo",
+      explanation: "Ainda não há dados suficientes para medir o impacto desta ação.",
+      deltaPct: null,
+      targetKey: target.key,
+    };
+  }
+  const pct = ((after - before) / Math.abs(before)) * 100;
+  const improvement = target.better === "up" ? pct : -pct;
+  let outcome = "neutro";
+  if (improvement > THRESHOLD_PCT) outcome = "positivo";
+  else if (improvement < -THRESHOLD_PCT) outcome = "negativo";
+  const label = LABEL_MAP[target.key] ?? target.key;
+  const fmt = (v: number) => target.key === "rating" ? v.toFixed(2) : Math.round(v).toString();
+  const sentido = improvement > THRESHOLD_PCT
+    ? "melhorou"
+    : improvement < -THRESHOLD_PCT
+      ? "piorou"
+      : "ficou estável";
+  const explanation = `Após você aplicar a ação, ${label} ${sentido}: passou de ${fmt(before)} para ${fmt(after)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%).`;
+  return { outcome, explanation, deltaPct: Number(pct.toFixed(2)), targetKey: target.key };
+}
+
 function avg(arr: any[], k: string): number | null {
   const vs = arr.map((x) => Number(x?.[k])).filter((n) => !isNaN(n));
   if (!vs.length) return null;
