@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { corsHeaders, jsonResponse, aiErrorResponse } from "../_shared/cors.ts";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -8,6 +8,15 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const TOPICS = ["atraso", "comida fria", "embalagem", "pedido errado", "atendimento", "porcao pequena", "qualidade", "preco"];
 
 Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
+  const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+  const aiErrorResponse = (status: number, fallback = "Erro ao chamar IA") => {
+    if (status === 429) return jsonResponse({ error: "Muitas requisições à IA. Tente novamente em alguns minutos." }, 429);
+    if (status === 402) return jsonResponse({ error: "Créditos de IA esgotados. Adicione créditos à sua workspace Lovable." }, 402);
+    return jsonResponse({ error: fallback }, 500);
+  };
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {

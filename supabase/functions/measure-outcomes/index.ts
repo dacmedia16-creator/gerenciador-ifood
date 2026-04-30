@@ -27,6 +27,66 @@ const TARGETS: Record<string, { key: string; better: "up" | "down" }> = {
 
 const THRESHOLD_PCT = 5;
 
+const LABEL_MAP: Record<string, string> = {
+  rating: "sua nota",
+  promised_delivery_time: "o tempo de entrega prometido",
+  cancellation_rate: "a taxa de cancelamento",
+  average_ticket: "o ticket médio",
+  orders: "o número de pedidos",
+  estimated_profit: "o lucro estimado",
+  revenue: "o faturamento",
+};
+
+// Lógica pura para classificar outcome + gerar explicação em pt-BR.
+// Exportada para testes unitários (sem depender de Supabase/HTTP).
+export function buildExplanation(opts: {
+  ruleId: string | null;
+  before: number | null | undefined;
+  after: number | null | undefined;
+}): { outcome: string; explanation: string; deltaPct: number | null; targetKey: string | null } {
+  const target = opts.ruleId ? TARGETS[opts.ruleId] : null;
+  if (!target) {
+    return {
+      outcome: "inconclusivo",
+      explanation: "Esta recomendação não tem métrica objetiva associada — peça feedback ao dono.",
+      deltaPct: null,
+      targetKey: null,
+    };
+  }
+  if (opts.before == null || opts.after == null) {
+    return {
+      outcome: "inconclusivo",
+      explanation: "Ainda não há dados suficientes para medir o impacto desta ação.",
+      deltaPct: null,
+      targetKey: target.key,
+    };
+  }
+  const before = Number(opts.before);
+  const after = Number(opts.after);
+  if (isNaN(before) || isNaN(after) || before === 0) {
+    return {
+      outcome: "inconclusivo",
+      explanation: "Ainda não há dados suficientes para medir o impacto desta ação.",
+      deltaPct: null,
+      targetKey: target.key,
+    };
+  }
+  const pct = ((after - before) / Math.abs(before)) * 100;
+  const improvement = target.better === "up" ? pct : -pct;
+  let outcome = "neutro";
+  if (improvement > THRESHOLD_PCT) outcome = "positivo";
+  else if (improvement < -THRESHOLD_PCT) outcome = "negativo";
+  const label = LABEL_MAP[target.key] ?? target.key;
+  const fmt = (v: number) => target.key === "rating" ? v.toFixed(2) : Math.round(v).toString();
+  const sentido = improvement > THRESHOLD_PCT
+    ? "melhorou"
+    : improvement < -THRESHOLD_PCT
+      ? "piorou"
+      : "ficou estável";
+  const explanation = `Após você aplicar a ação, ${label} ${sentido}: passou de ${fmt(before)} para ${fmt(after)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%).`;
+  return { outcome, explanation, deltaPct: Number(pct.toFixed(2)), targetKey: target.key };
+}
+
 function avg(arr: any[], k: string): number | null {
   const vs = arr.map((x) => Number(x?.[k])).filter((n) => !isNaN(n));
   if (!vs.length) return null;
@@ -78,44 +138,15 @@ async function measureForStore(admin: any, storeId: string) {
       samples: mAfter?.length ?? 0,
     };
 
-    let outcome: string = "inconclusivo";
-    let outcome_explanation: string | null = null;
-    if (target) {
-      const before = Number((r.metrics_before as any)?.[target.key]);
-      const after = Number(metricsAfter[target.key]);
-      if (!isNaN(before) && !isNaN(after) && before !== 0) {
-        const pct = ((after - before) / Math.abs(before)) * 100;
-        const improvement = target.better === "up" ? pct : -pct;
-        if (improvement > THRESHOLD_PCT) outcome = "positivo";
-        else if (improvement < -THRESHOLD_PCT) outcome = "negativo";
-        else outcome = "neutro";
-        metricsAfter._delta_pct = Number(pct.toFixed(2));
-        metricsAfter._target_metric = target.key;
-
-        const labelMap: Record<string, string> = {
-          rating: "sua nota",
-          promised_delivery_time: "o tempo de entrega prometido",
-          cancellation_rate: "a taxa de cancelamento",
-          average_ticket: "o ticket médio",
-          orders: "o número de pedidos",
-          estimated_profit: "o lucro estimado",
-          revenue: "o faturamento",
-        };
-        const label = labelMap[target.key] ?? target.key;
-        const fmt = (v: number) => target.key === "rating" ? v.toFixed(2) : Math.round(v).toString();
-        const sentido = improvement > THRESHOLD_PCT
-          ? "melhorou"
-          : improvement < -THRESHOLD_PCT
-            ? "piorou"
-            : "ficou estável";
-        outcome_explanation = `Após você aplicar a ação, ${label} ${sentido}: passou de ${fmt(before)} para ${fmt(after)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%).`;
-      } else {
-        outcome_explanation = "Ainda não há dados suficientes para medir o impacto desta ação.";
-      }
-    } else {
-      outcome_explanation = "Esta recomendação não tem métrica objetiva associada — peça feedback ao dono.";
-    }
-    metricsAfter._explanation = outcome_explanation;
+    const exp = buildExplanation({
+      ruleId: r.rule_id,
+      before: target ? (r.metrics_before as any)?.[target.key] : null,
+      after: target ? metricsAfter[target.key] : null,
+    });
+    const outcome = exp.outcome;
+    if (exp.deltaPct !== null) metricsAfter._delta_pct = exp.deltaPct;
+    if (exp.targetKey) metricsAfter._target_metric = exp.targetKey;
+    metricsAfter._explanation = exp.explanation;
 
     const { error: upErr } = await admin
       .from("recommendation_history")
