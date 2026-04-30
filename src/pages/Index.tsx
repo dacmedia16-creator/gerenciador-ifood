@@ -18,7 +18,7 @@ const C = {
   green: "#16A34A",
 };
 
-const CTA_PRIMARY = "/auth?mode=signup";
+const CTA_PRIMARY = "/contato";
 const CTA_LOGIN = "/auth";
 
 const Index = () => {
