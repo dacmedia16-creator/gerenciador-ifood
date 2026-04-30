@@ -75,3 +75,23 @@ Deno.test("rating=errada => outcome negativo mesmo sem status", () => {
   const u = buildUpdate({ rating: "errada" });
   assertEquals(u.outcome, "negativo");
 });
+
+Deno.test("status inválido é rejeitado pelo conjunto STATUSES", () => {
+  assertEquals(STATUSES.has("foo"), false);
+  assertEquals(STATUSES.has("done"), false);
+  assertEquals(STATUSES.has("aplicada"), true);
+});
+
+Deno.test("transição pendente → em_andamento → aplicada preserva applied_at na última", () => {
+  const u1 = buildUpdate({ status: "em_andamento" });
+  assertEquals(u1.applied_at, undefined);
+  const u2 = buildUpdate({ status: "aplicada" });
+  assertEquals(u2.applied_at, "now");
+});
+
+Deno.test("ownership: rec null vira 404 (cross-tenant bloqueado)", () => {
+  const blocked = ownershipCheck(null);
+  assertEquals(blocked?.status, 404);
+  const ok = ownershipCheck({ id: "abc" });
+  assertEquals(ok, null);
+});
