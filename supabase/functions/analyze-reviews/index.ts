@@ -104,18 +104,23 @@ Deno.serve(async (req) => {
     const total = allNeg?.length ?? 0;
     const criticalTopics = total > 0 ? Object.entries(topicCounts).filter(([, c]) => c / total > 0.3) : [];
 
+    // Em vez de inserir um diagnóstico paralelo (que ficaria órfão do ciclo de
+    // aprendizado da ai-consult), anexamos os tópicos críticos no último report.
+    // O ai-consult lê reports.report_data e o motor de regras pode usar isso
+    // como evidência. Mantém um único fluxo de diagnóstico.
     if (criticalTopics.length > 0) {
-      // Insere/atualiza diagnóstico de experiência
-      await admin.from("diagnostics").insert({
-        store_id, area: "Experiência do cliente",
-        problem: `Tópicos críticos recorrentes: ${criticalTopics.map(([t, c]) => `${t} (${c})`).join(", ")}`,
-        evidence: `Detectado em ${total} avaliações negativas`,
-        probable_cause: "Falha operacional sistemática",
-        business_impact: "Queda de nota e recompra",
-        recommended_solution: "Atacar causa raiz de cada tópico crítico",
-        practical_action: "Plano semanal por tópico até estabilizar",
-        suggested_deadline: "30 dias", severity: "critico", priority: "alta",
-      });
+      const { data: lastReport } = await admin
+        .from("reports").select("id, report_data")
+        .eq("store_id", store_id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      const payload = {
+        detected_at: new Date().toISOString(),
+        total_negative_reviews: total,
+        topics: criticalTopics.map(([t, c]) => ({ topic: t, count: c, share: Number((c / total).toFixed(2)) })),
+      };
+      if (lastReport?.id) {
+        const merged = { ...(lastReport.report_data ?? {}), review_topics: payload };
+        await admin.from("reports").update({ report_data: merged }).eq("id", lastReport.id);
+      }
     }
 
     return jsonResponse({ success: true, processed, critical_topics: criticalTopics.map(([t]) => t) });
