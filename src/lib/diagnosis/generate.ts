@@ -265,6 +265,7 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
         "Margem média apertada e/ou campanhas com ROI baixo. Reprecificar top vendidos.",
     },
     answers_summary: map,
+    rule_evidences: ruleEvidences,
   };
 
   const { data: report } = await supabase
