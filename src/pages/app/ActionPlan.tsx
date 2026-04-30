@@ -34,20 +34,26 @@ export default function ActionPlan() {
 
   const submitOutcome = async () => {
     if (!outcomeFor) return;
-    // Tenta achar a recommendation_history correspondente por título nesta loja
-    const { data: rec } = await supabase
-      .from("recommendation_history")
-      .select("id")
-      .eq("store_id", id!)
-      .ilike("recommendation", `%${outcomeFor.title.slice(0, 60)}%`)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // FK direta — sem busca por título.
+    let recommendation_id: string | null = outcomeFor.recommendation_id ?? null;
 
-    if (rec?.id) {
+    // Fallback para ações antigas sem FK: busca por título (legado).
+    if (!recommendation_id) {
+      const { data: rec } = await supabase
+        .from("recommendation_history")
+        .select("id")
+        .eq("store_id", id!)
+        .ilike("recommendation", `%${outcomeFor.title.slice(0, 60)}%`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      recommendation_id = rec?.id ?? null;
+    }
+
+    if (recommendation_id) {
       await supabase.functions.invoke("record-feedback", {
         body: {
-          recommendation_id: rec.id,
+          recommendation_id,
           applied: true,
           generated_result: outcome === "positivo" ? "sim" : outcome === "negativo" ? "nao" : "nao_sei",
           comment,

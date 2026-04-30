@@ -373,11 +373,33 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       if (rhErr) {
         console.warn("rec_history insert failed", rhErr);
       } else if (insertedRecs?.length) {
-        // Mapeia recommendation_id de volta para cada main_problem (ordem preservada).
         diagnosis.main_problems = diagnosis.main_problems.map((p: any, i: number) => ({
           ...p,
           recommendation_id: insertedRecs[i]?.id,
         }));
+
+        // Cria action_plans já amarrados via FK recommendation_id.
+        const planRows = diagnosis.main_problems
+          .filter((p: any) => p.recommendation_id)
+          .map((p: any) => {
+            const ev = ruleEvidences.find((e) => e.rule_id === p.rule_id);
+            const rank = (diagnosis.priority_ranking ?? []).find((r: any) => r.rule_id === p.rule_id);
+            return {
+              store_id: storeId,
+              recommendation_id: p.recommendation_id,
+              title: p.title,
+              area: ev?.area ?? null,
+              priority: rank?.priority ?? (ev?.severity === "alto" ? "alta" : ev?.severity === "medio" ? "media" : "baixa"),
+              impact: ev?.business_impact?.slice(0, 200) ?? null,
+              effort: null,
+              status: "pendente",
+              description: p.why_it_matters?.slice(0, 1000) ?? null,
+            };
+          });
+        if (planRows.length) {
+          const { error: apErr } = await supabase.from("action_plans").insert(planRows);
+          if (apErr) console.warn("action_plans insert failed", apErr);
+        }
       }
     }
 

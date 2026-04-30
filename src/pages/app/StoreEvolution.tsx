@@ -3,9 +3,12 @@ import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/LoadingState";
-import { TrendingUp, History as HistoryIcon } from "lucide-react";
+import { TrendingUp, History as HistoryIcon, RefreshCw } from "lucide-react";
 import { SourceChip } from "@/components/report/SourceChip";
+import { invokeAI } from "@/lib/ai/invokeAI";
+import { toast } from "sonner";
 
 const STATUS_VARIANT: Record<string, any> = {
   pendente: "outline",
@@ -26,24 +29,35 @@ export default function StoreEvolution() {
   const [memory, setMemory] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [measuring, setMeasuring] = useState(false);
 
-  useEffect(() => {
+  const load = async () => {
     if (!id) return;
-    (async () => {
-      const [{ data: m }, { data: h }] = await Promise.all([
-        supabase.from("store_memory").select("*").eq("store_id", id).maybeSingle(),
-        supabase
-          .from("recommendation_history")
-          .select("*")
-          .eq("store_id", id)
-          .order("created_at", { ascending: false })
-          .limit(50),
-      ]);
-      setMemory(m);
-      setHistory(h ?? []);
-      setLoading(false);
-    })();
-  }, [id]);
+    const [{ data: m }, { data: h }] = await Promise.all([
+      supabase.from("store_memory").select("*").eq("store_id", id).maybeSingle(),
+      supabase
+        .from("recommendation_history")
+        .select("*")
+        .eq("store_id", id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+    ]);
+    setMemory(m);
+    setHistory(h ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [id]);
+
+  const measure = async () => {
+    setMeasuring(true);
+    const res = await invokeAI<{ measured: number; candidates: number }>("measure-outcomes", { storeId: id });
+    setMeasuring(false);
+    if (res) {
+      toast.success(`${res.measured}/${res.candidates} recomendações medidas.`);
+      load();
+    }
+  };
 
   if (loading) return <LoadingState />;
 
@@ -51,9 +65,15 @@ export default function StoreEvolution() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <TrendingUp className="h-5 w-5 text-primary" />
-        <h1 className="text-2xl font-bold">Evolução da loja</h1>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          <h1 className="text-2xl font-bold">Evolução da loja</h1>
+        </div>
+        <Button size="sm" variant="outline" onClick={measure} disabled={measuring}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${measuring ? "animate-spin" : ""}`} />
+          Medir resultados
+        </Button>
       </div>
       <p className="text-sm text-muted-foreground">
         Histórico de tudo o que o Gestor IA recomendou, o que foi aplicado e qual foi o resultado.
