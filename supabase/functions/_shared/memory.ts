@@ -88,3 +88,56 @@ export function buildMetricsSnapshot(store: any, lastMetric: any) {
     captured_at: new Date().toISOString(),
   };
 }
+
+// ============================================================
+// Variantes "Meta" do RAG: retornam itens + modo (full/degraded)
+// para permitir logs estruturados sem alterar a semântica das funções
+// originais. Use estas em ai-consult; mantenha as antigas para qualquer
+// outro consumidor que não precise saber do modo.
+// ============================================================
+export async function findSimilarCasesMeta(
+  supabase: SupabaseClient,
+  queryText: string,
+  limit = 3,
+): Promise<RagSearchResult<any>> {
+  const meta = await embedTextWithMeta(queryText);
+  if (!meta.vector) return { items: [], mode: meta.mode, reason: meta.reason };
+  const { data, error } = await supabase.rpc("match_cases", {
+    query_embedding: toPgVector(meta.vector) as any,
+    match_count: limit,
+    filter_rule_id: null,
+  });
+  if (error) {
+    console.warn("match_cases error", error);
+    return { items: [], mode: meta.mode, reason: meta.reason };
+  }
+  return {
+    items: (data ?? []).filter((c: any) => c.similarity > 0.5),
+    mode: meta.mode,
+    reason: meta.reason,
+  };
+}
+
+export async function findKnowledgeSnippetsMeta(
+  supabase: SupabaseClient,
+  queryText: string,
+  areas: string[] | null = null,
+  limit = 5,
+): Promise<RagSearchResult<any>> {
+  const meta = await embedTextWithMeta(queryText);
+  if (!meta.vector) return { items: [], mode: meta.mode, reason: meta.reason };
+  const { data, error } = await supabase.rpc("match_knowledge", {
+    query_embedding: toPgVector(meta.vector) as any,
+    match_count: limit,
+    filter_areas: areas,
+  });
+  if (error) {
+    console.warn("match_knowledge error", error);
+    return { items: [], mode: meta.mode, reason: meta.reason };
+  }
+  return {
+    items: (data ?? []).filter((k: any) => k.similarity > 0.4),
+    mode: meta.mode,
+    reason: meta.reason,
+  };
+}
