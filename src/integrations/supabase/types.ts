@@ -403,6 +403,51 @@ export type Database = {
         }
         Relationships: []
       }
+      report_templates: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          footer_text: string | null
+          id: string
+          kpi_order: Json
+          logo_url: string | null
+          primary_color: string
+          sections: Json
+          store_id: string
+          summary_tone: string
+          tagline: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          footer_text?: string | null
+          id?: string
+          kpi_order?: Json
+          logo_url?: string | null
+          primary_color?: string
+          sections?: Json
+          store_id: string
+          summary_tone?: string
+          tagline?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          footer_text?: string | null
+          id?: string
+          kpi_order?: Json
+          logo_url?: string | null
+          primary_color?: string
+          sections?: Json
+          store_id?: string
+          summary_tone?: string
+          tagline?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           created_at: string
