@@ -168,3 +168,21 @@ Testes de regra (TS): garantir que cada novo `rule_id` da Etapa B aparece em amb
 - Deletar `ai-diagnose` (apenas marcar legado).
 
 Aprovando, executo as Etapas A–F numa única passada de implementação.
+
+---
+
+## 8. Execução — Etapas C/D/E (continuação)
+
+✅ Migration `recommendation_id` em `action_plans` e `embedding_version` em kb/casos.
+✅ `_shared/validate-diagnosis.ts` + teste `validation_test.ts` (Etapa F mínima).
+✅ `_shared/embeddings.ts` v1 lexical formalizado, wrapper `embedText` pronto para v2.
+✅ `update-store-memory` valida acesso à loja antes de SERVICE_ROLE.
+✅ `ai-diagnose` marcado DEPRECATED + `Diagnostics.tsx` redireciona ao Relatório.
+✅ `ai-consult` agora cria `action_plans` com FK `recommendation_id`.
+✅ `ActionPlan.submitOutcome` usa FK direta (fallback ilike só p/ legado).
+✅ Nova edge `measure-outcomes`: calcula `metrics_after` e `outcome` objetivo
+   por janela 7-30d; positivo dispara `extract-case`. Botão na página
+   "Evolução da loja".
+
+Pendente (futuro): cron diário para `measure-outcomes`, CORS por env,
+rate-limit em `ai-consult`, painel admin de KB.
