@@ -1,25 +1,48 @@
-## Objetivo
+## Contexto
 
-A prévia de link no WhatsApp (e em qualquer rede social) ainda mostra o posicionamento antigo:
+Pelo print do WhatsApp:
+- Título atual do preview: "Gestor de Delivery — Gestão premium do seu delivery" ✅
+- Imagem do preview: ainda é o placeholder roxo do Lovable ❌
+- Favicon: ainda é o padrão do Lovable ❌
+- Falta destacar a marca **"Gestor de Delivery"** visualmente na imagem de preview
 
-> "Gestor IA de Delivery — Diagnóstico inteligente, score por área e plano de ação automático para lojas de delivery."
+## Alterações
 
-Isso vem das meta tags em `index.html`. Vou atualizá-las para refletir o novo posicionamento premium de serviço de Gestor de Delivery.
+### 1. Favicon (G vermelho enviado)
+- Copiar `user-uploads://image-7.png` → `public/favicon.png`
+- Remover `public/favicon.ico` (senão o navegador continua usando o antigo por padrão)
+- No `<head>` do `index.html`:
+  ```html
+  <link rel="icon" href="/favicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  ```
 
-## Alteração
+### 2. Imagem Open Graph com a marca "Gestor de Delivery"
 
-**Arquivo:** `index.html`
+Gerar uma imagem de preview social personalizada (1200×630, formato recomendado para WhatsApp/Facebook/Twitter) com:
+- Fundo preto (identidade da marca)
+- "G" vermelho (mesmo do favicon) à esquerda
+- Texto **"Gestor de Delivery"** em destaque (branco, fonte forte/sans-serif)
+- Subtítulo: **"Gestão premium do seu delivery"** (cinza claro / amarelo de destaque)
+- Pequeno selo/linha vermelha (#EA1D2C, vermelho iFood) para reforçar o nicho
 
-Substituir as tags `<title>`, `<meta name="description">`, `og:title`, `og:description`, `twitter:title` e `twitter:description` por:
+A imagem será gerada via script (Node + canvas/sharp ou Python + Pillow) e salva em `public/og-image.png`.
 
-- **Title:** `Gestor de Delivery — Gestão premium para restaurantes que vendem por delivery`
-- **Description:** `Serviço premium de Gestor de Delivery para donos de restaurantes, hamburguerias, pizzarias, açaíterias e dark kitchens. Mais pedidos, mais margem e mais reputação no iFood, 99Food, WhatsApp e canais próprios.`
-- **OG/Twitter title:** `Gestor de Delivery — Gestão premium do seu delivery`
-- **OG description:** `Um time especialista cuidando do seu delivery: cardápio, precificação, operação, marketing e reputação. Foco em resultado para restaurantes que vendem no iFood, 99Food, WhatsApp e canais próprios.`
-- **Twitter description (mais curta):** `Um time especialista cuidando do seu delivery: cardápio, precificação, operação, marketing e reputação.`
-- **Author:** `Gestor de Delivery` (sem o "IA")
+### 3. Meta tags no `index.html`
+```html
+<meta property="og:title" content="Gestor de Delivery — Gestão premium do seu delivery" />
+<meta property="og:image" content="https://gestordelivery.app/og-image.png" />
+<meta property="og:url" content="https://gestordelivery.app/" />
+<meta name="twitter:image" content="https://gestordelivery.app/og-image.png" />
+```
 
-## Observações
+## Observação sobre cache do WhatsApp
 
-- Mantenho a `og:image` atual (placeholder Lovable). Se quiser, depois posso gerar uma imagem de preview personalizada com a identidade visual (preto, vermelho iFood, amarelo).
-- Após publicar, o WhatsApp pode demorar a atualizar o cache do preview — para forçar, basta enviar o link com um parâmetro novo (ex.: `?v=2`) uma vez.
+WhatsApp/Facebook fazem cache agressivo do preview. Depois de publicar, para forçar atualização envie o link uma vez com um parâmetro extra (ex.: `https://gestordelivery.app/?v=3`). Depois disso o preview novo fica salvo também para a URL limpa.
+
+## Arquivos afetados
+
+- `public/favicon.png` (novo)
+- `public/og-image.png` (novo, gerado com a marca "Gestor de Delivery")
+- `public/favicon.ico` (removido)
+- `index.html` (links de ícone + meta tags de imagem/URL social)
