@@ -42,11 +42,14 @@ export default function StoreOverview() {
   const runAI = async () => {
     if (!id) return;
     setAiRunning(true);
-    const res = await invokeAI("ai-diagnose", { store_id: id });
+    // Fluxo unificado: ai-consult é a ÚNICA porta de entrada do Gestor IA.
+    // Já grava report, recommendation_history (com metrics_before) e action_plans (FK).
+    const res = await invokeAI<{ diagnosis: any }>("ai-consult", { storeId: id });
     setAiRunning(false);
-    if (res?.success) {
-      toast.success(`Diagnóstico IA: ${res.diagnostics_count} problemas, ${res.actions_count} ações.`);
-      navigate(`/app/stores/${id}/diagnostics`);
+    if (res?.diagnosis) {
+      const probs = res.diagnosis.main_problems?.length ?? 0;
+      toast.success(`Gestor IA: ${probs} problema(s) priorizado(s).`);
+      navigate(`/app/stores/${id}/report`);
     }
   };
 
