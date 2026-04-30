@@ -6,8 +6,14 @@
 // palavras-chave, NÃO por significado. Sinônimos não casam. Quando trocarmos
 // para embeddings reais, a interface destas funções não muda.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { embedText, toPgVector } from "./embeddings.ts";
+import { embedText, embedTextWithMeta, toPgVector, type RagMode } from "./embeddings.ts";
 import type { RuleEvidence } from "./evidences.ts";
+
+export interface RagSearchResult<T> {
+  items: T[];
+  mode: RagMode;
+  reason?: string;
+}
 
 export async function loadStoreMemory(supabase: SupabaseClient, storeId: string) {
   const { data } = await supabase.from("store_memory").select("*").eq("store_id", storeId).maybeSingle();
