@@ -354,6 +354,109 @@ export function rulesFromAnswers(answers: AnswersByStep): Diagnostic[] {
     });
   }
 
+  // ============================================================
+  // === REGRAS DE FALLBACK — quando faltam dados específicos ===
+  // ============================================================
+
+  // Cardápio não cadastrado
+  if (products.length === 0 && num(menu.products_total) == null) {
+    diags.push({
+      area: "Cardápio",
+      problem: "Cardápio não cadastrado no diagnóstico",
+      evidence: "Nenhum produto informado no funil",
+      probable_cause: "Cadastro inicial incompleto",
+      business_impact: "Sem cardápio é impossível analisar margem, fotos, nomes e combos",
+      recommended_solution: "Cadastrar pelo menos os 5 produtos mais vendidos com preço, custo e foto",
+      priority: "alta",
+      practical_action: "Acessar Produtos > Adicionar e cadastrar top 5 vendidos",
+      suggested_deadline: "7 dias",
+      severity: "atencao",
+    });
+  }
+
+  // Custos não informados — impede análise de margem
+  if (products.length > 0) {
+    const withCosts = products.filter((p) => num(p.food_cost) != null || num(p.packaging_cost) != null);
+    if (withCosts.length === 0) {
+      diags.push({
+        area: "Preço e margem",
+        problem: "Custos dos produtos não informados",
+        evidence: `${products.length} produto(s) cadastrados sem custo de insumo ou embalagem`,
+        probable_cause: "Cadastro de produto incompleto",
+        business_impact: "Sem custo, não é possível calcular margem real nem detectar produtos campeões deficitários",
+        recommended_solution: "Preencher food_cost, packaging_cost e taxa da plataforma para cada produto",
+        priority: "alta",
+        practical_action: "Editar cada produto e informar custo de insumo + embalagem",
+        suggested_deadline: "7 dias",
+        severity: "atencao",
+      });
+    }
+  }
+
+  // Sem informação de reputação
+  if (rating == null) {
+    diags.push({
+      area: "Avaliações e reputação",
+      problem: "Sem informação de nota / avaliações",
+      evidence: "Nenhuma nota informada no funil ou no cadastro da loja",
+      probable_cause: "Cadastro do storefront incompleto",
+      business_impact: "Reputação é o principal fator de ranking — não medir é não melhorar",
+      recommended_solution: "Informar nota atual e quantidade de avaliações da loja na plataforma",
+      priority: "media",
+      practical_action: "Editar a loja e preencher nota + nº de avaliações",
+      suggested_deadline: "3 dias",
+      severity: "atencao",
+    });
+  }
+
+  // Sem dados de funil de conversão
+  if (visits == null && orders == null && num(conversion.conversion_rate) == null) {
+    diags.push({
+      area: "Conversão",
+      problem: "Sem dados de funil de visitas → pedidos",
+      evidence: "Nenhuma informação de visitas, cliques ou pedidos do período",
+      probable_cause: "Métricas do iFood / plataforma não informadas",
+      business_impact: "Sem funil é impossível identificar onde a loja perde cliente",
+      recommended_solution: "Informar visitas e pedidos do último mês para calcular conversão",
+      priority: "alta",
+      practical_action: "Pegar print do iFood Gestor de Vendas e cadastrar em Métricas",
+      suggested_deadline: "5 dias",
+      severity: "atencao",
+    });
+  }
+
+  // Sem mapeamento de concorrência
+  if (competitors.length === 0) {
+    diags.push({
+      area: "Concorrência",
+      problem: "Sem mapeamento de concorrentes",
+      evidence: "Nenhum concorrente cadastrado",
+      probable_cause: "Etapa de competidores não preenchida",
+      business_impact: "Sem benchmark, não é possível avaliar tempo, taxa e posicionamento relativos",
+      recommended_solution: "Cadastrar 3 concorrentes diretos com nota, tempo, taxa e diferenciais",
+      priority: "media",
+      practical_action: "Buscar 3 concorrentes no iFood e preencher Concorrentes",
+      suggested_deadline: "10 dias",
+      severity: "atencao",
+    });
+  }
+
+  // Sem avaliações reais coletadas
+  if (!reviews.real_reviews && !reviews.main_complaints && !yes(reviews.complaint_cold) && !yes(reviews.complaint_late) && !yes(reviews.complaint_wrong) && !yes(reviews.complaint_packaging)) {
+    diags.push({
+      area: "Voz do cliente",
+      problem: "Sem coleta de avaliações reais",
+      evidence: "Nenhum comentário ou reclamação informada no funil",
+      probable_cause: "Etapa de avaliações não preenchida",
+      business_impact: "Sem voz do cliente, diagnóstico de operação fica cego",
+      recommended_solution: "Colar 10 avaliações recentes (boas e ruins) na etapa de avaliações",
+      priority: "media",
+      practical_action: "Copiar 10 reviews da plataforma e colar no funil",
+      suggested_deadline: "5 dias",
+      severity: "atencao",
+    });
+  }
+
   return diags;
 }
 

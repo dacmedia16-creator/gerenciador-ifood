@@ -152,7 +152,26 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
   }
 
   // Diagnósticos
-  const diagnostics = rulesFromAnswers(map);
+  let diagnostics = rulesFromAnswers(map);
+
+  // Garantia mínima — nunca devolver 0 itens
+  if (diagnostics.length === 0) {
+    diagnostics = [
+      {
+        area: "Cadastro geral",
+        problem: "Cadastro insuficiente para diagnóstico aprofundado",
+        evidence: "Dados do funil consultivo estão muito incompletos",
+        probable_cause: "Onboarding inicial não preenchido",
+        business_impact: "Sem dados, não é possível identificar gargalos reais da loja",
+        recommended_solution: "Completar cadastro: produtos, concorrentes, funil de conversão e avaliações",
+        priority: "alta",
+        practical_action: "Voltar ao funil e preencher as etapas restantes",
+        suggested_deadline: "7 dias",
+        severity: "atencao",
+      },
+    ];
+  }
+
   if (diagnostics.length) {
     await supabase.from("diagnostics").insert(
       diagnostics.map((d) => ({

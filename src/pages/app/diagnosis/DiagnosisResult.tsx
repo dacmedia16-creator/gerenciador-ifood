@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge } from "@/components/StatusBadges";
-import { ArrowRight, FileText, Target, AlertTriangle, ListTodo } from "lucide-react";
+import { ArrowRight, FileText, Target, AlertTriangle, ListTodo, Info } from "lucide-react";
 
 export default function DiagnosisResult() {
   const { sessionId = "" } = useParams();
@@ -49,6 +49,9 @@ export default function DiagnosisResult() {
   const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions } = data;
   const { overall, areas } = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
   const critical = diagnostics.filter((d: any) => d.severity === "critico");
+  const attention = diagnostics.filter((d: any) => d.severity === "atencao");
+  const visibleProblems = critical.length > 0 ? critical : attention;
+  const lowDataMode = critical.length === 0 && actions.every((a: any) => a.area === "Cadastro geral" || /sem |não cadastrad|incompleto/i.test(a.title || ""));
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -79,18 +82,56 @@ export default function DiagnosisResult() {
         </div>
       </Card>
 
+      {lowDataMode && (
+        <Card className="p-5 border-l-4 border-warning bg-warning/5">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold mb-1">Diagnóstico limitado por falta de dados</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Para um diagnóstico aprofundado, complete o cadastro abaixo. Cada item destrava novas análises.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {products.length === 0 && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/app/stores/${data.store_id}/products`}>Cadastrar produtos</Link>
+                  </Button>
+                )}
+                {competitors.length === 0 && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/app/stores/${data.store_id}/competitors`}>Cadastrar concorrentes</Link>
+                  </Button>
+                )}
+                {metrics.length === 0 && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/app/stores/${data.store_id}/metrics`}>Informar métricas</Link>
+                  </Button>
+                )}
+                {reviews.length === 0 && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/app/stores/${data.store_id}/reviews`}>Cadastrar avaliações</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid md:grid-cols-2 gap-4">
         <Card className="p-5">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-destructive" />
-            Principais problemas ({critical.length})
+            <AlertTriangle className={`h-4 w-4 ${critical.length > 0 ? "text-destructive" : "text-warning"}`} />
+            {critical.length > 0
+              ? `Principais problemas (${critical.length})`
+              : `Pontos de atenção (${attention.length})`}
           </h3>
-          {critical.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum problema crítico encontrado 🎉</p>
+          {visibleProblems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum problema identificado.</p>
           ) : (
             <ul className="space-y-2">
-              {critical.slice(0, 5).map((d: any) => (
-                <li key={d.id} className="text-sm border-l-2 border-destructive pl-3">
+              {visibleProblems.slice(0, 5).map((d: any) => (
+                <li key={d.id} className={`text-sm border-l-2 pl-3 ${critical.length > 0 ? "border-destructive" : "border-warning"}`}>
                   <p className="font-medium">{d.problem}</p>
                   <p className="text-xs text-muted-foreground">{d.area}</p>
                 </li>

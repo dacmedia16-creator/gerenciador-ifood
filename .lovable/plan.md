@@ -1,69 +1,85 @@
-# Diagnóstico IA Consultivo (especialista iFood)
+## Causa raiz
 
-Adicionar uma camada de IA no Relatório que aplica o prompt do gestor especialista em iFood sobre todos os dados já cadastrados da loja e devolve um diagnóstico consultivo estruturado.
+A tela "Diagnóstico gerado!" mostra:
+- Score geral 56 com áreas baixas (Fotos 50, Promoções 50, Entrega 30)
+- **0 problemas críticos** ("Nenhum problema crítico encontrado")
+- **0 ações sugeridas** ("Sem ações sugeridas")
 
-## O que muda para o usuário
+Existem **dois motores rodando em paralelo** com critérios diferentes:
 
-- No Relatório da loja, novo botão **"Gerar análise consultiva (IA)"**.
-- Ao clicar, em ~10-20s aparece um bloco completo "Análise IA do Especialista" com:
-  - Resumo executivo
-  - Score geral + score por área (barras)
-  - Gargalo principal
-  - Diagnóstico por jornada (busca → entrada → clique → compra → entrega → recompra)
-  - Lista de problemas (problema, evidência, causa, impacto, solução, prioridade, prazo)
-  - Produtos que precisam de ajuste
-  - Oportunidades de ticket médio
-  - Riscos de margem
-  - Próxima melhor ação
-  - Plano de 7 dias
-  - Diagnóstico final em 6 perguntas
-- Resultado fica salvo no relatório — abrir de novo mostra a última análise.
+1. `src/lib/diagnostics/engine.ts` → calcula o **score por área** (usado na tela). Quando faltam dados, atribui scores médios/baixos por padrão (50, 30 etc.).
+2. `src/lib/diagnosis/rules.ts` → gera os **problemas e ações** (gravados em `diagnostics` e `action_plans`). Cada regra exige dados muito específicos do wizard:
+   - Reputação exige `front.rating` ou `reviews.avg_rating`
+   - Entrega exige `front.promised_delivery_time > 35`
+   - Conversão exige `conversion.visits` + `conversion.orders`
+   - Fotos exige `menu.without_photo` + `menu.products_total`
+   - Margem exige `products[]` com `sale_price` e custos
+   - Concorrência exige `competitors[]` cadastrados
 
-## Arquitetura
+A loja "Teste1" foi criada com cadastro mínimo, então **nenhuma regra dispara** → 0 diagnósticos → 0 ações. Mas o motor de score, com defaults, mostra áreas em 30/50, dando a falsa impressão de que "achou problemas mas não escreveu nada".
 
-```text
-Relatório (UI) ──► invoke('ai-consult', { storeId })
-                        │
-                        ▼
-              Edge Function ai-consult
-                        │ valida JWT + RLS
-                        │ coleta dados (stores, products, competitors,
-                        │   reviews, metrics, diagnostics, último report)
-                        ▼
-            Lovable AI Gateway (gemini-2.5-pro)
-              tool_choice: consultive_diagnosis  ◄── prompt do especialista
-                        │
-                        ▼
-              JSON validado ──► merge em reports.report_data.ai_consult
-                        │
-                        ▼
-              Render no <AIConsultReport />
-```
+## O que mudar
+
+### 1. `src/lib/diagnosis/rules.ts` — adicionar regras de fallback baseadas no que sempre existe
+
+Quando dados específicos estão ausentes, gerar diagnóstico de **"dados insuficientes"** acionável (em vez de silenciar):
+
+- Se `products.length === 0` e `menu.products_total` ausente → diagnóstico "Cardápio não cadastrado" (severidade `atencao`, ação: cadastrar produtos)
+- Se `front.rating == null` e `reviews.avg_rating == null` → diagnóstico "Sem informação de reputação" (ação: informar nota atual)
+- Se `conversion.visits == null && conversion.orders == null` → diagnóstico "Sem dados de funil" (ação: importar visitas/pedidos)
+- Se `competitors.length === 0` → diagnóstico "Sem mapeamento de concorrência" (ação: cadastrar 3 concorrentes)
+- Se `loyalty` totalmente vazio → já cai na regra atual de "sem recompra"
+
+Também relaxar gatilhos óbvios:
+- Rating threshold já é < 4.5; manter
+- Entrega: usar também `store.promised_delivery_time` (vem do cadastro básico) como fallback além de `front.promised_delivery_time`
+- Margem: se nenhum produto tem custos, gerar "custos de produtos não informados" (severidade `atencao`)
+
+### 2. `src/lib/diagnosis/generate.ts` — garantir que o fluxo nunca termine em vazio
+
+- Se `diagnostics.length === 0` após as novas regras de fallback, inserir 1 diagnóstico genérico "Cadastro insuficiente para diagnóstico aprofundado" + ação "Completar cadastro: produtos, concorrentes e funil de conversão" (assim a tela nunca fica 100% vazia)
+- O `executive_summary` do report deve refletir a contagem correta
+
+### 3. `src/pages/app/diagnosis/DiagnosisResult.tsx` — UX honesta quando faltam dados
+
+- Quando `critical.length === 0` E `actions.length === 0`, em vez de "Nenhum problema crítico encontrado 🎉" (que confunde), mostrar:
+  - Banner amarelo "Diagnóstico limitado por falta de dados"
+  - Lista do que falta cadastrar (produtos, concorrentes, funil, avaliações)
+  - CTAs diretos: "Cadastrar produtos", "Cadastrar concorrentes", "Informar funil"
+- Quando há ações no plano, mostrar normalmente
+
+### 4. Sem mudanças de schema
+
+Nada no DB muda. Reaproveita `diagnostics` e `action_plans` existentes.
 
 ## Detalhes técnicos
 
-- **Edge function nova** `supabase/functions/ai-consult/index.ts`
-  - System prompt = texto do especialista iFood + benchmarks (conversão 7/12/15%, 35min, 150 avaliações etc.).
-  - User prompt = JSON com loja, produtos, concorrentes, avaliações (até 40), métricas (3 últimas), diagnósticos existentes e contexto do funil.
-  - **Structured output via tool calling** (`consultive_diagnosis`) com schema cobrindo todos os campos pedidos — evita JSON malformado.
-  - Modelo padrão: `google/gemini-2.5-pro` (raciocínio + contexto). Override por `body.model`.
-  - Trata 429 / 402 retornando mensagens claras.
-  - Persiste em `reports.report_data.ai_consult` (cria relatório se não existir). Sem migration.
-- **Componente novo** `src/components/report/AIConsultReport.tsx`
-  - Renderiza todos os blocos com Card / Badge / Progress.
-  - `react-markdown` + `remark-gfm` no resumo executivo.
-- **Edição** `src/pages/app/Report.tsx`
-  - Botão "Gerar análise consultiva (IA)" com loading.
-  - Carrega `report_data.ai_consult` existente e renderiza `<AIConsultReport />` no topo.
-- **Dependências**: `react-markdown`, `remark-gfm` (instalar).
-- **Segurança**: RLS já garante que o usuário só lê suas próprias lojas; a edge function usa o token do usuário no client Supabase, então só consegue ler/escrever o que ele pode.
-- **Sem mudanças de schema**, sem novos secrets (`LOVABLE_API_KEY` já existe).
+```text
+Wizard ──► generate.ts ──► rulesFromAnswers (rules.ts)
+                                │
+                                ├── regras "duras" (existentes) — só com dados
+                                ├── NOVO: regras de cadastro incompleto
+                                └── NOVO: garantia mínima de 1 diagnóstico
 
-## Entregáveis
+           ──► insert diagnostics + action_plans
+           ──► insert reports
 
-1. `supabase/functions/ai-consult/index.ts` (novo)
-2. `src/components/report/AIConsultReport.tsx` (novo)
-3. `src/pages/app/Report.tsx` (botão + render)
-4. `package.json` com `react-markdown` + `remark-gfm`
+DiagnosisResult.tsx:
+- critical.length === 0 && actions.length === 0
+  → renderiza <IncompleteDataNotice /> com checklist + CTAs
+- caso contrário → render atual
+```
 
-Aprovando, eu implemento tudo num único ciclo.
+## Arquivos
+
+- `src/lib/diagnosis/rules.ts` — adicionar ~6 regras de fallback (dados ausentes)
+- `src/lib/diagnosis/generate.ts` — garantia de diagnóstico mínimo + summary correto
+- `src/pages/app/diagnosis/DiagnosisResult.tsx` — UX para "dados insuficientes" com CTAs
+
+## Resultado esperado
+
+Para a loja "Teste1" atual: o relatório passa a mostrar de 3 a 6 itens claros do tipo "Cadastre seus produtos para análise de margem", "Informe visitas e pedidos para diagnóstico de conversão", em vez da tela enganosa de "0 problemas".
+
+Para lojas com dados completos: comportamento atual preservado, com mais regras disparando.
+
+Aprovando, implemento tudo num único ciclo.
