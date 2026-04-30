@@ -55,7 +55,7 @@ export default function Knowledge() {
         <div key={area} className="space-y-2">
           <h2 className="text-sm font-semibold uppercase text-muted-foreground">{area}</h2>
           <div className="grid md:grid-cols-2 gap-3">
-            {list.map((k) => (
+            {(list as any[]).map((k) => (
               <Card key={k.id} className="p-4 shadow-card">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <strong className="text-sm">{k.title}</strong>
