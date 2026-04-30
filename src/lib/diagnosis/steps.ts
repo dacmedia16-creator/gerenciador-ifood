@@ -96,8 +96,23 @@ export const STEPS: StepDef[] = [
     ],
   },
   {
-    key: "storefront",
+    key: "conversion",
     index: 3,
+    title: "Conversão da loja",
+    subtitle: "Visitas, cliques e pedidos",
+    description:
+      "Esses dados aparecem no painel do iFood (Gestor de Pedidos → Desempenho). Servem para classificar a saúde da sua conversão (ideal ≥ 12%).",
+    questions: [
+      { key: "visits", label: "Visitas da loja (últimos 30 dias)", type: "number", essential: true, tooltip: "Quantas pessoas viram sua loja na busca/feed." },
+      { key: "clicks", label: "Cliques em produtos (últimos 30 dias)", type: "number", tooltip: "Quantas vezes alguém abriu a tela de algum produto seu." },
+      { key: "orders", label: "Pedidos concluídos (últimos 30 dias)", type: "number", essential: true },
+      { key: "conversion_rate", label: "Taxa de conversão (%) — opcional, se já souber", type: "number", min: 0, max: 100, tooltip: "Se deixar em branco, calculamos pedidos ÷ visitas × 100." },
+      { key: "conversion_notes", label: "Observações sobre conversão", type: "textarea" },
+    ],
+  },
+  {
+    key: "storefront",
+    index: 4,
     title: "Vitrine da loja",
     subtitle: "Como sua loja aparece para o cliente",
     questions: [
