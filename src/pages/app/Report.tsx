@@ -135,6 +135,57 @@ export default function Report() {
         </Card>
       )}
 
+      {history.length > 0 && (
+        <Card className="p-6 no-print">
+          <div className="flex items-center gap-2 mb-4">
+            <History className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-bold">Histórico de relatórios</h2>
+            <Badge variant="outline" className="ml-auto">{history.length}</Badge>
+          </div>
+          <div className="space-y-2">
+            {history.map((r) => {
+              const ai = r.report_data?.ai_consult;
+              const date = new Date(r.created_at);
+              return (
+                <div key={r.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border hover:bg-muted/40 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <strong className="text-sm truncate">{r.title || "Diagnóstico"}</strong>
+                      {r.general_score != null && <ScoreBadge score={r.general_score} />}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {date.toLocaleDateString("pt-BR")} às {date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      {ai ? " · análise IA" : " · sem IA"}
+                    </p>
+                  </div>
+                  {ai ? (
+                    <Button size="sm" variant="outline" onClick={() => setOpenHistoryItem(r)}>
+                      <Eye className="h-4 w-4 mr-1" /> Abrir
+                    </Button>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">sem IA</Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Dialog open={!!openHistoryItem} onOpenChange={(o) => !o && setOpenHistoryItem(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {openHistoryItem?.title} — {openHistoryItem ? new Date(openHistoryItem.created_at).toLocaleString("pt-BR") : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {openHistoryItem?.report_data?.ai_consult && (
+            <AIConsultReport data={openHistoryItem.report_data.ai_consult} />
+          )}
+        </DialogContent>
+      </Dialog>
+
+
       <Card className="p-8 shadow-elegant">
         <header className="border-b pb-4 mb-6">
           <h1 className="text-3xl font-bold">{store.name}</h1>
