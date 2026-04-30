@@ -534,6 +534,9 @@ const Index = () => {
             </Link>
           </div>
         </div>
+        <div className="container mx-auto px-4 pb-4 text-center text-xs text-white/40">
+          Rua Horácio Cenci, 9 — Sala 604 — Campolim — Sorocaba/SP — CEP 18047-800
+        </div>
         <div className="text-center text-xs text-white/30 pb-6">
           © {new Date().getFullYear()} Gestor de Delivery — Todos os direitos reservados.
         </div>
