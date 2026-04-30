@@ -12,12 +12,15 @@ import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { AIConsultReport } from "@/components/report/AIConsultReport";
 
 export default function Report() {
   const { id } = useParams();
   const data = useStoreData(id);
   const [downloading, setDownloading] = useState(false);
   const [latestReport, setLatestReport] = useState<any>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiConsult, setAiConsult] = useState<any>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -29,9 +32,24 @@ export default function Report() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (data) setLatestReport(data);
+      if (data) {
+        setLatestReport(data);
+        const ai = (data as any).report_data?.ai_consult;
+        if (ai) setAiConsult(ai);
+      }
     })();
   }, [id]);
+
+  const runAIConsult = async () => {
+    if (!id) return;
+    setAiLoading(true);
+    const res = await invokeAI<{ diagnosis: any }>("ai-consult", { storeId: id });
+    if (res?.diagnosis) {
+      setAiConsult(res.diagnosis);
+      toast.success("Análise consultiva gerada!");
+    }
+    setAiLoading(false);
+  };
 
   const downloadPdf = async () => {
     if (!id) return;
@@ -94,13 +112,22 @@ export default function Report() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between no-print flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Relatório consultivo</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={runAIConsult} disabled={aiLoading} variant="default" className="gradient-primary text-primary-foreground">
+            {aiLoading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Analisando…</> : <><Sparkles className="h-4 w-4 mr-1" />{aiConsult ? "Atualizar análise IA" : "Gerar análise consultiva (IA)"}</>}
+          </Button>
           <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" /> Imprimir</Button>
-          <Button onClick={downloadPdf} disabled={downloading} className="gradient-primary text-primary-foreground">
+          <Button variant="outline" onClick={downloadPdf} disabled={downloading}>
             {downloading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Gerando…</> : <><Download className="h-4 w-4 mr-1" />Baixar PDF</>}
           </Button>
         </div>
       </div>
+
+      {aiConsult && (
+        <Card className="p-6 shadow-elegant border-primary/30">
+          <AIConsultReport data={aiConsult} />
+        </Card>
+      )}
 
       <Card className="p-8 shadow-elegant">
         <header className="border-b pb-4 mb-6">
