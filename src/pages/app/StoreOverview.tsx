@@ -69,7 +69,7 @@ export default function StoreOverview() {
           </Button>
           <Button onClick={runAI} disabled={aiRunning} className="gradient-primary text-primary-foreground">
             <Sparkles className={`h-4 w-4 mr-1 ${aiRunning ? "animate-pulse" : ""}`} />
-            {aiRunning ? "Analisando…" : "Diagnóstico IA"}
+            {aiRunning ? "Consultando…" : "Consultar Gestor IA"}
           </Button>
         </div>
       </div>
