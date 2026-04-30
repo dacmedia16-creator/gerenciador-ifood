@@ -398,6 +398,15 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       }
     }
 
+    // Re-sincroniza enriched + atualiza report_data com os recommendation_ids gerados
+    enriched.main_problems = diagnosis.main_problems;
+    if (newReportId) {
+      const baseData2 = (reportR.data?.report_data as any) ?? {};
+      await supabase.from("reports").update({
+        report_data: { ...baseData2, ai_consult: enriched },
+      }).eq("id", newReportId);
+    }
+
     // Grava 1 training_example via service role (RLS bloqueia usuário)
     try {
       const adminClient = createClient(
