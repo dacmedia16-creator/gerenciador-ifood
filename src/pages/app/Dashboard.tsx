@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { ScoreBadge } from "@/components/StatusBadges";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { seedDemoStore } from "@/lib/seed/demoStore";
@@ -18,7 +19,21 @@ export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [draftSession, setDraftSession] = useState<any>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("diagnosis_sessions")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("status", "draft")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setDraftSession(data));
+  }, [user]);
 
   useEffect(() => {
     (async () => {
