@@ -20,7 +20,7 @@ export default function NewStore() {
   });
   const [loading, setLoading] = useState(false);
 
-  const set = (k: string, v: any) => setForm({ ...form, [k]: v });
+  const set = (k: string, v: any) => setForm((prev: any) => ({ ...prev, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
