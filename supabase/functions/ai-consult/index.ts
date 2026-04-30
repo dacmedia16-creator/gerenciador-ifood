@@ -244,20 +244,19 @@ Deno.serve(async (req) => {
 
     const enriched = { ...diagnosis, generated_at: new Date().toISOString(), model };
 
-    if (reportR.data?.id) {
-      const merged = { ...(reportR.data.report_data ?? {}), ai_consult: enriched };
-      await supabase.from("reports").update({ report_data: merged }).eq("id", reportR.data.id);
-    } else {
-      await supabase.from("reports").insert({
-        store_id: storeId,
-        title: `Diagnóstico IA — ${storeR.data.name}`,
-        executive_summary: diagnosis.executive_summary,
-        general_score: diagnosis.overall_score,
-        report_data: { ai_consult: enriched },
-      });
-    }
+    // Sempre cria um novo relatório no histórico (preserva contexto do último)
+    const baseData = reportR.data?.report_data ?? {};
+    const merged = { ...baseData, ai_consult: enriched };
 
-    return new Response(JSON.stringify({ diagnosis: enriched }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { data: inserted } = await supabase.from("reports").insert({
+      store_id: storeId,
+      title: `Diagnóstico IA — ${new Date().toLocaleDateString("pt-BR")}`,
+      executive_summary: diagnosis.executive_summary,
+      general_score: diagnosis.overall_score,
+      report_data: merged,
+    }).select("id").single();
+
+    return new Response(JSON.stringify({ diagnosis: enriched, report_id: inserted?.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("ai-consult error", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
