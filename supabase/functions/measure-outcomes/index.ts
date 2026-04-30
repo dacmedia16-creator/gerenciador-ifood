@@ -161,6 +161,17 @@ async function measureForStore(admin: any, storeId: string) {
     measured++;
     results.push({ id: r.id, rule_id: r.rule_id, outcome, delta_pct: metricsAfter._delta_pct ?? null });
 
+    if (outcome === "inconclusivo") {
+      console.log(JSON.stringify({
+        evt: "measure_outcomes.inconclusive",
+        store_id: storeId,
+        recommendation_id: r.id,
+        rule_id: r.rule_id,
+        target_metric: metricsAfter._target_metric ?? null,
+        samples: metricsAfter.samples,
+      }));
+    }
+
     if (outcome === "positivo") {
       admin.functions.invoke("extract-case", {
         body: { recommendation_id: r.id },

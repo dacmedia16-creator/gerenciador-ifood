@@ -70,15 +70,37 @@ export function embedTextLexical(text: string): number[] | null {
   return l2Normalize(vec);
 }
 
+export type RagMode = "full" | "degraded";
+
+export interface EmbedResult {
+  vector: number[] | null;
+  mode: RagMode;
+  reason?: string;
+}
+
 /**
- * Wrapper público. No futuro tentará embedding real via Lovable AI
- * Gateway quando EMBED_MODEL estiver definida; hoje usa sempre lexical.
+ * Wrapper com metadata. Permite ao chamador saber se o RAG está degradado.
+ * Hoje sempre retorna mode="degraded" porque ainda usamos lexical (RAG v1).
+ * Quando EMBED_MODEL estiver setada e funcionar, retornará mode="full".
+ */
+export async function embedTextWithMeta(text: string): Promise<EmbedResult> {
+  // TODO v2: quando o gateway expor um modelo de embedding, ativar aqui.
+  // const model = Deno.env.get("EMBED_MODEL");
+  // if (model) { ...fetch para o gateway... return { vector, mode: "full" }; }
+  return {
+    vector: embedTextLexical(text),
+    mode: "degraded",
+    reason: "lexical_v1",
+  };
+}
+
+/**
+ * Wrapper público legado. Mantido para compatibilidade com chamadores
+ * que não precisam saber do modo. Use embedTextWithMeta() para observabilidade.
  */
 export async function embedText(text: string): Promise<number[] | null> {
-  // TODO v2: quando o gateway expor um modelo de embedding, ativar aqui
-  // const model = Deno.env.get("EMBED_MODEL");
-  // if (model) { ...fetch para o gateway, retornar embedding real... }
-  return embedTextLexical(text);
+  const r = await embedTextWithMeta(text);
+  return r.vector;
 }
 
 // Converte array para o literal do pgvector (string "[a,b,c]")

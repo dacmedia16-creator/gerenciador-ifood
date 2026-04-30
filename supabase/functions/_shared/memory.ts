@@ -6,8 +6,14 @@
 // palavras-chave, NÃO por significado. Sinônimos não casam. Quando trocarmos
 // para embeddings reais, a interface destas funções não muda.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { embedText, toPgVector } from "./embeddings.ts";
+import { embedText, embedTextWithMeta, toPgVector, type RagMode } from "./embeddings.ts";
 import type { RuleEvidence } from "./evidences.ts";
+
+export interface RagSearchResult<T> {
+  items: T[];
+  mode: RagMode;
+  reason?: string;
+}
 
 export async function loadStoreMemory(supabase: SupabaseClient, storeId: string) {
   const { data } = await supabase.from("store_memory").select("*").eq("store_id", storeId).maybeSingle();
@@ -80,5 +86,58 @@ export function buildMetricsSnapshot(store: any, lastMetric: any) {
     monthly_orders: store?.monthly_orders ?? lastMetric?.orders,
     cancellation_rate: store?.cancellation_rate ?? lastMetric?.cancellation_rate,
     captured_at: new Date().toISOString(),
+  };
+}
+
+// ============================================================
+// Variantes "Meta" do RAG: retornam itens + modo (full/degraded)
+// para permitir logs estruturados sem alterar a semântica das funções
+// originais. Use estas em ai-consult; mantenha as antigas para qualquer
+// outro consumidor que não precise saber do modo.
+// ============================================================
+export async function findSimilarCasesMeta(
+  supabase: SupabaseClient,
+  queryText: string,
+  limit = 3,
+): Promise<RagSearchResult<any>> {
+  const meta = await embedTextWithMeta(queryText);
+  if (!meta.vector) return { items: [], mode: meta.mode, reason: meta.reason };
+  const { data, error } = await supabase.rpc("match_cases", {
+    query_embedding: toPgVector(meta.vector) as any,
+    match_count: limit,
+    filter_rule_id: null,
+  });
+  if (error) {
+    console.warn("match_cases error", error);
+    return { items: [], mode: meta.mode, reason: meta.reason };
+  }
+  return {
+    items: (data ?? []).filter((c: any) => c.similarity > 0.5),
+    mode: meta.mode,
+    reason: meta.reason,
+  };
+}
+
+export async function findKnowledgeSnippetsMeta(
+  supabase: SupabaseClient,
+  queryText: string,
+  areas: string[] | null = null,
+  limit = 5,
+): Promise<RagSearchResult<any>> {
+  const meta = await embedTextWithMeta(queryText);
+  if (!meta.vector) return { items: [], mode: meta.mode, reason: meta.reason };
+  const { data, error } = await supabase.rpc("match_knowledge", {
+    query_embedding: toPgVector(meta.vector) as any,
+    match_count: limit,
+    filter_areas: areas,
+  });
+  if (error) {
+    console.warn("match_knowledge error", error);
+    return { items: [], mode: meta.mode, reason: meta.reason };
+  }
+  return {
+    items: (data ?? []).filter((k: any) => k.similarity > 0.4),
+    mode: meta.mode,
+    reason: meta.reason,
   };
 }

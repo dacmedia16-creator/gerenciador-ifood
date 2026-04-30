@@ -4,8 +4,8 @@ import {
   loadStoreMemory,
   loadPastRecommendations,
   buildSearchText,
-  findSimilarCases,
-  findKnowledgeSnippets,
+  findSimilarCasesMeta,
+  findKnowledgeSnippetsMeta,
   buildMetricsSnapshot,
 } from "../_shared/memory.ts";
 import { applyDiagnosisValidation } from "../_shared/validate-diagnosis.ts";
@@ -149,6 +149,7 @@ const TOOL_SCHEMA = {
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const t0 = Date.now();
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -216,12 +217,25 @@ Deno.serve(async (req) => {
     // ===== Camada 3: RAG (casos e conhecimento) =====
     const searchText = buildSearchText(ruleEvidences);
     const areas = Array.from(new Set(ruleEvidences.map((e) => e.area)));
-    const [similarCases, kbSnippets] = await Promise.all([
-      findSimilarCases(supabase, searchText, 3),
-      findKnowledgeSnippets(supabase, searchText, areas.length ? areas : null, 5),
+    const [similarCasesRes, kbSnippetsRes] = await Promise.all([
+      findSimilarCasesMeta(supabase, searchText, 3),
+      findKnowledgeSnippetsMeta(supabase, searchText, areas.length ? areas : null, 5),
     ]);
+    const similarCases = similarCasesRes.items;
+    const kbSnippets = kbSnippetsRes.items;
     const validCaseIds = new Set(similarCases.map((c: any) => c.id));
     const validKbIds = new Set(kbSnippets.map((k: any) => k.id));
+
+    // RAG observabilidade — logs estruturados sem expor segredos
+    const LOVABLE_API_KEY_PRESENT = !!Deno.env.get("LOVABLE_API_KEY");
+    const ragMeta = {
+      rag_mode: similarCasesRes.mode, // hoje sempre "degraded" (lexical v1)
+      degraded_reason: similarCasesRes.mode === "degraded" ? (similarCasesRes.reason ?? "lexical_v1") : undefined,
+      missing_lovable_api_key: !LOVABLE_API_KEY_PRESENT,
+      similar_cases_count: similarCases.length,
+      kb_snippets_count: kbSnippets.length,
+    };
+    console.log(JSON.stringify({ evt: "ai_consult.rag", store_id: storeId, ...ragMeta }));
 
     // ===== Snapshot de métricas para gravar como "antes" =====
     const metricsSnapshot = buildMetricsSnapshot(storeR.data, metricsR.data?.[0]);
@@ -270,6 +284,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
+      console.log(JSON.stringify({ evt: "ai_consult.missing_api_key", store_id: storeId }));
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY não configurada" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -328,6 +343,17 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
     if (Object.values(dropped).some((n) => n > 0)) {
       console.warn("Itens descartados por referência inválida", dropped);
     }
+    // Observabilidade: descarte alto (>20% dos problemas) sinaliza prompt drift / IA inventando.
+    const beforeProblems = (dropped.problems ?? 0) + (diagnosis.main_problems?.length ?? 0);
+    if (beforeProblems > 0 && (dropped.problems / beforeProblems) > 0.2) {
+      console.log(JSON.stringify({
+        evt: "ai_consult.validation_drop_high",
+        store_id: storeId,
+        dropped_problems: dropped.problems,
+        total_before: beforeProblems,
+        drop_ratio: Number((dropped.problems / beforeProblems).toFixed(2)),
+      }));
+    }
 
     const enriched = {
       ...diagnosis,
@@ -337,6 +363,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       similar_cases_used: similarCases,
       knowledge_snippets_used: kbSnippets,
       validation: { dropped },
+      rag_meta: ragMeta,
     };
 
     // ===== Persistência =====
@@ -359,6 +386,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       const rows = diagnosis.main_problems.map((p: any) => ({
         store_id: storeId,
         report_id: newReportId,
+        diagnosis_cycle_id: newReportId, // agrupa todas as recs deste ciclo
         rule_id: p.rule_id,
         recommendation: p.title,
         expected_impact: p.why_it_matters?.slice(0, 500),
@@ -438,6 +466,16 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       });
     } catch (e) {
       console.warn("training_examples / memory update failed", e);
+    }
+
+    const elapsed = Date.now() - t0;
+    if (elapsed > 10_000) {
+      console.log(JSON.stringify({
+        evt: "ai_consult.slow",
+        store_id: storeId,
+        elapsed_ms: elapsed,
+        model,
+      }));
     }
 
     return new Response(JSON.stringify({ diagnosis: enriched, report_id: newReportId }), {
