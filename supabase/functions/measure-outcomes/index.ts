@@ -130,7 +130,6 @@ async function measureForStore(admin: any, storeId: string) {
       samples: mAfter?.length ?? 0,
     };
 
-    const target = TARGETS[r.rule_id ?? ""];
     const exp = buildExplanation({
       ruleId: r.rule_id,
       before: target ? (r.metrics_before as any)?.[target.key] : null,
