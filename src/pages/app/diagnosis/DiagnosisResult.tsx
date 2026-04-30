@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge } from "@/components/StatusBadges";
-import { ArrowRight, FileText, Target, AlertTriangle, ListTodo } from "lucide-react";
+import { ArrowRight, FileText, Target, AlertTriangle, ListTodo, Info } from "lucide-react";
 
 export default function DiagnosisResult() {
   const { sessionId = "" } = useParams();
