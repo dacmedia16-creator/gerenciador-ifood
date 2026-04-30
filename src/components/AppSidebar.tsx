@@ -15,10 +15,15 @@ const general = [
   { title: "Lojas", url: "/app/stores", icon: Store },
 ];
 
-const storeSections = (id: string) => [
+const storeAnalysis = (id: string) => [
   { title: "Visão geral", url: `/app/stores/${id}`, icon: Home },
   { title: "Diagnóstico", url: `/app/stores/${id}/diagnostics`, icon: Stethoscope },
   { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
+  { title: "Plano de ação", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
+  { title: "Relatório", url: `/app/stores/${id}/report`, icon: FileText },
+];
+
+const storeOperations = (id: string) => [
   { title: "Cardápio", url: `/app/stores/${id}/menu`, icon: UtensilsCrossed },
   { title: "Produtos", url: `/app/stores/${id}/products`, icon: Package },
   { title: "Margem & Preço", url: `/app/stores/${id}/pricing`, icon: DollarSign },
@@ -26,9 +31,10 @@ const storeSections = (id: string) => [
   { title: "Concorrentes", url: `/app/stores/${id}/competitors`, icon: Users },
   { title: "Campanhas", url: `/app/stores/${id}/campaigns`, icon: Megaphone },
   { title: "Métricas", url: `/app/stores/${id}/metrics`, icon: BarChart3 },
-  { title: "Uploads", url: `/app/stores/${id}/uploads`, icon: Upload },
-  { title: "Plano de ação", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
-  { title: "Relatório", url: `/app/stores/${id}/report`, icon: FileText },
+];
+
+const storeData = (id: string) => [
+  { title: "Importar dados", url: `/app/stores/${id}/uploads`, icon: Upload },
   { title: "Template do PDF", url: `/app/stores/${id}/report/template`, icon: Palette },
 ];
 
@@ -50,8 +56,8 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
         <NavLink to="/app/dashboard" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground font-bold">G</div>
-          {!collapsed && <span className="font-semibold">Gestor IA</span>}
+          <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">G</div>
+          {!collapsed && <span className="font-semibold leading-tight text-sm">Gestor IA<br/><span className="text-xs text-muted-foreground font-normal">de Delivery</span></span>}
         </NavLink>
       </SidebarHeader>
 
@@ -72,20 +78,52 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {storeId && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Loja</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {storeSections(storeId).map((item) => (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                      <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <>
+            <SidebarGroup>
+              <SidebarGroupLabel>Análise</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {storeAnalysis(storeId).map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Operação</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {storeOperations(storeId).map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Dados & Saída</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {storeData(storeId).map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
         )}
       </SidebarContent>
 
