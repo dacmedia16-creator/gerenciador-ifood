@@ -284,6 +284,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
+      console.log(JSON.stringify({ evt: "ai_consult.missing_api_key", store_id: storeId }));
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY não configurada" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -342,6 +343,17 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
     if (Object.values(dropped).some((n) => n > 0)) {
       console.warn("Itens descartados por referência inválida", dropped);
     }
+    // Observabilidade: descarte alto (>20% dos problemas) sinaliza prompt drift / IA inventando.
+    const beforeProblems = (dropped.problems ?? 0) + (diagnosis.main_problems?.length ?? 0);
+    if (beforeProblems > 0 && (dropped.problems / beforeProblems) > 0.2) {
+      console.log(JSON.stringify({
+        evt: "ai_consult.validation_drop_high",
+        store_id: storeId,
+        dropped_problems: dropped.problems,
+        total_before: beforeProblems,
+        drop_ratio: Number((dropped.problems / beforeProblems).toFixed(2)),
+      }));
+    }
 
     const enriched = {
       ...diagnosis,
@@ -351,6 +363,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       similar_cases_used: similarCases,
       knowledge_snippets_used: kbSnippets,
       validation: { dropped },
+      rag_meta: ragMeta,
     };
 
     // ===== Persistência =====
@@ -373,6 +386,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       const rows = diagnosis.main_problems.map((p: any) => ({
         store_id: storeId,
         report_id: newReportId,
+        diagnosis_cycle_id: newReportId, // agrupa todas as recs deste ciclo
         rule_id: p.rule_id,
         recommendation: p.title,
         expected_impact: p.why_it_matters?.slice(0, 500),
@@ -452,6 +466,16 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       });
     } catch (e) {
       console.warn("training_examples / memory update failed", e);
+    }
+
+    const elapsed = Date.now() - t0;
+    if (elapsed > 10_000) {
+      console.log(JSON.stringify({
+        evt: "ai_consult.slow",
+        store_id: storeId,
+        elapsed_ms: elapsed,
+        model,
+      }));
     }
 
     return new Response(JSON.stringify({ diagnosis: enriched, report_id: newReportId }), {
