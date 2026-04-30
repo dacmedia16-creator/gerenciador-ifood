@@ -52,6 +52,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/contato" element={<Contato />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             {/* Diagnosis funnel — fora do AppLayout para tela cheia */}
             <Route path="/app/diagnosis/new" element={<NewDiagnosis />} />
