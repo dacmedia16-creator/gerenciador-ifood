@@ -22,23 +22,27 @@ export default function Report() {
   const [latestReport, setLatestReport] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiConsult, setAiConsult] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [openHistoryItem, setOpenHistoryItem] = useState<any>(null);
+
+  const loadReports = async () => {
+    if (!id) return;
+    const { data: rows } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("store_id", id)
+      .order("created_at", { ascending: false });
+    if (rows && rows.length > 0) {
+      setLatestReport(rows[0]);
+      setHistory(rows);
+      const ai = (rows[0] as any).report_data?.ai_consult;
+      if (ai) setAiConsult(ai);
+    }
+  };
 
   useEffect(() => {
-    if (!id) return;
-    (async () => {
-      const { data } = await supabase
-        .from("reports")
-        .select("*")
-        .eq("store_id", id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setLatestReport(data);
-        const ai = (data as any).report_data?.ai_consult;
-        if (ai) setAiConsult(ai);
-      }
-    })();
+    loadReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const runAIConsult = async () => {
@@ -48,6 +52,7 @@ export default function Report() {
     if (res?.diagnosis) {
       setAiConsult(res.diagnosis);
       toast.success("Análise consultiva gerada!");
+      await loadReports();
     }
     setAiLoading(false);
   };
