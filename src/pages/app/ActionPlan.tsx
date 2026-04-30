@@ -103,13 +103,39 @@ export default function ActionPlan() {
                   {a.due_date && <span>Prazo: {a.due_date}</span>}
                 </div>
               </div>
-              <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a.id, e.target.value)}>
+              <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </Card>
         ))}
       </div>
+
+      <Dialog open={!!outcomeFor} onOpenChange={(o) => !o && setOutcomeFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Como foi o resultado?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{outcomeFor?.title}</p>
+          <div className="flex gap-2 flex-wrap">
+            {[
+              { v: "positivo", l: "Funcionou bem" },
+              { v: "neutro", l: "Sem mudança clara" },
+              { v: "negativo", l: "Não funcionou" },
+              { v: "inconclusivo", l: "Ainda cedo" },
+            ].map((o) => (
+              <Button key={o.v} size="sm" variant={outcome === o.v ? "default" : "outline"} onClick={() => setOutcome(o.v)}>
+                {o.l}
+              </Button>
+            ))}
+          </div>
+          <Textarea placeholder="O que aconteceu? (opcional)" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOutcomeFor(null)}>Pular</Button>
+            <Button onClick={submitOutcome}>Registrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
