@@ -1,103 +1,53 @@
-## Reposicionamento da Landing Page — De SaaS para Serviço Premium de Gestão de Delivery
+## Página de Contato com formulário e canais de conversão
 
-### Objetivo
-Transformar `src/pages/Index.tsx` em uma página que vende um **serviço consultivo premium** de gestão de delivery (não mais um SaaS self-service), com visual escuro/imponente e copy de autoridade.
+Criar uma nova página `/contato` alinhada à identidade premium da landing (preto, vermelho `#EA1D2C`, amarelo `#FFD000`, off-white) com formulário de captação de leads e exibição clara dos canais (endereço, e-mail e WhatsApp).
 
----
+### O que será entregue
 
-### 1. Mudanças de copy e estrutura (`src/pages/Index.tsx`)
+**1. Nova página `src/pages/Contato.tsx`**
+- Header e footer reaproveitando o estilo visual do `Index.tsx` (mesma paleta isolada, mesmo logo "G", mesmo CTA "Área do cliente").
+- Hero curto: "Fale com um Gestor de Delivery" + subtítulo de conversão ("Receba uma análise inicial gratuita do seu delivery em até 24h").
+- Layout em 2 colunas (responsivo, vira 1 coluna no mobile):
+  - **Esquerda – Formulário** dentro de um Card com:
+    - Nome, WhatsApp, E-mail, Nome do restaurante, Cidade/UF, Faturamento mensal estimado (select), Mensagem.
+    - Botão primário vermelho: "Quero falar com um especialista".
+    - Validação com `zod` (trim, e-mail válido, limites de tamanho), mensagens de erro inline e `toast` de sucesso/erro (sonner já configurado).
+    - Ao enviar com sucesso: também abre o WhatsApp em nova aba com mensagem pré-formatada (fallback de conversão imediata).
+  - **Direita – Canais de contato** em cards escuros:
+    - WhatsApp (ícone + número clicável `https://wa.me/...`) — CTA destacado.
+    - E-mail (mailto:).
+    - Endereço completo: Rua Horácio Cenci, 9 — Sala 604 — Campolim — Sorocaba/SP — CEP 18047-800.
+    - Horário de atendimento (Seg–Sex, 9h–18h).
+    - Bloco de "garantias" (resposta em até 24h, atendimento humano, sem compromisso).
 
-Reescrever a página inteira com as seguintes seções, nesta ordem:
+**2. Persistência do lead (Lovable Cloud)**
+- Criar tabela `public.contact_leads` (id, created_at, nome, whatsapp, email, restaurante, cidade, faturamento, mensagem, origem).
+- RLS: habilitada; `INSERT` permitido para `anon` e `authenticated` (formulário público); `SELECT` apenas para usuários com role `admin` (via `has_role`, padrão de segurança do projeto).
+- O formulário grava direto via `supabase.from('contact_leads').insert(...)` — sem edge function.
 
-**Header premium**
-- Logo + nome "Gestor de Delivery" (estilo monograma em vermelho/preto)
-- Links âncora: Como funciona · O que analisamos · Para quem é · Falar com especialista
-- CTA no topo: "Solicitar análise" (vermelho sólido)
-- Remover botões "Entrar" / "Começar grátis" do destaque (acesso ao login fica como link discreto "Área do cliente" no rodapé do header)
+**3. Integração na navegação**
+- Adicionar rota `/contato` em `src/App.tsx`.
+- Adicionar link "Contato" no menu do header e no rodapé do `Index.tsx`.
+- Trocar o link "Falar com especialista" do header/footer da landing para apontar para `/contato` (em vez de `/auth?mode=signup`), mantendo o CTA "Solicitar análise" do hero apontando para signup.
 
-**Hero (fundo escuro #111111 com detalhes em vermelho/amarelo)**
-- Badge: "Gestão especializada para delivery"
-- H1: "Gestão profissional para restaurantes que querem vender mais no delivery"
-- Subtítulo: "Assumimos a inteligência operacional do seu delivery: cardápio, margem, reputação, campanhas, concorrência, recompra e plano de crescimento para aplicativos e canais próprios."
-- CTA primário (vermelho #EA1D2C): "Solicitar análise do meu delivery"
-- CTA secundário (outline claro): "Ver como funciona"
-- Mock visual lateral: card escuro com mini-dashboard (score, ticket médio, pedidos, evolução) usando a paleta delivery
-- Selos de confiança: "iFood · 99Food · WhatsApp · Cardápio próprio"
+### Dados de contato exibidos
 
-**Seção de dores**
-- Título: "O problema não é só vender pouco. É não saber onde o dinheiro está escapando."
-- 6 cards: Margem baixa · Promoções sem lucro · Avaliações ruins · Entrega lenta · Baixa recompra · Concorrência mais forte
-- Cards claros sobre off-white #FFF8F2, borda fina, ícone vermelho
+- **Endereço:** Rua Horácio Cenci, 9 — Sala 604 — Campolim — Sorocaba/SP — CEP 18047-800
+- **WhatsApp / E-mail:** preciso que você me informe os valores reais. Enquanto isso, deixarei placeholders (`(15) 90000-0000` e `contato@gestordedelivery.com.br`) marcados com comentário `// TODO` para você ajustar — ou me responda agora com os dados certos que já entrego prontos.
 
-**Seção de serviços** (id="como-funciona")
-- Título: "Uma gestão completa para transformar delivery em canal de crescimento."
-- 6 cards: Diagnóstico Comercial · Gestão de Cardápio · Performance em Aplicativos · Campanhas e Promoções · Reputação e Avaliações · Plano de Crescimento
+### Detalhes técnicos
 
-**Seção diferenciadora (fundo grafite #1F1F1F)**
-- Frase forte: "Você não contrata uma plataforma. Você contrata uma equipe olhando para o seu delivery."
-- 3 colunas: Dados · Inteligência Artificial · Visão estratégica humana
-- Frases-âncora: "Você cuida da cozinha. Nós cuidamos da performance do seu delivery."
+- Validação: `zod` + `react-hook-form` (já presentes no projeto via `components/ui/form`).
+- Toasts: `sonner` (já montado em `App.tsx`).
+- Sanitização de URL: `encodeURIComponent` na mensagem do WhatsApp.
+- Estilo: classes Tailwind + `style={{ backgroundColor: C.* }}` para manter a paleta da landing isolada do design system (mesmo padrão usado em `Index.tsx`).
+- Sem novas dependências.
 
-**Seção de processo**
-- 4 etapas numeradas: 1) Raio-X da operação · 2) Diagnóstico estratégico · 3) Plano de ação priorizado · 4) Acompanhamento e otimização
+### Arquivos afetados
 
-**Seção "Para quem é"** (id="para-quem")
-- Lista visual: Hamburguerias · Pizzarias · Açaíterias · Dark Kitchens · Restaurantes locais · Operações em iFood/99Food/WhatsApp/cardápio próprio
+- `src/pages/Contato.tsx` (novo)
+- `src/App.tsx` (rota)
+- `src/pages/Index.tsx` (links de header/footer)
+- Migração SQL: tabela `contact_leads` + RLS
 
-**Seção de indicadores analisados** (id="o-que-analisamos")
-- Grid com: Cardápio, margem, ticket médio, avaliações, tempo de entrega, cancelamentos, concorrência, campanhas, recompra, produtos campeões e produtos problemáticos
-- Estilo: chips/tags escuros sobre fundo claro
-
-**CTA final (fundo preto #111 com gradiente vermelho)**
-- "Quer descobrir onde seu delivery está perdendo dinheiro?"
-- Botão grande amarelo #FFD000 com texto preto: "Solicitar análise agora"
-- Botão secundário: "Falar com um gestor"
-
-**Footer**
-- Nome da empresa, tagline curta, link discreto "Área do cliente" → `/auth`
-
----
-
-### 2. Direção visual e paleta
-
-Aplicar via classes Tailwind inline (cores arbitrárias `bg-[#EA1D2C]`, `text-[#FFD000]`, etc.) para evitar mexer no design system global e não impactar o resto do app:
-
-- Vermelho principal: `#EA1D2C`
-- Amarelo destaque: `#FFD000`
-- Preto premium: `#111111`
-- Grafite: `#1F1F1F`
-- Off-white: `#FFF8F2`
-- Verde positivo: `#16A34A`
-
-Cards: bordas finas (`border border-black/10` ou `border-white/10`), sombra elegante (`shadow-xl shadow-black/5`), `rounded-2xl`, padding generoso (`p-8`).
-
-Tipografia: títulos grandes e densos (`text-5xl md:text-7xl font-bold tracking-tight`), bom espaçamento entre seções (`py-24`).
-
-Ícones: usar `lucide-react` (já no projeto) — `ChefHat`, `TrendingUp`, `Star`, `Truck`, `Target`, `BarChart3`, `Users`, `MessageCircle`, etc.
-
----
-
-### 3. CTAs e roteamento
-
-Todos os CTAs principais ("Solicitar análise", "Falar com especialista", "Falar com um gestor") apontam para o mesmo destino. Como ainda não existe formulário de captação:
-
-- **Decisão padrão (a confirmar se preferir outra):** apontar todos os CTAs principais para `/auth?mode=signup` mantendo a rota existente, mas com label de serviço ("Solicitar análise"). Assim a página vende serviço sem quebrar o fluxo atual.
-- "Área do cliente" (link discreto) → `/auth`
-
-Se preferir um link `mailto:` ou WhatsApp, ajusto após aprovação.
-
----
-
-### 4. Escopo do que NÃO muda
-
-- Nenhuma mudança em `App.tsx`, rotas, autenticação ou backend.
-- `src/index.css` e `tailwind.config.ts` permanecem intactos (cores aplicadas inline na Index para isolar o tema premium da landing).
-- Nenhuma alteração em páginas internas (`/app/*`).
-
----
-
-### Arquivos alterados
-- `src/pages/Index.tsx` — reescrita completa.
-
-### Resultado esperado
-Landing escura, imponente, com narrativa de serviço consultivo premium para donos de delivery, paleta iFood/99, CTAs de captação ("Solicitar análise") e zero linguagem de SaaS self-service.
+Posso prosseguir? Se já tiver WhatsApp e e-mail oficiais, me passe junto da aprovação.

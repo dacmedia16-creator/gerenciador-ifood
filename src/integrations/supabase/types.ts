@@ -263,6 +263,45 @@ export type Database = {
           },
         ]
       }
+      contact_leads: {
+        Row: {
+          cidade: string | null
+          created_at: string
+          email: string
+          faturamento: string | null
+          id: string
+          mensagem: string | null
+          nome: string
+          origem: string
+          restaurante: string | null
+          whatsapp: string
+        }
+        Insert: {
+          cidade?: string | null
+          created_at?: string
+          email: string
+          faturamento?: string | null
+          id?: string
+          mensagem?: string | null
+          nome: string
+          origem?: string
+          restaurante?: string | null
+          whatsapp: string
+        }
+        Update: {
+          cidade?: string | null
+          created_at?: string
+          email?: string
+          faturamento?: string | null
+          id?: string
+          mensagem?: string | null
+          nome?: string
+          origem?: string
+          restaurante?: string | null
+          whatsapp?: string
+        }
+        Relationships: []
+      }
       diagnosis_answers: {
         Row: {
           answer_type: string | null

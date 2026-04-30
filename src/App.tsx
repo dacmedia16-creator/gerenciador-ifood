@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Contato from "./pages/Contato";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import AppLayout from "./components/AppLayout";
@@ -51,6 +52,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/contato" element={<Contato />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             {/* Diagnosis funnel — fora do AppLayout para tela cheia */}
             <Route path="/app/diagnosis/new" element={<NewDiagnosis />} />

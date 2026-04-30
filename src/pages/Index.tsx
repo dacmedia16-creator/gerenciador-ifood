@@ -46,7 +46,7 @@ const Index = () => {
             <a href="#como-funciona" className="hover:text-white transition">Como funciona</a>
             <a href="#o-que-analisamos" className="hover:text-white transition">O que analisamos</a>
             <a href="#para-quem" className="hover:text-white transition">Para quem é</a>
-            <a href={CTA_PRIMARY} className="hover:text-white transition">Falar com especialista</a>
+            <Link to="/contato" className="hover:text-white transition">Contato</Link>
           </nav>
 
           <Button
@@ -528,6 +528,7 @@ const Index = () => {
             </div>
           </div>
           <div className="flex items-center gap-6 text-sm">
+            <Link to="/contato" className="text-white/70 hover:text-white transition">Contato</Link>
             <a href={CTA_PRIMARY} className="text-white/70 hover:text-white transition">Falar com especialista</a>
             <Link to={CTA_LOGIN} className="text-white/40 hover:text-white/70 transition text-xs">
               Área do cliente
