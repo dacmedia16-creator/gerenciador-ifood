@@ -92,18 +92,20 @@ export function runDiagnostics(input: {
   }
 
   const noPhoto = products.filter((p) => !p.has_photo).length;
-  if (products.length > 0 && noPhoto / products.length > 0.3) {
+  const noPhotoRatio = products.length ? noPhoto / products.length : 0;
+  if (products.length > 0 && noPhotoRatio > 0.3) {
+    const allMissing = noPhoto === products.length;
     diags.push({
       area: "Cardápio / Fotos",
-      problem: `${noPhoto} produtos sem foto (${Math.round((noPhoto / products.length) * 100)}%)`,
-      evidence: `Mais de 30% do cardápio sem imagem`,
+      problem: allMissing ? `Nenhum produto com foto no cardápio` : `${noPhoto} produtos sem foto (${Math.round(noPhotoRatio * 100)}%)`,
+      evidence: allMissing ? `100% do cardápio sem imagem` : `Mais de 30% do cardápio sem imagem`,
       probable_cause: "Cardápio incompleto ou desatualizado",
       business_impact: "Reduz conversão em até 30%",
       recommended_solution: "Fotografar todos os produtos com fundo neutro e boa iluminação",
       priority: "alta",
       practical_action: "Sessão de fotos em lote dos 10 produtos mais vendidos",
       suggested_deadline: "15 dias",
-      severity: "atencao",
+      severity: allMissing ? "critico" : "atencao",
     });
   }
 
