@@ -7,7 +7,10 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, ImageOff, Image } from "lucide-react";
+import { Plus, ImageOff, Image, Package } from "lucide-react";
+import { LoadingState } from "@/components/LoadingState";
+import { EmptyState } from "@/components/EmptyState";
+import { Link } from "react-router-dom";
 
 export default function Products() {
   const { id } = useParams();
@@ -26,7 +29,7 @@ export default function Products() {
     reload();
   };
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4">
@@ -51,7 +54,15 @@ export default function Products() {
         </Card>
       )}
 
-      <Card className="shadow-card overflow-hidden">
+      {(!products || products.length === 0) ? (
+        <EmptyState
+          icon={Package}
+          title="Nenhum produto cadastrado"
+          description="Adicione produtos manualmente ou importe um CSV do seu cardápio."
+          action={<Button asChild variant="outline"><Link to={`/app/stores/${id}/uploads`}>Importar CSV</Link></Button>}
+        />
+      ) : (
+      <Card className="shadow-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-xs uppercase">
             <tr><th className="p-3 text-left">Produto</th><th>Categoria</th><th>Preço</th><th>Custo</th><th>Margem</th><th>Vendas</th><th>Recl.</th><th>Foto</th></tr>
@@ -72,6 +83,7 @@ export default function Products() {
           </tbody>
         </table>
       </Card>
+      )}
     </div>
   );
 }

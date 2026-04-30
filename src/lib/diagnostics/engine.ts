@@ -98,18 +98,22 @@ export function runDiagnostics({ store, products, reviews, competitors, campaign
 
   // Fotos
   const noPhoto = products.filter((p) => !p.has_photo).length;
-  if (products.length > 0 && noPhoto / products.length > 0.3) {
+  const noPhotoRatio = products.length ? noPhoto / products.length : 0;
+  if (products.length > 0 && noPhotoRatio > 0.3) {
+    const allMissing = noPhoto === products.length;
     diags.push({
       area: "Cardápio / Fotos",
-      problem: `${noPhoto} produtos sem foto (${Math.round((noPhoto / products.length) * 100)}%)`,
-      evidence: `Mais de 30% do cardápio sem imagem`,
+      problem: allMissing
+        ? `Nenhum produto com foto no cardápio`
+        : `${noPhoto} produtos sem foto (${Math.round(noPhotoRatio * 100)}%)`,
+      evidence: allMissing ? `100% do cardápio sem imagem` : `Mais de 30% do cardápio sem imagem`,
       probable_cause: "Cardápio incompleto ou desatualizado",
       business_impact: "Reduz conversão em até 30% — clientes não compram o que não veem",
       recommended_solution: "Fotografar todos os produtos com fundo neutro e boa iluminação",
       priority: "alta",
       practical_action: "Sessão de fotos em lote dos 10 produtos mais vendidos",
       suggested_deadline: "15 dias",
-      severity: "atencao",
+      severity: allMissing ? "critico" : "atencao",
     });
   }
 
@@ -166,6 +170,26 @@ export function runDiagnostics({ store, products, reviews, competitors, campaign
     });
   }
 
+  // Competitividade de taxa de entrega
+  const competitorFees = competitors.map((c) => Number(c.delivery_fee)).filter((n) => !isNaN(n) && n > 0);
+  if (store.delivery_fee && competitorFees.length >= 2) {
+    const avgFee = competitorFees.reduce((a, b) => a + b, 0) / competitorFees.length;
+    if (Number(store.delivery_fee) > avgFee * 1.15) {
+      diags.push({
+        area: "Competitividade de taxa",
+        problem: `Taxa de entrega R$ ${store.delivery_fee} acima da média dos concorrentes (R$ ${avgFee.toFixed(2)})`,
+        evidence: `Sua taxa é ~${Math.round(((Number(store.delivery_fee) - avgFee) / avgFee) * 100)}% maior que a média do mercado local`,
+        probable_cause: "Taxa fixa sem benchmark de mercado ou logística cara",
+        business_impact: "Cliente abandona checkout ao ver frete alto e migra pro concorrente",
+        recommended_solution: "Reduzir taxa em horário de pico ou oferecer frete grátis acima de um valor",
+        priority: "media",
+        practical_action: "Testar frete grátis acima de R$ 50 por 2 semanas e medir conversão",
+        suggested_deadline: "14 dias",
+        severity: "atencao",
+      });
+    }
+  }
+
   // Reviews — palavras-chave
   const negativeHits: Record<string, number> = {};
   reviews.forEach((r) => {
@@ -197,29 +221,53 @@ export function runDiagnostics({ store, products, reviews, competitors, campaign
 export function calculateScore(input: DiagnosticInput) {
   const { store, products, reviews, competitors, campaigns } = input;
 
+  const photoPct = products.length ? Math.round((products.filter((p) => p.has_photo).length / products.length) * 100) : 50;
+  const marginAvg = products.length ? products.reduce((s, p) => s + (Number(p.estimated_margin) || 0), 0) / products.length : 25;
+  const marginScore = Math.min(100, Math.max(0, Math.round((marginAvg / 35) * 100)));
+  const ratingScore = store.rating ? Math.round((Number(store.rating) / 5) * 100) : 60;
+  const deliveryScore = store.promised_delivery_time
+    ? Math.max(0, Math.min(100, 100 - (store.promised_delivery_time - 30) * 2)) : 70;
+  const cancellationScore = store.cancellation_rate != null ? Math.max(0, 100 - store.cancellation_rate * 10) : 80;
+  const adsScore = campaigns.length
+    ? Math.round((campaigns.filter((c) => Number(c.estimated_roi) >= 1).length / campaigns.length) * 100)
+    : 60;
+  const negReviews = reviews.filter((r: any) => r.sentiment === "negativo").length;
+  const recompraScore = reviews.length
+    ? Math.max(30, 100 - Math.round((negReviews / reviews.length) * 100))
+    : 55;
+
   const areas: Record<string, number> = {
     "Vitrine e aparência": 75,
-    "Cardápio": products.length > 10 ? 80 : 60,
-    "Fotos": products.length ? Math.round((products.filter((p) => p.has_photo).length / products.length) * 100) : 50,
-    "Preço e margem": (() => {
-      if (!products.length) return 50;
-      const m = products.reduce((s, p) => s + (Number(p.estimated_margin) || 0), 0) / products.length;
-      return Math.min(100, Math.max(0, Math.round((m / 35) * 100)));
-    })(),
+    "Cardápio": products.length > 10 ? 80 : products.length > 5 ? 65 : 50,
+    "Fotos": photoPct,
+    "Preço e margem": marginScore,
     "Promoções": campaigns.length ? 70 : 50,
     "Concorrência": competitors.length >= 3 ? 75 : 60,
-    "Avaliações": store.rating ? Math.round((Number(store.rating) / 5) * 100) : 60,
-    "Entrega": store.promised_delivery_time ? Math.max(0, Math.min(100, 100 - (store.promised_delivery_time - 30) * 2)) : 70,
-    "Cancelamentos": store.cancellation_rate != null ? Math.max(0, 100 - store.cancellation_rate * 10) : 80,
-    "Recompra": reviews.length > 20 ? 70 : 55,
-    "Anúncios": campaigns.length
-      ? Math.round((campaigns.filter((c) => Number(c.estimated_roi) >= 1).length / campaigns.length) * 100)
-      : 60,
+    "Avaliações": ratingScore,
+    "Entrega": deliveryScore,
+    "Cancelamentos": cancellationScore,
+    "Recompra": recompraScore,
+    "Anúncios": adsScore,
     "Indicadores financeiros": store.monthly_revenue ? 75 : 50,
   };
 
+  const notes: Record<string, string> = {
+    "Vitrine e aparência": "Capa, banners e categorias bem destacadas aumentam o clique.",
+    "Cardápio": products.length > 10 ? "Boa variedade de itens." : "Cardápio enxuto — avalie expandir com combos e acompanhamentos.",
+    "Fotos": photoPct >= 80 ? "Cobertura ótima de fotos." : `Apenas ${photoPct}% dos produtos têm foto. Conversão sofre.`,
+    "Preço e margem": marginScore >= 60 ? "Margens saudáveis." : `Margem média ${marginAvg.toFixed(1)}% está apertada. Reprecificar top vendidos.`,
+    "Promoções": campaigns.length ? "Campanhas ativas — monitore ROI por canal." : "Sem campanhas registradas — testar 1 cupom controlado.",
+    "Concorrência": competitors.length >= 3 ? "Boa amostra de concorrentes monitorados." : "Cadastre mais 2–3 concorrentes para benchmark.",
+    "Avaliações": ratingScore >= 80 ? "Reputação forte." : "Nota abaixo do ideal — atacar reclamações recorrentes.",
+    "Entrega": deliveryScore >= 70 ? "Tempo competitivo." : "Tempo de entrega impacta diretamente conversão.",
+    "Cancelamentos": cancellationScore >= 80 ? "Cancelamento sob controle." : "Cancelamentos altos derrubam reputação na plataforma.",
+    "Recompra": recompraScore >= 70 ? "Cliente satisfeito tende a voltar." : "Avaliações negativas estão minando a recompra.",
+    "Anúncios": adsScore >= 70 ? "Anúncios com bom retorno." : "ROI baixo: revisar segmentação e cupons.",
+    "Indicadores financeiros": store.monthly_revenue ? "Faturamento registrado — acompanhe margem real." : "Cadastre faturamento e ticket para análise financeira completa.",
+  };
+
   const overall = Math.round(Object.values(areas).reduce((a, b) => a + b, 0) / Object.values(areas).length);
-  return { areas, overall };
+  return { areas, overall, notes };
 }
 
 export const scoreColor = (score: number) =>

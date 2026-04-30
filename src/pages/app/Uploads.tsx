@@ -121,8 +121,17 @@ export default function Uploads() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Importar dados</h1>
-        <p className="text-sm text-muted-foreground">Importe planilhas CSV exportadas do iFood, Rappi ou outras plataformas. Baixe um template para ver o formato esperado.</p>
+        <p className="text-sm text-muted-foreground">
+          Importe planilhas <strong>CSV</strong> exportadas do iFood, Rappi ou outras plataformas. Baixe um template para ver o formato esperado.
+        </p>
       </div>
+
+      <Card className="p-4 border-dashed bg-muted/30 shadow-none">
+        <p className="text-sm">
+          <strong>Em breve:</strong> importação direta de <code>.xlsx</code> e leitura de <code>.pdf</code> exportados das plataformas.
+          Por enquanto, exporte como CSV ou use o <button onClick={() => document.getElementById("f-metrics")?.click()} className="text-primary underline">template oficial</button>.
+        </p>
+      </Card>
 
       <div className="grid md:grid-cols-3 gap-4">
         <ImporterCard kind="metrics" storeId={id} onDone={() => setVersion((v) => v + 1)} />

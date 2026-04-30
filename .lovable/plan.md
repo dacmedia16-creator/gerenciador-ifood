@@ -1,156 +1,147 @@
 
-# Plano de evolução — Gestor IA de Delivery
+# Refinamento "Gestor IA de Delivery" — rodada de profissionalização
 
-5 frentes integradas, cada uma com backend (edge function/migration) e frontend conectados ao Supabase já existente.
+Objetivo: deixar o MVP pronto para apresentar em reunião comercial, com identidade consistente, segurança auditada, jornada coerente e camada de diagnóstico/score/relatório mais sólida. Nada de funcionalidade existente é removido.
 
----
+## Estado atual (auditado)
 
-## 1. IA real nos diagnósticos (Lovable AI)
+- `package.json` ainda usa `name: "vite_react_shadcn_ts"`; README é o template padrão.
+- Auth, RLS por loja (`has_store_access`) e proteção de rota em `AppLayout` já existem e funcionam.
+- Linter Supabase aponta 2 warnings: (1) bucket `report-logos` público permite listagem; (2) função `SECURITY DEFINER` executável por authenticated.
+- Engine de diagnóstico já cobre 9 regras pedidas; falta diagnóstico de "taxa de entrega vs. concorrentes" e refinos de cobertura.
+- Score já tem 12 áreas e 0–100, mas falta a área "Indicadores financeiros" usar dados reais e faltam textos consultivos por área.
+- Relatório consultivo já existe e responde as 5 perguntas-chave; falta seção "principais oportunidades" e "recomendações estratégicas" explícitas.
+- Estados vazios estão razoáveis em algumas páginas (Stores, Diagnostics) mas inconsistentes em Products / Reviews / Campaigns / Competitors / ActionPlan / Report (vamos padronizar).
+- Uploads já aceita CSV com parser/preview real; falta deixar explícito que XLSX/PDF estão "em breve" e oferecer modo demonstração.
 
-**Objetivo**: enriquecer o motor de regras determinístico com um camada de IA que gera diagnóstico consultivo, resumo executivo e recomendações personalizadas.
+## Escopo da rodada
 
-**Backend**
-- Nova edge function `supabase/functions/ai-diagnose/index.ts`
-  - Recebe `store_id`
-  - Carrega via service role: store + últimos 6 meses de `metrics` + `products` + `reviews` + `competitors`
-  - Roda primeiro o motor de regras local (reaproveita `src/lib/diagnostics/engine.ts` portado para Deno em `_shared/engine.ts`) para obter sinais objetivos
-  - Chama Lovable AI (`google/gemini-3-flash-preview`) com **tool calling estruturado** para retornar JSON com: `executive_summary`, `key_problems[]`, `opportunities[]`, `recommendations[]`, `general_score`
-  - Persiste tudo em `diagnostics` (problemas) + `action_plans` (recomendações com prioridade/prazo) + `reports` (snapshot completo)
-  - Trata 429 (rate limit) e 402 (créditos) devolvendo erro claro
+### 1. Identidade do produto
+- `package.json`: renomear `name` para `gestor-ia-delivery`.
+- `index.html`: ajustar `<title>`, `meta description`, `og:title`, `og:description`, `author`, `twitter:site` para "Gestor IA de Delivery".
+- Sidebar: header passa de "Gestor IA" para "Gestor IA de Delivery" (com versão curta no estado collapsed).
+- Varrer textos genéricos remanescentes ("Lovable Generated Project", "TODO", placeholders).
 
-**Frontend**
-- Botão "Gerar diagnóstico com IA" na página `Diagnostics.tsx` e no topo do `StoreOverview.tsx`
-- Loading state com skeleton; toast de erro/sucesso
-- Após retorno, navega para `/app/stores/:id/diagnostics` mostrando os novos itens
+### 2. README profissional
+Substituir `README.md` por documento contendo:
+- Nome, descrição e objetivo do SaaS.
+- Funcionalidades principais (dashboard, diagnóstico por regras + IA, score 0–100 por área, plano de ação, relatório consultivo, importação CSV, template de PDF por loja).
+- Stack (React 18, Vite 5, TS, Tailwind, shadcn/ui, React Router, TanStack Query, Recharts, Lovable Cloud/Supabase, Edge Functions, Lovable AI Gateway).
+- Como rodar localmente (`npm i`, `npm run dev`, vars `.env` autogeradas).
+- Estrutura de pastas (`src/pages/app`, `src/lib/diagnostics`, `src/lib/seed`, `supabase/functions`).
+- Modelo de dados (lista das tabelas Supabase).
+- Observação clara sobre dados mockados (`seedDemoStore`).
+- Próximos passos planejados (parsing XLSX/PDF real, integrações iFood/Rappi, IA preditiva).
 
----
+### 3. Jornada principal
+- Stores vazio → CTA dupla "Criar minha primeira loja" + "Carregar loja demo" (já existe parcialmente no Onboarding; vamos garantir o mesmo CTA na lista).
+- Após cadastro manual em `NewStore`, oferecer toast com link "Ir para diagnóstico" e seed automático opcional de métricas vazias.
+- StoreOverview: garantir botões claros de "Rodar diagnóstico" e "Ver relatório".
+- Adicionar breadcrumb leve / botão "Voltar para Lojas" no header da loja.
 
-## 2. Importação de planilhas CSV/XLSX
+### 4. Proteção de rotas e dados
+- `AppLayout` já redireciona não-logado; manter.
+- Adicionar verificação extra: ao entrar em `/app/stores/:id/*`, se `stores.select().eq("id", id).maybeSingle()` retornar `null`, redirecionar para `/app/stores` com toast "Loja não encontrada ou sem acesso" (RLS já bloqueia, mas a UX precisa explicar).
+- Centralizar isso no `useStoreData`.
 
-**Objetivo**: popular `metrics`, `products` e `reviews` a partir de exports do iFood/planilhas.
+### 5. Auditoria Supabase
+Migrações:
+- `report-logos`: tornar bucket privado e servir logos via URL assinada, OU manter público mas restringir `SELECT` em `storage.objects` apenas para arquivos próprios + leitura pública só para o path do template (resolve warn 1).
+- Revogar `EXECUTE ... TO authenticated, anon, public` nas funções `SECURITY DEFINER` (`has_store_access`, `handle_new_user`, `touch_updated_at`) — manter execução apenas via policies/triggers (resolve warn 2).
+- Conferir/reaplicar policies `*_all_own` em todas as 11 tabelas listadas (todas já existem segundo o schema; não recriar, apenas auditar via linter pós-migração).
+- Confirmar trigger `on_auth_user_created` para `handle_new_user` (criar se ausente).
 
-**Backend (cliente, sem edge function)**
-- Lib `xlsx` (já usada no ecossistema) para parse no browser
-- Novo módulo `src/lib/import/parsers.ts` com 3 parsers:
-  - `parseMetricsCSV` → mapeia colunas (data, faturamento, pedidos, ticket, cancelamento, tempo, avaliação)
-  - `parseProductsCSV` → produtos vendidos, qtd, preço, custo
-  - `parseReviewsCSV` → data, nota, comentário
-- Validação com Zod, preview antes de inserir, insert em lote no Supabase
+### 6. Dados mockados mais realistas
+Reescrever `src/lib/seed/demoStore.ts` para gerar:
+- Loja "Burger House (Demo)" com KPIs já realistas (mantém base atual, ajusta valores).
+- 14–16 produtos cobrindo:
+  - "vende muito + margem baixa" (Batata Rústica, Refrigerante).
+  - "lucrativo + pouco destaque" (Brownie sem foto, Burger Premium).
+  - "vendedor com reclamações" (Burger Bacon).
+- 18–20 avaliações com mistura forte de positivas/negativas, padrões repetidos de "atrasou", "frio", "embalagem", "pedido errado" (alimenta engine).
+- 4 concorrentes com prazos/notas/taxas variando claramente.
+- 3 campanhas: 1 ROI alto (cupom), 1 ROI baixo (ads), 1 neutra (frete grátis).
+- 6 meses de métricas com leve tendência.
+- Roda `runDiagnostics` e cria `action_plans` linkados (já existe; manter).
 
-**Frontend**
-- Refatorar `src/pages/app/Uploads.tsx`:
-  - 3 cards (Métricas / Produtos / Avaliações) com dropzone
-  - Tabela de preview com erros por linha em vermelho
-  - Botão "Confirmar importação" → `supabase.from(...).insert([...])`
-  - Template CSV para download de cada tipo
+### 7. Engine de diagnóstico
+Adicionar/ajustar em `src/lib/diagnostics/engine.ts`:
+- Nova regra: `delivery_fee` da loja > média dos concorrentes → diagnóstico "Competitividade de taxa".
+- Nova regra: nenhum produto com foto → severity crítico em "Cardápio / Fotos".
+- Nova regra: ticket médio baixo + ausência de produto categoria "Combos" → reforça diagnóstico de combos.
+- Garantir que toda saída tem os 9 campos pedidos (já tem 8; adicionar `severity` derivado de `priority` quando ausente — já presente).
+- Mesmas regras aplicadas no Edge Function `_shared/diagnostic-rules.ts` para manter paridade.
 
----
+### 8. Score
+- Acrescentar texto consultivo curto por área no objeto retornado por `calculateScore` (campo `notes: Record<area, string>`).
+- Página `Score`: exibir explicação consultiva geral baseada em faixas (já existe parcialmente) + nota por área usando o novo `notes`.
+- Cores já mapeiam verde/amarelo/vermelho via `scoreColor`.
 
-## 3. Geração avançada de PDF do relatório
+### 9. Relatório final
+Em `src/pages/app/Report.tsx`:
+- Adicionar seção "Principais oportunidades" (top 5 ações de impacto alto + esforço baixo/médio).
+- Adicionar seção "Recomendações estratégicas" (3 bullets gerados das áreas com menor score).
+- Adicionar seção "Próximos passos" (checklist 30/60/90 dias derivado do plano).
+- Manter as 5 perguntas-chave já presentes.
+- Espelhar as novas seções no Edge Function `generate-report-pdf` (respeitando `report_templates.sections`/`kpi_order`).
 
-**Objetivo**: PDF profissional do relatório consultivo, salvo no bucket `reports`.
+### 10. Polimento SaaS premium
+- Padronizar header das páginas de loja: título, subtítulo, ações à direita.
+- Cards: revisar paddings (`p-4`/`p-5`) e usar `shadow-card` consistentemente.
+- Sidebar: agrupar seções da loja em sub-grupos ("Análise", "Operação", "Saída") para reduzir lista longa.
+- Mobile: garantir `flex-wrap` nos headers e tabelas com `overflow-x-auto`.
+- Componentizar `EmptyState` em `src/components/EmptyState.tsx` (ícone + título + descrição + CTA opcional) e usar em Products/Reviews/Campaigns/Competitors/ActionPlan/Report quando vazios.
+- Componentizar `LoadingState` para padronizar o "Carregando…" atual.
 
-**Backend**
-- Edge function `supabase/functions/generate-report-pdf/index.ts`
-  - Recebe `report_id` (ou `store_id` para gerar novo)
-  - Usa **`pdf-lib`** (Deno-compatível via npm) para montar:
-    - Capa com nome da loja, data, score, logo
-    - Sumário executivo
-    - Seção de problemas críticos (cor por severidade)
-    - Plano de ação em tabela
-    - KPIs com mini-gráficos via SVG embutido
-  - Faz upload para `reports/{store_id}/{report_id}.pdf` (bucket privado)
-  - Retorna signed URL (1h) para download
+### 11. Uploads e exportação
+- `Uploads.tsx`: adicionar callout informando que XLSX e PDF estão "em breve" e botão "Carregar dados de demonstração" que chama `seedDemoStore`-like helper para popular só a categoria importada.
+- Validação de tamanho (<5MB) e mensagem de erro amigável.
+- `Report.tsx`: já tem botão imprimir + baixar PDF via Edge Function; adicionar fallback que abre `window.print()` se a função falhar e toast explicativo.
 
-**Frontend**
-- Botão "Baixar PDF" na página `Report.tsx`
-- Histórico de relatórios em `Reports` mostrando data + link de download (signed URL gerada on-demand)
+### 12. Estados vazios e feedback
+Aplicar `EmptyState` em:
+- Products: "Nenhum produto cadastrado" + CTA "Importar via CSV" / "Carregar demo".
+- Reviews: "Sem avaliações" + CTA importar.
+- Campaigns / Competitors: idem.
+- ActionPlan: "Nenhuma ação pendente. Rode um diagnóstico."
+- Report: "Cadastre métricas e produtos para gerar o relatório."
+Loading: trocar todos os `<div>Carregando…</div>` por `<LoadingState />` com skeleton mínimo.
+Erros: padronizar via `toast.error` com mensagem em português.
 
----
+### 13. Critério de aceite
+Após esta rodada deve ser possível, em ~3 minutos de demo:
+1. Criar conta → login.
+2. Clicar em "Carregar loja demo".
+3. Ver dashboard com score, KPIs, gráficos, alertas críticos.
+4. Abrir Diagnóstico (regras + IA), Score por área, Plano de ação.
+5. Navegar Produtos / Avaliações / Concorrentes / Campanhas / Métricas com dados realistas.
+6. Abrir Relatório consultivo, imprimir e baixar PDF customizado.
+7. Visitar Uploads e ver template + suporte futuro a XLSX/PDF.
 
-## 4. Análise de sentimento real das avaliações
-
-**Objetivo**: classificar sentimento e extrair tópicos (atraso, embalagem, comida fria, pedido errado, atendimento) das reviews via IA.
-
-**Backend**
-- Edge function `supabase/functions/analyze-reviews/index.ts`
-  - Recebe `store_id` (processa reviews com `sentiment IS NULL`)
-  - Para cada lote de até 20 reviews, chama Lovable AI com tool calling:
-    - Output: `[{ id, sentiment: 'positivo'|'neutro'|'negativo', topics: string[] }]`
-  - Atualiza `reviews.sentiment` e `reviews.detected_topics`
-  - Quando >30% das reviews mencionam um tópico crítico, cria automaticamente um `diagnostic` da área "experiência"
-
-**Frontend**
-- Em `Reviews.tsx`:
-  - Botão "Analisar com IA" (mostra contador de pendentes)
-  - Filtros por sentimento e por tópico (chips)
-  - Card de "Top reclamações" agregando `detected_topics`
-  - Sentimento exibido com badge colorido
-
----
-
-## 5. Onboarding guiado (wizard de primeira loja)
-
-**Objetivo**: após signup, conduzir o usuário até ver o primeiro diagnóstico em <3 min.
-
-**Frontend**
-- Nova rota `/app/onboarding` com 4 passos (componente `Stepper`):
-  1. **Bem-vindo** — escolha entre "Usar loja demo" (chama `seedDemoStore`) ou "Cadastrar minha loja"
-  2. **Dados da loja** — form mínimo: nome, plataforma, categoria, cidade
-  3. **Métricas do último mês** — 6 campos essenciais (faturamento, pedidos, ticket, cancelamento, tempo, nota)
-  4. **Pronto!** — roda diagnóstico (regras + opcionalmente IA) e redireciona para `StoreOverview`
-- `useAuth` checa após login: se `stores.count === 0`, redireciona para `/app/onboarding`
-- Possibilidade de pular ("Configurar depois")
-- Barra de progresso e botão "Voltar" entre passos
-
----
-
-## Estrutura técnica
+## Detalhes técnicos relevantes
 
 ```text
-supabase/functions/
-├── ai-diagnose/
-│   └── index.ts            (regras + Lovable AI + persiste)
-├── analyze-reviews/
-│   └── index.ts            (sentimento + tópicos)
-├── generate-report-pdf/
-│   └── index.ts            (pdf-lib + upload bucket)
-└── _shared/
-    ├── cors.ts
-    └── diagnostic-rules.ts (regras portadas)
+Migrações Supabase
+├─ revoke execute em SECURITY DEFINER (auth/anon/public) e re-grant pontual
+├─ ajuste de policy SELECT em storage.objects para bucket report-logos
+└─ (opcional) trigger on_auth_user_created se faltar
 
-src/
-├── lib/
-│   ├── import/
-│   │   ├── parsers.ts      (CSV/XLSX → tipados com Zod)
-│   │   └── templates.ts    (templates de download)
-│   └── ai/
-│       └── invokeAI.ts     (helper supabase.functions.invoke + erros)
-├── components/
-│   ├── onboarding/
-│   │   ├── OnboardingWizard.tsx
-│   │   └── steps/{Welcome,StoreInfo,Metrics,Done}.tsx
-│   └── reviews/
-│       ├── SentimentBadge.tsx
-│       └── TopComplaints.tsx
-└── pages/app/
-    ├── Onboarding.tsx       (novo)
-    ├── Uploads.tsx          (refatorado: importação real)
-    ├── Reviews.tsx          (botão analisar + filtros)
-    ├── Diagnostics.tsx      (botão IA)
-    └── Report.tsx           (botão baixar PDF + histórico)
+Código
+├─ package.json: name → gestor-ia-delivery
+├─ index.html: meta tags
+├─ README.md: doc completa
+├─ src/components/EmptyState.tsx, LoadingState.tsx (novos)
+├─ src/components/AppSidebar.tsx: agrupar + nome completo
+├─ src/lib/diagnostics/engine.ts: +2 regras, notes no score
+├─ supabase/functions/_shared/diagnostic-rules.ts: paridade
+├─ src/lib/seed/demoStore.ts: dataset enriquecido
+├─ src/pages/app/Report.tsx: +3 seções
+├─ supabase/functions/generate-report-pdf/index.ts: novas seções
+├─ src/hooks/useStoreData.ts: redirect quando store nula
+├─ src/pages/app/Uploads.tsx: callouts + demo data
+└─ várias páginas: EmptyState/LoadingState
 ```
 
-## Tratamento de erros (toda IA/edge function)
-- 429 → toast "Muitas requisições, tente novamente em alguns minutos"
-- 402 → toast "Créditos de IA esgotados. Adicione créditos em Configurações."
-- Erro genérico → toast com mensagem, botão "Tentar novamente"
+Estimativa de impacto: ~15 arquivos editados, ~3 criados, 1 migração SQL. Sem breaking changes.
 
-## Não inclui
-- Conexão direta com API do iFood (importação fica via planilha)
-- Pagamentos / planos
-- Multi-usuário por loja (continua 1 owner por store)
-
----
-
-Após aprovação, implemento na ordem: **(1) onboarding** → **(2) importação CSV** → **(3) IA diagnóstico** → **(4) sentimento reviews** → **(5) PDF**, fazendo commits navegáveis a cada etapa.
+Se aprovado, executo tudo na próxima rodada em modo build.

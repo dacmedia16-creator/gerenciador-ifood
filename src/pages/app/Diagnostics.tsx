@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SeverityBadge, PriorityBadge } from "@/components/StatusBadges";
 import { Sparkles } from "lucide-react";
+import { LoadingState } from "@/components/LoadingState";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { toast } from "sonner";
 
@@ -24,7 +25,7 @@ export default function Diagnostics() {
     }
   };
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4">

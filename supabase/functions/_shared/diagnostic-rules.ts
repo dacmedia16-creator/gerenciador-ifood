@@ -92,18 +92,20 @@ export function runDiagnostics(input: {
   }
 
   const noPhoto = products.filter((p) => !p.has_photo).length;
-  if (products.length > 0 && noPhoto / products.length > 0.3) {
+  const noPhotoRatio = products.length ? noPhoto / products.length : 0;
+  if (products.length > 0 && noPhotoRatio > 0.3) {
+    const allMissing = noPhoto === products.length;
     diags.push({
       area: "Cardápio / Fotos",
-      problem: `${noPhoto} produtos sem foto (${Math.round((noPhoto / products.length) * 100)}%)`,
-      evidence: `Mais de 30% do cardápio sem imagem`,
+      problem: allMissing ? `Nenhum produto com foto no cardápio` : `${noPhoto} produtos sem foto (${Math.round(noPhotoRatio * 100)}%)`,
+      evidence: allMissing ? `100% do cardápio sem imagem` : `Mais de 30% do cardápio sem imagem`,
       probable_cause: "Cardápio incompleto ou desatualizado",
       business_impact: "Reduz conversão em até 30%",
       recommended_solution: "Fotografar todos os produtos com fundo neutro e boa iluminação",
       priority: "alta",
       practical_action: "Sessão de fotos em lote dos 10 produtos mais vendidos",
       suggested_deadline: "15 dias",
-      severity: "atencao",
+      severity: allMissing ? "critico" : "atencao",
     });
   }
 
@@ -155,6 +157,26 @@ export function runDiagnostics(input: {
       suggested_deadline: "30 dias",
       severity: "atencao",
     });
+  }
+
+  // Competitividade de taxa de entrega
+  const competitorFees = competitors.map((c) => Number(c.delivery_fee)).filter((n) => !isNaN(n) && n > 0);
+  if (store.delivery_fee && competitorFees.length >= 2) {
+    const avgFee = competitorFees.reduce((a, b) => a + b, 0) / competitorFees.length;
+    if (Number(store.delivery_fee) > avgFee * 1.15) {
+      diags.push({
+        area: "Competitividade de taxa",
+        problem: `Taxa de entrega R$ ${store.delivery_fee} acima da média dos concorrentes (R$ ${avgFee.toFixed(2)})`,
+        evidence: `Sua taxa é ~${Math.round(((Number(store.delivery_fee) - avgFee) / avgFee) * 100)}% maior que a média do mercado`,
+        probable_cause: "Taxa fixa sem benchmark de mercado",
+        business_impact: "Cliente abandona checkout ao ver frete alto",
+        recommended_solution: "Reduzir taxa em pico ou oferecer frete grátis acima de um valor",
+        priority: "media",
+        practical_action: "Testar frete grátis acima de R$ 50 por 2 semanas",
+        suggested_deadline: "14 dias",
+        severity: "atencao",
+      });
+    }
   }
 
   const negativeHits: Record<string, number> = {};

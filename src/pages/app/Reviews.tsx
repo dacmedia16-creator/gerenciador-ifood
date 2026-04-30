@@ -4,7 +4,10 @@ import { useStoreData } from "@/hooks/useStoreData";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Star } from "lucide-react";
+import { LoadingState } from "@/components/LoadingState";
+import { EmptyState } from "@/components/EmptyState";
+import { Link } from "react-router-dom";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { toast } from "sonner";
 import { SentimentBadge } from "@/components/reviews/SentimentBadge";
@@ -48,7 +51,17 @@ export default function Reviews() {
     }
   };
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  if (loading) return <LoadingState />;
+  if (!loading && list.length === 0) {
+    return (
+      <EmptyState
+        icon={Star}
+        title="Sem avaliações cadastradas"
+        description="Importe um CSV de avaliações ou aguarde a primeira avaliação aparecer aqui."
+        action={<Button asChild variant="outline"><Link to={`/app/stores/${id}/uploads`}>Importar CSV</Link></Button>}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
