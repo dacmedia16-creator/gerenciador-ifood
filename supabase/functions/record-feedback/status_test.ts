@@ -5,6 +5,13 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
 const STATUSES = new Set(["pendente", "em_andamento", "aplicada", "ignorada", "rejeitada"]);
 
+// Espelha a checagem de ownership cross-tenant: se o select RLS retorna null,
+// a função deve devolver 404 ANTES de inserir feedback ou atualizar histórico.
+function ownershipCheck(rec: { id: string } | null) {
+  if (!rec) return { status: 404, body: { error: "Recomendação não encontrada ou sem acesso" } };
+  return null;
+}
+
 function buildUpdate(input: {
   status?: string | null;
   applied?: boolean | null;
