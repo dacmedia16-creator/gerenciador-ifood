@@ -250,11 +250,10 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
       store_id: storeId,
       title: `Diagnóstico — ${basic.name || "Loja"}`,
       executive_summary: `Diagnóstico gerado a partir do funil consultivo com ${diagnostics.length} problemas identificados.`,
-      general_score: null,
-      key_problems: diagnostics.slice(0, 5).map((d) => ({ area: d.area, problem: d.problem, severity: d.severity })),
-      recommendations: diagnostics.slice(0, 5).map((d) => d.recommended_solution),
-      report_data: reportData,
-    })
+      key_problems: diagnostics.slice(0, 5).map((d) => ({ area: d.area, problem: d.problem, severity: d.severity })) as any,
+      recommendations: diagnostics.slice(0, 5).map((d) => d.recommended_solution) as any,
+      report_data: reportData as any,
+    } as any)
     .select("id")
     .single();
 
