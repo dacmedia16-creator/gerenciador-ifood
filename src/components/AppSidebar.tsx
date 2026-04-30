@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home,
+  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -29,6 +29,7 @@ const storeSections = (id: string) => [
   { title: "Uploads", url: `/app/stores/${id}/uploads`, icon: Upload },
   { title: "Plano de ação", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
   { title: "Relatório", url: `/app/stores/${id}/report`, icon: FileText },
+  { title: "Template do PDF", url: `/app/stores/${id}/report/template`, icon: Palette },
 ];
 
 export function AppSidebar() {
