@@ -69,6 +69,12 @@ Deno.serve(async (req) => {
       .eq("id", recommendation_id)
       .maybeSingle();
     if (ownedErr || !ownedRec) {
+      console.log(JSON.stringify({
+        evt: "record_feedback.not_found",
+        user_id: userId,
+        recommendation_id,
+        reason: ownedErr ? "db_error" : "no_access_or_missing",
+      }));
       return new Response(JSON.stringify({ error: "Recomendação não encontrada ou sem acesso" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
