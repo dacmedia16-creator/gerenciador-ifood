@@ -130,7 +130,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "menu",
-    index: 4,
+    index: 5,
     title: "Cardápio",
     subtitle: "Estrutura e variedade",
     questions: [
@@ -152,7 +152,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "photos",
-    index: 5,
+    index: 6,
     title: "Fotos dos produtos",
     subtitle: "Qualidade visual do cardápio",
     questions: [
@@ -168,7 +168,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "products",
-    index: 6,
+    index: 7,
     title: "Produtos e vendas",
     subtitle: "Cadastre seus produtos principais",
     description: "Adicione pelo menos os 5 mais vendidos para um diagnóstico mais preciso.",
@@ -178,7 +178,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "pricing",
-    index: 7,
+    index: 8,
     title: "Preço e margem",
     subtitle: "Como você gerencia lucro",
     questions: [
@@ -195,7 +195,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "combos",
-    index: 8,
+    index: 9,
     title: "Combos e ticket médio",
     subtitle: "Estratégias para vender mais por pedido",
     questions: [
@@ -212,7 +212,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "promotions",
-    index: 9,
+    index: 10,
     title: "Promoções e cupons",
     subtitle: "Estratégia promocional",
     questions: [
@@ -230,7 +230,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "reviews",
-    index: 10,
+    index: 11,
     title: "Avaliações e reputação",
     subtitle: "O que os clientes dizem",
     questions: [
@@ -248,7 +248,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "delivery",
-    index: 11,
+    index: 12,
     title: "Entrega e operação",
     subtitle: "Logística e cumprimento",
     questions: [
@@ -266,7 +266,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "competitors",
-    index: 12,
+    index: 13,
     title: "Concorrência",
     subtitle: "Cadastre seus principais concorrentes",
     questions: [
@@ -275,7 +275,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "demand",
-    index: 13,
+    index: 14,
     title: "Horários e demanda",
     subtitle: "Quando vende e quando perde",
     questions: [
@@ -290,7 +290,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "loyalty",
-    index: 14,
+    index: 15,
     title: "Recompra e fidelização",
     subtitle: "Como você traz o cliente de volta",
     questions: [
@@ -305,7 +305,7 @@ export const STEPS: StepDef[] = [
   },
   {
     key: "ads",
-    index: 15,
+    index: 16,
     title: "Anúncios e campanhas",
     subtitle: "Investimento em mídia",
     questions: [
@@ -321,8 +321,23 @@ export const STEPS: StepDef[] = [
     ],
   },
   {
+    key: "final_questions",
+    index: 17,
+    title: "6 perguntas finais",
+    subtitle: "O diagnóstico estratégico em 6 perguntas",
+    description: "Responda com a sua percepção atual. A IA cruza com os dados que você preencheu.",
+    questions: [
+      { key: "q_nao_entram", label: "Por que as pessoas não entram na sua loja?", type: "textarea", placeholder: "Ex.: nota baixa, tempo alto, poucas avaliações…" },
+      { key: "q_nao_clicam", label: "Por que entram e não clicam nos produtos?", type: "textarea", placeholder: "Ex.: faltam fotos, vitrine pouco atrativa…" },
+      { key: "q_nao_compram", label: "Por que clicam e não compram?", type: "textarea", placeholder: "Ex.: preço, taxa de entrega, falta de combo…" },
+      { key: "q_compram_pouco", label: "Por que compram pouco (ticket baixo)?", type: "textarea", placeholder: "Ex.: sem combo, sem cross-sell…" },
+      { key: "q_nao_voltam", label: "Por que não voltam?", type: "textarea", placeholder: "Ex.: experiência ruim, sem cupom de retorno…" },
+      { key: "q_nao_lucram", label: "Por que vende, mas não lucra?", type: "textarea", placeholder: "Ex.: margem apertada, cupons agressivos…" },
+    ],
+  },
+  {
     key: "uploads",
-    index: 16,
+    index: 18,
     title: "Uploads opcionais",
     subtitle: "Envie planilhas, PDFs ou prints",
     description: "Os arquivos serão armazenados com segurança. O processamento automático estará disponível em breve.",
