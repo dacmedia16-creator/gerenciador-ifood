@@ -121,8 +121,31 @@ export default function Dashboard() {
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <Button variant="outline" size="sm" onClick={() => navigate("/app/stores/new")}><Plus className="h-4 w-4 mr-1" /> Loja</Button>
+          <Button size="sm" onClick={() => navigate("/app/diagnosis/new?new=1")}><Sparkles className="h-4 w-4 mr-1" /> Novo Diagnóstico</Button>
         </div>
       </div>
+
+      {draftSession && (
+        <Card className="p-4 shadow-card border-primary/40 bg-primary/5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm">Diagnóstico em andamento</p>
+                <p className="text-xs text-muted-foreground">
+                  {draftSession.completion_percentage}% concluído · etapa {draftSession.current_step}/16
+                </p>
+                <Progress value={draftSession.completion_percentage} className="h-1.5 mt-1 w-48" />
+              </div>
+            </div>
+            <Button size="sm" onClick={() => navigate(`/app/diagnosis/${draftSession.id}`)}>
+              Continuar diagnóstico
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Score */}
       <Card className="p-6 shadow-card">
