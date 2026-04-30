@@ -53,13 +53,12 @@ export default function DiagnosisWizard() {
     storeId: session?.store_id,
     stepKey: step.key,
     values,
-    onSaved: async () => {
-      // recarrega statuses para refletir progresso na sidebar
-      const { data } = await supabase.from("diagnosis_step_status").select("*").eq("session_id", sessionId);
-      setStatuses(data || []);
-      const completed = (data || []).filter((s) => s.is_completed).length;
-      const pct = Math.round((completed / STEPS.length) * 100);
-      await supabase.from("diagnosis_sessions").update({ completion_percentage: pct }).eq("id", sessionId);
+    onSaved: (info) => {
+      // atualiza status localmente, sem refetch (evita re-render que tira foco)
+      setStatuses((prev) => {
+        const others = prev.filter((s) => s.step_key !== step.key);
+        return [...others, { step_key: step.key, ...info }];
+      });
     },
   });
 
