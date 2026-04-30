@@ -1,17 +1,20 @@
 // Extrai casos com outcome definido para a case_library (anonimizado) e gera embedding.
+// Função INTERNA: aceita apenas chamadas com header X-Internal-Call = SERVICE_ROLE_KEY
+// (vinda de measure-outcomes ou de jobs administrativos).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { embedText, toPgVector } from "../_shared/embeddings.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { buildCorsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
+    const internalCall = req.headers.get("X-Internal-Call") === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!internalCall) {
+      return new Response(JSON.stringify({ error: "Forbidden — internal use only" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
