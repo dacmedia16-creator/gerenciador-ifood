@@ -159,19 +159,29 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
+    const token = authHeader.replace("Bearer ", "");
+
+    // Client 1: somente para validar o JWT (sem header global, para não interferir com queries).
+    const authClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
     );
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    const { data: userData, error: userErr } = await authClient.auth.getUser(token);
     if (userErr || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Client 2: queries com RLS do usuário autenticado.
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      }
+    );
 
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
