@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore, scoreLabel } from "@/lib/diagnostics/engine";
 import { SeverityBadge, PriorityBadge, ScoreBadge } from "@/components/StatusBadges";
-import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react";
+import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight, History, Eye } from "lucide-react";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AIConsultReport } from "@/components/report/AIConsultReport";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Report() {
   const { id } = useParams();
@@ -21,23 +22,27 @@ export default function Report() {
   const [latestReport, setLatestReport] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiConsult, setAiConsult] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [openHistoryItem, setOpenHistoryItem] = useState<any>(null);
+
+  const loadReports = async () => {
+    if (!id) return;
+    const { data: rows } = await supabase
+      .from("reports")
+      .select("*")
+      .eq("store_id", id)
+      .order("created_at", { ascending: false });
+    if (rows && rows.length > 0) {
+      setLatestReport(rows[0]);
+      setHistory(rows);
+      const ai = (rows[0] as any).report_data?.ai_consult;
+      if (ai) setAiConsult(ai);
+    }
+  };
 
   useEffect(() => {
-    if (!id) return;
-    (async () => {
-      const { data } = await supabase
-        .from("reports")
-        .select("*")
-        .eq("store_id", id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setLatestReport(data);
-        const ai = (data as any).report_data?.ai_consult;
-        if (ai) setAiConsult(ai);
-      }
-    })();
+    loadReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const runAIConsult = async () => {
@@ -47,6 +52,7 @@ export default function Report() {
     if (res?.diagnosis) {
       setAiConsult(res.diagnosis);
       toast.success("Análise consultiva gerada!");
+      await loadReports();
     }
     setAiLoading(false);
   };
@@ -128,6 +134,57 @@ export default function Report() {
           <AIConsultReport data={aiConsult} />
         </Card>
       )}
+
+      {history.length > 0 && (
+        <Card className="p-6 no-print">
+          <div className="flex items-center gap-2 mb-4">
+            <History className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-bold">Histórico de relatórios</h2>
+            <Badge variant="outline" className="ml-auto">{history.length}</Badge>
+          </div>
+          <div className="space-y-2">
+            {history.map((r) => {
+              const ai = r.report_data?.ai_consult;
+              const date = new Date(r.created_at);
+              return (
+                <div key={r.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border hover:bg-muted/40 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <strong className="text-sm truncate">{r.title || "Diagnóstico"}</strong>
+                      {r.general_score != null && <ScoreBadge score={r.general_score} />}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {date.toLocaleDateString("pt-BR")} às {date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      {ai ? " · análise IA" : " · sem IA"}
+                    </p>
+                  </div>
+                  {ai ? (
+                    <Button size="sm" variant="outline" onClick={() => setOpenHistoryItem(r)}>
+                      <Eye className="h-4 w-4 mr-1" /> Abrir
+                    </Button>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">sem IA</Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Dialog open={!!openHistoryItem} onOpenChange={(o) => !o && setOpenHistoryItem(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {openHistoryItem?.title} — {openHistoryItem ? new Date(openHistoryItem.created_at).toLocaleString("pt-BR") : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {openHistoryItem?.report_data?.ai_consult && (
+            <AIConsultReport data={openHistoryItem.report_data.ai_consult} />
+          )}
+        </DialogContent>
+      </Dialog>
+
 
       <Card className="p-8 shadow-elegant">
         <header className="border-b pb-4 mb-6">
