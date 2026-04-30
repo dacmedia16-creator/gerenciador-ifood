@@ -9,13 +9,7 @@ import {
   buildMetricsSnapshot,
 } from "../_shared/memory.ts";
 import { applyDiagnosisValidation } from "../_shared/validate-diagnosis.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { buildCorsHeaders } from "../_shared/cors.ts";
 
 const SYSTEM_PROMPT = `Você é um GESTOR DE DELIVERY EXPERIENTE atuando como consultor.
 
