@@ -35,31 +35,27 @@ export default function NewStore() {
     navigate(`/app/stores/${data.id}`);
   };
 
-  const F = ({ k, label, type = "text", step }: any) => (
-    <div><Label>{label}</Label><Input type={type} step={step} value={form[k]} onChange={(e) => set(k, e.target.value)} /></div>
-  );
-
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Cadastrar loja</h1>
       <Card className="p-6 shadow-card">
         <form onSubmit={handleSubmit} className="grid md:grid-cols-2 gap-4">
-          <F k="name" label="Nome da loja *" />
-          <F k="category" label="Categoria" />
+          <div><Label>Nome da loja *</Label><Input value={form.name} onChange={(e) => set("name", e.target.value)} /></div>
+          <div><Label>Categoria</Label><Input value={form.category} onChange={(e) => set("category", e.target.value)} /></div>
           <div><Label>Plataforma principal</Label>
             <select className="w-full border rounded-md px-3 py-2 bg-background" value={form.platform} onChange={(e) => set("platform", e.target.value)}>
               <option>iFood</option><option>Rappi</option><option>99Food</option><option>Próprio</option><option>Outro</option>
             </select>
           </div>
-          <F k="city" label="Cidade" />
-          <F k="neighborhood" label="Bairro" />
-          <F k="rating" label="Nota atual" type="number" step="0.1" />
-          <F k="promised_delivery_time" label="Tempo prometido (min)" type="number" />
-          <F k="delivery_fee" label="Taxa de entrega (R$)" type="number" step="0.01" />
-          <F k="monthly_revenue" label="Faturamento mensal (R$)" type="number" step="0.01" />
-          <F k="monthly_orders" label="Pedidos por mês" type="number" />
-          <F k="average_ticket" label="Ticket médio (R$)" type="number" step="0.01" />
-          <F k="cancellation_rate" label="Taxa de cancelamento (%)" type="number" step="0.1" />
+          <div><Label>Cidade</Label><Input value={form.city} onChange={(e) => set("city", e.target.value)} /></div>
+          <div><Label>Bairro</Label><Input value={form.neighborhood} onChange={(e) => set("neighborhood", e.target.value)} /></div>
+          <div><Label>Nota atual</Label><Input type="number" step="0.1" value={form.rating} onChange={(e) => set("rating", e.target.value)} /></div>
+          <div><Label>Tempo prometido (min)</Label><Input type="number" value={form.promised_delivery_time} onChange={(e) => set("promised_delivery_time", e.target.value)} /></div>
+          <div><Label>Taxa de entrega (R$)</Label><Input type="number" step="0.01" value={form.delivery_fee} onChange={(e) => set("delivery_fee", e.target.value)} /></div>
+          <div><Label>Faturamento mensal (R$)</Label><Input type="number" step="0.01" value={form.monthly_revenue} onChange={(e) => set("monthly_revenue", e.target.value)} /></div>
+          <div><Label>Pedidos por mês</Label><Input type="number" value={form.monthly_orders} onChange={(e) => set("monthly_orders", e.target.value)} /></div>
+          <div><Label>Ticket médio (R$)</Label><Input type="number" step="0.01" value={form.average_ticket} onChange={(e) => set("average_ticket", e.target.value)} /></div>
+          <div><Label>Taxa de cancelamento (%)</Label><Input type="number" step="0.1" value={form.cancellation_rate} onChange={(e) => set("cancellation_rate", e.target.value)} /></div>
           <div className="md:col-span-2"><Label>Horários de funcionamento</Label><Input value={form.opening_hours} onChange={(e) => set("opening_hours", e.target.value)} placeholder="Ex: 18h–23h, todos os dias" /></div>
           <div className="md:col-span-2"><Label>Observações</Label><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} /></div>
           <div className="md:col-span-2 flex gap-2 justify-end pt-2">
