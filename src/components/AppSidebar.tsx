@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator, Target, Clock,
+  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator, Target, Clock, BookOpen, TrendingUp,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -15,6 +15,7 @@ const general = [
   { title: "Novo Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
   { title: "Lojas", url: "/app/stores", icon: Store },
   { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
+  { title: "Base de conhecimento", url: "/app/knowledge", icon: BookOpen },
 ];
 
 const storeAnalysis = (id: string) => [
@@ -22,6 +23,7 @@ const storeAnalysis = (id: string) => [
   { title: "Diagnóstico", url: `/app/stores/${id}/diagnostics`, icon: Stethoscope },
   { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
   { title: "Plano de ação", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
+  { title: "Evolução IA", url: `/app/stores/${id}/evolution`, icon: TrendingUp },
   { title: "Relatório", url: `/app/stores/${id}/report`, icon: FileText },
 ];
 
