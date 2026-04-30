@@ -1,146 +1,128 @@
 
-# Auditoria — Gestor IA de Delivery (estado atual)
+## Auditoria final — diagnóstico
 
-## O que já está pronto e correto
+### O que está sólido (não mexer)
 
-| Área | Estado |
-|------|--------|
-| Fluxo principal IA | `ai-consult` com evidências + memória + RAG + validação anti-alucinação (hard fail se sem rule_id) |
-| Motor de evidências | `_shared/evidences.ts` com 24 regras (camada 1 + camada 2 com cruzamentos, tendências e sinal positivo "não mexer") |
-| Histórico | `recommendation_history` salva `metrics_before`, `source`, `source_ref`, FK em `action_plans` |
-| Feedback | Componente `RecommendationFeedback` + função `record-feedback` (apliquei/ignorei/funcionou/comentário) |
-| Medição objetiva | `measure-outcomes` compara `metrics_before` × atual após 7d, define outcome e dispara `extract-case` se positivo |
-| Memória da loja | `update-store-memory` agrega métricas 7/14/30d + `recurring_problems` |
-| Segurança parcial | `update-store-memory` e `measure-outcomes` validam acesso à loja antes de usar service role; RLS por loja em todas as tabelas sensíveis |
-| Anti-alucinação | `validate-diagnosis.ts` testado, descarta refs inválidas e força hard-fail |
+- **Fluxo único de diagnóstico**: `analyze-reviews` agora só faz `update` em `reports.report_data.review_topics`; nenhum insert em `diagnostics` em runtime (só `generate-report-pdf` lê para histórico). `ai-consult` é o único produtor de diagnóstico, recomendações e plano.
+- **`ai-consult`**: SYSTEM_PROMPT cobre todas as regras pedidas (status, outcome, sucessos, falhas, ignored_repeatedly, improving/worsening, similar_cases, knowledge_base). Validação `applyDiagnosisValidation` derruba qualquer rule_id/source_ref inventado e tem hard-fail quando não há evidência. `recommendation_history` recebe `metrics_before` no momento do diagnóstico → base para `measure-outcomes`.
+- **5 status do feedback**: validados em `record-feedback` (`STATUSES`) e usados pelo `ActionPlan.tsx`. `applied_at` só é setado em `aplicada`. `rejeitada` força `outcome=negativo`.
+- **`measure-outcomes`**: compara `metrics_before` com `metrics_after`, classifica em positivo/negativo/neutro/inconclusivo (limiar 5%), gera `_explanation` em pt-BR claro, dispara `extract-case` e `update-store-memory` por trás (com `X-Internal-Call`). Modo cron exige header interno + `allStores`.
+- **`store_memory`**: `update-store-memory` popula `profile.learning.successful_recommendations / failed_recommendations / ignored_repeatedly / improving_areas / worsening_areas` exatamente como o prompt do `ai-consult` espera.
+- **CORS**: `ai-consult`, `ai-diagnose` (stub 410), `embed-knowledge`, `extract-case`, `measure-outcomes`, `record-feedback`, `update-store-memory` usam `buildCorsHeaders` (origem restrita).
+- **Tests**: 7 casos em `record-feedback/status_test.ts` + `ai-consult/validation_test.ts` + `ai-consult/learning_test.ts`.
 
-## Problemas CRÍTICOS encontrados
+### Problemas identificados
 
-1. **`StoreOverview.tsx` ainda chama `ai-diagnose`** (rota `src/pages/app/StoreOverview.tsx:45`). `ai-diagnose` está marcada como deprecated mas continua **APAGANDO `diagnostics` e `action_plans` da loja a cada chamada** — isso destrói o ciclo de aprendizado (perde FKs `recommendation_id`). Precisa migrar para `ai-consult`.
-2. **`measure-outcomes` é manual**. Sem cron, recomendações aplicadas nunca recebem `metrics_after` automaticamente — o ciclo só fecha se o usuário lembrar de clicar.
-3. **CORS aberto (`*`) em produção**. Funções IA aceitam requisições de qualquer origem.
+**Crítico (1)**
 
-## Problemas IMPORTANTES
+- **`record-feedback` não verifica explicitamente que `recommendation_id` pertence ao usuário.** Hoje a proteção depende inteiramente do RLS `has_store_access` em `recommendation_history`. Funciona, mas:
+  - O `insert` em `recommendation_feedback` só checa `auth.uid() = user_id` — qualquer usuário pode inserir feedback apontando para uma `recommendation_id` de outra loja (a linha vai existir, embora não afete `recommendation_history`).
+  - O `update` em `recommendation_history` falha em silêncio (0 linhas) quando o RLS bloqueia, mas devolvemos `ok: true` — comportamento confuso e potencialmente explorável para enumeração.
 
-4. **`store_memory` não tem campos de aprendizado explícito**. Tem `recurring_problems` mas não tem `successful_recommendations`, `failed_recommendations`, `ignored_repeatedly`, `improving_areas`, `worsening_areas`. A IA já consulta `PAST_RECOMMENDATIONS` direto, mas o resumo persistido fica fraco.
-4b. **Prompt da IA não diferencia "ações ignoradas várias vezes"** — só usa o último status.
-5. **`extract-case` não tem auth** (só service role). Deveria aceitar invocação interna apenas (já é o caso na prática, mas vale documentar/proteger).
-6. **`embedding_version` foi adicionado nas tabelas mas não há trilha para reembedar** quando upgradeamos de v1 lexical para v2 semântico.
-7. **Sem testes de segurança** garantindo que usuário A não vê loja B via essas funções.
+**Importante (2)**
 
-## Melhorias OPCIONAIS
+- **`suggest-product-names` ainda tem `Access-Control-Allow-Origin: "*"`** definido inline (não usa `buildCorsHeaders`). Função autenticada e não-sensível, mas inconsistente com o restante.
+- **`analyze-reviews` ainda importa `corsHeaders` (wildcard `*`) do `_shared/cors.ts`.** A constante `corsHeaders` exportada continua sendo `*` — ela existe só por compat, mas como `analyze-reviews` é chamada do front com JWT, deveria usar `buildCorsHeaders(req)` igual às outras.
 
-- Rate-limit em `ai-consult` (já apontado anteriormente, ainda não feito).
-- UI mostrando explicitamente "esta recomendação já foi tentada antes — outcome: X" no relatório.
-- `ai-diagnose` poderia ser deletada da pasta (mantém só o stub depreciado).
+**Melhorias opcionais (3)**
 
----
+- **Remover/depreciar a constante `corsHeaders` "*"** do `_shared/cors.ts` (ou marcar com comentário ainda mais explícito de "uso interno apenas") — hoje convida a regressão.
+- **`generate-report-pdf` ainda lê `diagnostics`** (legado, não escreve). Não quebra nada, mas a tabela `diagnostics` virou cemitério — vale documentar ou planejar deprecação futura.
+- **Testes pendentes**: faltam casos cobrindo (a) status inválido devolvendo 400, (b) bloqueio cross-tenant em `record-feedback`, (c) `measure-outcomes._explanation` para os 4 outcomes, (d) `metrics_after._explanation` não polui agregadores.
 
-# Plano de implementação (mínimo viável para fechar o ciclo)
+## Plano de implementação (mínimo necessário)
 
-## Etapa 1 — Migrar `StoreOverview` para `ai-consult` (CRÍTICO)
-- `src/pages/app/StoreOverview.tsx`: trocar `invokeAI("ai-diagnose", { store_id })` por `invokeAI("ai-consult", { storeId })`.
-- Após resposta, redirecionar para `/app/stores/:id/report` (onde `ai-consult` já gravou `report_id`).
-- Garante que **toda** geração de diagnóstico passa pelo fluxo com memória/FK/validação.
+### 1. Fix crítico em `record-feedback` (segurança)
 
-## Etapa 2 — Automatizar medição de outcome
-- Criar migration que habilita `pg_cron` + `pg_net` e agenda `measure-outcomes` **diariamente às 03:00 UTC**, varrendo todas as lojas com recomendações `aplicada` há ≥7 dias e `metrics_after IS NULL`.
-- Ajustar `measure-outcomes` para aceitar `{ allStores: true }` e iterar sobre lojas pendentes (apenas via service role / cron, não exposto a usuário).
+Antes de inserir feedback ou atualizar histórico, validar que `recommendation_id` pertence a uma loja do usuário:
 
-## Etapa 3 — Enriquecer `store_memory` com aprendizados
-Em `update-store-memory/index.ts`, adicionar ao payload:
-- `successful_recommendations`: rule_ids com outcome=positivo nos últimos 90d
-- `failed_recommendations`: rule_ids com outcome=negativo
-- `ignored_repeatedly`: rule_ids com status=ignorada >=2x
-- `improving_areas` / `worsening_areas`: comparando `metrics_7d` vs `metrics_30d` por métrica-chave (rating, cancel, ticket, revenue)
-- `learnings`: array de `{ rule_id, lesson }` extraído de feedbacks com comentário e outcome
-
-Esses campos são lidos automaticamente pelo `loadStoreMemory()` e aparecem no prompt da `ai-consult`. Atualizar SYSTEM_PROMPT para orientar o uso ("se rule_id está em failed_recommendations, não repita sem fato novo").
-
-## Etapa 4 — Segurança
-- Restringir CORS de `ai-consult`, `record-feedback`, `update-store-memory`, `measure-outcomes`, `extract-case` à origem de produção (`https://gerenciador-ifood.lovable.app`) + preview Lovable.
-- `extract-case`: adicionar guarda que rejeita requisições sem header interno (so chamável via `supabase.functions.invoke` server-side).
-
-## Etapa 5 — Testes (Deno)
-Criar `supabase/functions/ai-consult/security_test.ts` e `learning_test.ts` cobrindo (com mocks):
-- IA não usa `rule_id` que não existe no set válido → descartado
-- IA não repete recomendação com outcome=negativo sem fato novo (assertion sobre prompt rendering)
-- recomendação aplicada gera linha em `recommendation_history` com `metrics_before` preenchido (já existe lógica, validar shape)
-- `applyDiagnosisValidation` derruba `recommendation_id` que não pertence ao set
-
-(testes A→B de loja são mais E2E; documentamos como manuais nesta etapa)
-
-## Etapa 6 — Limpeza leve do legado
-- Manter `ai-diagnose` apenas como stub que **retorna 410 Gone** com mensagem "Use ai-consult". Remove o risco de alguém invocar e destruir dados.
-- Atualizar `supabase/config.toml` se necessário para refletir.
-
----
-
-# Arquivos que serão alterados/criados
-
-**Editados**
-- `src/pages/app/StoreOverview.tsx` — troca callsite e redirect
-- `supabase/functions/measure-outcomes/index.ts` — modo cron `allStores`
-- `supabase/functions/update-store-memory/index.ts` — novos campos de aprendizado
-- `supabase/functions/ai-consult/index.ts` — CORS restrito + prompt usa novos campos
-- `supabase/functions/record-feedback/index.ts` — CORS restrito
-- `supabase/functions/extract-case/index.ts` — CORS restrito + guarda interna
-- `supabase/functions/ai-diagnose/index.ts` — vira stub 410
-
-**Criados**
-- `supabase/functions/_shared/cors.ts` (ou ajuste no existente) — helper `allowedOrigins`
-- `supabase/migrations/<ts>_cron_measure_outcomes.sql` — agenda diária (via insert tool, não migration, pois usa anon key específica)
-- `supabase/functions/ai-consult/security_test.ts`
-- `supabase/functions/ai-consult/learning_test.ts`
-
-**Não alterados** (preservados como estão)
-- Schema do banco — já tem todas as colunas necessárias
-- `src/lib/diagnosis/rules.ts` — frontend funnel está OK
-- `_shared/evidences.ts` — 24 regras já cobrem os cenários pedidos
-- `RecommendationFeedback.tsx` e `ActionPlan.tsx` — fluxo de feedback já correto
-
----
-
-# Resultado esperado após implementação
-
-```text
-[Cadastro/Métricas]
-        │
-        ▼
-[Funil de Diagnóstico] ──► rule_evidences (camada 1+2)
-        │
-        ▼
-[ai-consult] (único caminho)
-   ├─ valida store via JWT
-   ├─ carrega STORE_MEMORY enriquecida (sucessos/fracassos/ignorados)
-   ├─ RAG: casos + KB
-   ├─ valida output contra rule_ids/refs
-   ├─ insere recommendation_history (metrics_before)
-   └─ insere action_plans com FK
-        │
-        ▼
-[Usuário marca "apliquei" / feedback] ──► record-feedback
-        │
-        ▼
-[CRON diário 03h UTC] ──► measure-outcomes
-   ├─ calcula metrics_after (7-30d)
-   ├─ define outcome (positivo/negativo/neutro/inconclusivo)
-   ├─ se positivo → extract-case (alimenta case_library)
-   └─ chama update-store-memory
-        │
-        ▼
-[store_memory atualizada]
-   ├─ successful_recommendations / failed_recommendations
-   ├─ ignored_repeatedly / improving_areas / worsening_areas
-   └─ recurring_problems
-        │
-        ▼
-Próxima chamada de ai-consult já usa esses aprendizados.
+```ts
+const { data: rec, error: recErr } = await supabase
+  .from("recommendation_history")
+  .select("id, store_id")
+  .eq("id", recommendation_id)
+  .maybeSingle();
+if (recErr || !rec) {
+  return new Response(JSON.stringify({ error: "Recomendação não encontrada ou sem acesso" }), {
+    status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 ```
 
-A IA passa a:
-- Não repetir o que falhou ou foi ignorado.
-- Reconhecer áreas melhorando/piorando.
-- Sugerir próximo passo após sucesso.
-- Bloquear diagnóstico quando faltam evidências.
-- Operar via fluxo único, sem perda de FKs.
+(Como o cliente usa o JWT do usuário, o `select` já é filtrado por RLS — `null` significa "não é seu".) Mantém o resto do fluxo inalterado.
+
+### 2. Padronizar CORS
+
+- `analyze-reviews/index.ts`: trocar `import { corsHeaders, ... }` por `buildCorsHeaders(req)` no handler (manter `jsonResponse`/`aiErrorResponse` mas passando o cors dinâmico).
+- `suggest-product-names/index.ts`: substituir o `corsHeaders` inline por `buildCorsHeaders(req)`.
+- `_shared/cors.ts`: ajustar `jsonResponse`/`aiErrorResponse` para aceitar `req` opcional e construir cors dinamicamente, mantendo backward compat.
+
+### 3. Cobertura de testes adicional
+
+Criar/estender testes (Deno, sem rede):
+
+- `supabase/functions/record-feedback/status_test.ts` — adicionar:
+  - status inválido (`"foo"`) → rejeitado pela validação `STATUSES`.
+  - troca pendente → em_andamento → aplicada (sem perder `applied_at`).
+  - cross-tenant: simular `select` retornando `null` → resposta 404.
+- `supabase/functions/measure-outcomes/explanation_test.ts` (novo) — testar a função pura `buildExplanation` (extrair de dentro do handler para ficar testável) cobrindo positivo/negativo/neutro/sem-target/sem-dados.
+
+### 4. Checklist final de produção (entregue ao usuário)
+
+Apresentado no fim com 4 seções: pronto / requer teste manual / monitorar / riscos.
+
+## Detalhes técnicos
+
+**Arquivos editados**
+
+- `supabase/functions/record-feedback/index.ts` (+15 linhas: ownership check)
+- `supabase/functions/analyze-reviews/index.ts` (~6 linhas: usar `buildCorsHeaders`)
+- `supabase/functions/suggest-product-names/index.ts` (~5 linhas: usar `buildCorsHeaders`)
+- `supabase/functions/_shared/cors.ts` (jsonResponse aceitando cors dinâmico opcional)
+- `supabase/functions/measure-outcomes/index.ts` (extrair `buildExplanation` puro — sem mudança de comportamento)
+
+**Arquivos novos**
+
+- `supabase/functions/measure-outcomes/explanation_test.ts`
+
+**Arquivos editados (testes)**
+
+- `supabase/functions/record-feedback/status_test.ts` (+3 casos)
+
+**O que NÃO vamos tocar**
+
+- `ai-consult/index.ts`, `update-store-memory/index.ts`, `ActionPlan.tsx`, `ai-diagnose/index.ts`, `extract-case/index.ts`, schema do banco, RLS, cron job.
+
+**Validação após implementação**
+
+- Rodar `supabase--test_edge_functions` em `record-feedback`, `ai-consult`, `measure-outcomes`.
+- `curl_edge_functions` em `record-feedback` com `recommendation_id` inválido (espera 404) e válido (espera 200).
+- Verificar `supabase--linter` para garantir que nada novo apareceu.
+
+## Checklist de produção (entregue após implementação)
+
+**Pronto para produção**
+- Diagnóstico unificado (`ai-consult` única fonte)
+- Validação anti-alucinação com hard-fail
+- 5 status com `applied_at` consistente
+- Medição automática diária (cron) com explicação pt-BR
+- `store_memory.profile.learning` alimentando o prompt
+- CORS restrito a domínios oficiais
+
+**Requer teste manual antes de abrir para clientes**
+- Aplicar uma recomendação real, esperar 7 dias, conferir `metrics_after._explanation`
+- Rejeitar uma recomendação e rodar nova consulta — IA deve listar em `avoided_repetitions`
+- Aplicar com sucesso → próxima consulta deve usar como "próximo passo" (não repetir)
+- Onboarding completo de uma loja nova até primeiro diagnóstico
+
+**Monitorar nos primeiros clientes**
+- Logs de `applyDiagnosisValidation` (ratio de itens descartados — se >20% recorrente, ajustar prompt)
+- Edge logs do cron `measure-outcomes-daily` às 03:00 UTC
+- Taxa de `outcome="inconclusivo"` (sinal de que falta dado de métricas)
+- Tempo de resposta de `ai-consult` (vetorial + IA pode passar de 10s)
+
+**Riscos remanescentes**
+- Embeddings RAG ainda dependem de `LOVABLE_API_KEY` — sem ele, `findSimilarCases`/`findKnowledgeSnippets` retornam vazio (não quebra, mas degrada qualidade)
+- `case_library` cresce sem limite — sem rotina de poda hoje
+- Tabela `diagnostics` é cemitério (lida só pelo PDF) — risco baixo, mas vale alinhar deprecação
+- `metrics_before` é capturado no momento do diagnóstico; se a IA é executada várias vezes no mesmo dia, o "antes" da última sobrescreve a referência das anteriores via memória (não via FK) — checar se isso polui medição

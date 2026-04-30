@@ -60,6 +60,20 @@ Deno.serve(async (req) => {
       });
     }
 
+    // SECURITY: confirma que a recomendação pertence a uma loja do usuário
+    // ANTES de inserir feedback ou atualizar histórico. O cliente usa o JWT
+    // do usuário, então o RLS já filtra — null = não é seu.
+    const { data: ownedRec, error: ownedErr } = await supabase
+      .from("recommendation_history")
+      .select("id, store_id")
+      .eq("id", recommendation_id)
+      .maybeSingle();
+    if (ownedErr || !ownedRec) {
+      return new Response(JSON.stringify({ error: "Recomendação não encontrada ou sem acesso" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Insere feedback bruto (uma linha por interação)
     const { error: fbErr } = await supabase.from("recommendation_feedback").insert({
       recommendation_id, user_id: userId, rating, applied, generated_result,
