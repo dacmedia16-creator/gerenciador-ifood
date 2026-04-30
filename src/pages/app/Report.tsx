@@ -120,7 +120,7 @@ export default function Report() {
         <h1 className="text-2xl font-bold">Relatório consultivo</h1>
         <div className="flex gap-2 flex-wrap">
           <Button onClick={runAIConsult} disabled={aiLoading} variant="default" className="gradient-primary text-primary-foreground">
-            {aiLoading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Analisando…</> : <><Sparkles className="h-4 w-4 mr-1" />{aiConsult ? "Atualizar análise IA" : "Gerar análise consultiva (IA)"}</>}
+            {aiLoading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Analisando…</> : <><Sparkles className="h-4 w-4 mr-1" />{aiConsult ? "Atualizar consultoria IA" : "Consultar Gestor IA"}</>}
           </Button>
           <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" /> Imprimir</Button>
           <Button variant="outline" onClick={downloadPdf} disabled={downloading}>
