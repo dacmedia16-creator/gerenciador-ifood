@@ -53,6 +53,14 @@ export function buildExplanation(opts: {
       targetKey: null,
     };
   }
+  if (opts.before == null || opts.after == null) {
+    return {
+      outcome: "inconclusivo",
+      explanation: "Ainda não há dados suficientes para medir o impacto desta ação.",
+      deltaPct: null,
+      targetKey: target.key,
+    };
+  }
   const before = Number(opts.before);
   const after = Number(opts.after);
   if (isNaN(before) || isNaN(after) || before === 0) {
