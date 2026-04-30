@@ -122,6 +122,7 @@ export default function Dashboard() {
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <Button variant="outline" size="sm" onClick={() => navigate("/app/stores/new")}><Plus className="h-4 w-4 mr-1" /> Loja</Button>
+          <Button variant="outline" size="sm" onClick={() => refreshSystem()} title="Limpa caches e recarrega para aplicar atualizações"><RefreshCw className="h-4 w-4 mr-1" /> Atualizar sistema</Button>
           <Button size="sm" onClick={() => navigate("/app/diagnosis/new?new=1")}><Sparkles className="h-4 w-4 mr-1" /> Novo Diagnóstico</Button>
         </div>
       </div>
