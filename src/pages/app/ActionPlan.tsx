@@ -20,7 +20,7 @@ export default function ActionPlan() {
     toast.success("Status atualizado"); reload();
   };
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  if (loading) return <LoadingState />;
 
   const list = (actions || []).filter((a: any) => filter === "todos" || a.status === filter);
   const sorted = [...list].sort((a: any, b: any) => {

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { LoadingState } from "@/components/LoadingState";
 
 export default function Competitors() {
   const { id } = useParams();
@@ -23,7 +24,7 @@ export default function Competitors() {
     setOpen(false); setForm({ name: "", rating: "", delivery_time: "", delivery_fee: "", price_range: "$$" }); reload();
   };
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4">

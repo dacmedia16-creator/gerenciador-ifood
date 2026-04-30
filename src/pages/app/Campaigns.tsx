@@ -7,7 +7,9 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus, AlertTriangle, Megaphone } from "lucide-react";
+import { LoadingState } from "@/components/LoadingState";
+import { EmptyState } from "@/components/EmptyState";
 
 export default function Campaigns() {
   const { id } = useParams();
@@ -25,7 +27,7 @@ export default function Campaigns() {
     toast.success("Campanha registrada"); setOpen(false); reload();
   };
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4">
@@ -51,6 +53,9 @@ export default function Campaigns() {
         </Card>
       )}
 
+      {(!campaigns || campaigns.length === 0) ? (
+        <EmptyState icon={Megaphone} title="Nenhuma campanha cadastrada" description="Cadastre cupons, anúncios e ações de frete para acompanhar o ROI." />
+      ) : (
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {campaigns?.map((c: any) => {
           const negative = Number(c.estimated_roi) < 1;
@@ -72,6 +77,7 @@ export default function Campaigns() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
