@@ -152,6 +152,7 @@ export type Database = {
       }
       case_library: {
         Row: {
+          archived_at: string | null
           created_at: string
           diagnosis: string | null
           embedding: string | null
@@ -163,11 +164,14 @@ export type Database = {
           outcome: string | null
           problem_rule_id: string | null
           recommendation: string
+          retention_notes: string | null
           store_profile: Json
+          usefulness_score: number | null
           user_action: string | null
           user_feedback: string | null
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           diagnosis?: string | null
           embedding?: string | null
@@ -179,11 +183,14 @@ export type Database = {
           outcome?: string | null
           problem_rule_id?: string | null
           recommendation: string
+          retention_notes?: string | null
           store_profile?: Json
+          usefulness_score?: number | null
           user_action?: string | null
           user_feedback?: string | null
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           diagnosis?: string | null
           embedding?: string | null
@@ -195,7 +202,9 @@ export type Database = {
           outcome?: string | null
           problem_rule_id?: string | null
           recommendation?: string
+          retention_notes?: string | null
           store_profile?: Json
+          usefulness_score?: number | null
           user_action?: string | null
           user_feedback?: string | null
         }
@@ -759,6 +768,7 @@ export type Database = {
         Row: {
           applied_at: string | null
           created_at: string
+          diagnosis_cycle_id: string | null
           expected_impact: string | null
           id: string
           metrics_after: Json | null
@@ -777,6 +787,7 @@ export type Database = {
         Insert: {
           applied_at?: string | null
           created_at?: string
+          diagnosis_cycle_id?: string | null
           expected_impact?: string | null
           id?: string
           metrics_after?: Json | null
@@ -795,6 +806,7 @@ export type Database = {
         Update: {
           applied_at?: string | null
           created_at?: string
+          diagnosis_cycle_id?: string | null
           expected_impact?: string | null
           id?: string
           metrics_after?: Json | null
