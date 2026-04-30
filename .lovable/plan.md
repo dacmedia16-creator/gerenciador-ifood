@@ -1,53 +1,25 @@
-## Página de Contato com formulário e canais de conversão
+## Objetivo
 
-Criar uma nova página `/contato` alinhada à identidade premium da landing (preto, vermelho `#EA1D2C`, amarelo `#FFD000`, off-white) com formulário de captação de leads e exibição clara dos canais (endereço, e-mail e WhatsApp).
+A prévia de link no WhatsApp (e em qualquer rede social) ainda mostra o posicionamento antigo:
 
-### O que será entregue
+> "Gestor IA de Delivery — Diagnóstico inteligente, score por área e plano de ação automático para lojas de delivery."
 
-**1. Nova página `src/pages/Contato.tsx`**
-- Header e footer reaproveitando o estilo visual do `Index.tsx` (mesma paleta isolada, mesmo logo "G", mesmo CTA "Área do cliente").
-- Hero curto: "Fale com um Gestor de Delivery" + subtítulo de conversão ("Receba uma análise inicial gratuita do seu delivery em até 24h").
-- Layout em 2 colunas (responsivo, vira 1 coluna no mobile):
-  - **Esquerda – Formulário** dentro de um Card com:
-    - Nome, WhatsApp, E-mail, Nome do restaurante, Cidade/UF, Faturamento mensal estimado (select), Mensagem.
-    - Botão primário vermelho: "Quero falar com um especialista".
-    - Validação com `zod` (trim, e-mail válido, limites de tamanho), mensagens de erro inline e `toast` de sucesso/erro (sonner já configurado).
-    - Ao enviar com sucesso: também abre o WhatsApp em nova aba com mensagem pré-formatada (fallback de conversão imediata).
-  - **Direita – Canais de contato** em cards escuros:
-    - WhatsApp (ícone + número clicável `https://wa.me/...`) — CTA destacado.
-    - E-mail (mailto:).
-    - Endereço completo: Rua Horácio Cenci, 9 — Sala 604 — Campolim — Sorocaba/SP — CEP 18047-800.
-    - Horário de atendimento (Seg–Sex, 9h–18h).
-    - Bloco de "garantias" (resposta em até 24h, atendimento humano, sem compromisso).
+Isso vem das meta tags em `index.html`. Vou atualizá-las para refletir o novo posicionamento premium de serviço de Gestor de Delivery.
 
-**2. Persistência do lead (Lovable Cloud)**
-- Criar tabela `public.contact_leads` (id, created_at, nome, whatsapp, email, restaurante, cidade, faturamento, mensagem, origem).
-- RLS: habilitada; `INSERT` permitido para `anon` e `authenticated` (formulário público); `SELECT` apenas para usuários com role `admin` (via `has_role`, padrão de segurança do projeto).
-- O formulário grava direto via `supabase.from('contact_leads').insert(...)` — sem edge function.
+## Alteração
 
-**3. Integração na navegação**
-- Adicionar rota `/contato` em `src/App.tsx`.
-- Adicionar link "Contato" no menu do header e no rodapé do `Index.tsx`.
-- Trocar o link "Falar com especialista" do header/footer da landing para apontar para `/contato` (em vez de `/auth?mode=signup`), mantendo o CTA "Solicitar análise" do hero apontando para signup.
+**Arquivo:** `index.html`
 
-### Dados de contato exibidos
+Substituir as tags `<title>`, `<meta name="description">`, `og:title`, `og:description`, `twitter:title` e `twitter:description` por:
 
-- **Endereço:** Rua Horácio Cenci, 9 — Sala 604 — Campolim — Sorocaba/SP — CEP 18047-800
-- **WhatsApp / E-mail:** preciso que você me informe os valores reais. Enquanto isso, deixarei placeholders (`(15) 90000-0000` e `contato@gestordedelivery.com.br`) marcados com comentário `// TODO` para você ajustar — ou me responda agora com os dados certos que já entrego prontos.
+- **Title:** `Gestor de Delivery — Gestão premium para restaurantes que vendem por delivery`
+- **Description:** `Serviço premium de Gestor de Delivery para donos de restaurantes, hamburguerias, pizzarias, açaíterias e dark kitchens. Mais pedidos, mais margem e mais reputação no iFood, 99Food, WhatsApp e canais próprios.`
+- **OG/Twitter title:** `Gestor de Delivery — Gestão premium do seu delivery`
+- **OG description:** `Um time especialista cuidando do seu delivery: cardápio, precificação, operação, marketing e reputação. Foco em resultado para restaurantes que vendem no iFood, 99Food, WhatsApp e canais próprios.`
+- **Twitter description (mais curta):** `Um time especialista cuidando do seu delivery: cardápio, precificação, operação, marketing e reputação.`
+- **Author:** `Gestor de Delivery` (sem o "IA")
 
-### Detalhes técnicos
+## Observações
 
-- Validação: `zod` + `react-hook-form` (já presentes no projeto via `components/ui/form`).
-- Toasts: `sonner` (já montado em `App.tsx`).
-- Sanitização de URL: `encodeURIComponent` na mensagem do WhatsApp.
-- Estilo: classes Tailwind + `style={{ backgroundColor: C.* }}` para manter a paleta da landing isolada do design system (mesmo padrão usado em `Index.tsx`).
-- Sem novas dependências.
-
-### Arquivos afetados
-
-- `src/pages/Contato.tsx` (novo)
-- `src/App.tsx` (rota)
-- `src/pages/Index.tsx` (links de header/footer)
-- Migração SQL: tabela `contact_leads` + RLS
-
-Posso prosseguir? Se já tiver WhatsApp e e-mail oficiais, me passe junto da aprovação.
+- Mantenho a `og:image` atual (placeholder Lovable). Se quiser, depois posso gerar uma imagem de preview personalizada com a identidade visual (preto, vermelho iFood, amarelo).
+- Após publicar, o WhatsApp pode demorar a atualizar o cache do preview — para forçar, basta enviar o link com um parâmetro novo (ex.: `?v=2`) uma vez.
