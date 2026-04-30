@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
 import { LoadingState } from "@/components/LoadingState";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 const STATUSES = ["pendente", "em andamento", "concluido"];
 
@@ -14,11 +16,48 @@ export default function ActionPlan() {
   const { id } = useParams();
   const { actions, loading, reload } = useStoreData(id);
   const [filter, setFilter] = useState<string>("todos");
+  const [outcomeFor, setOutcomeFor] = useState<any>(null);
+  const [outcome, setOutcome] = useState<string>("positivo");
+  const [comment, setComment] = useState("");
 
-  const change = async (actionId: string, status: string) => {
-    const { error } = await supabase.from("action_plans").update({ status }).eq("id", actionId);
+  const change = async (action: any, status: string) => {
+    const { error } = await supabase.from("action_plans").update({ status }).eq("id", action.id);
     if (error) return toast.error(error.message);
-    toast.success("Status atualizado"); reload();
+    toast.success("Status atualizado");
+    if (status === "concluido") {
+      setOutcomeFor(action);
+      setOutcome("positivo");
+      setComment("");
+    }
+    reload();
+  };
+
+  const submitOutcome = async () => {
+    if (!outcomeFor) return;
+    // Tenta achar a recommendation_history correspondente por título nesta loja
+    const { data: rec } = await supabase
+      .from("recommendation_history")
+      .select("id")
+      .eq("store_id", id!)
+      .ilike("recommendation", `%${outcomeFor.title.slice(0, 60)}%`)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (rec?.id) {
+      await supabase.functions.invoke("record-feedback", {
+        body: {
+          recommendation_id: rec.id,
+          applied: true,
+          generated_result: outcome === "positivo" ? "sim" : outcome === "negativo" ? "nao" : "nao_sei",
+          comment,
+        },
+      });
+      toast.success("Resultado registrado — a IA vai aprender com isso.");
+    } else {
+      toast.info("Concluído (sem recomendação IA vinculada)");
+    }
+    setOutcomeFor(null);
   };
 
   if (loading) return <LoadingState />;
