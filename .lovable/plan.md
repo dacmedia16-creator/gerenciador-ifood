@@ -1,67 +1,103 @@
-## Problema
+## Reposicionamento da Landing Page — De SaaS para Serviço Premium de Gestão de Delivery
 
-Ao clicar em **"Consultar Gestor IA"**, a edge function `ai-consult` retorna **404 "Loja não encontrada"**, mesmo com a loja existindo no banco e o usuário sendo o dono (`user_id` bate com `auth.uid()`).
+### Objetivo
+Transformar `src/pages/Index.tsx` em uma página que vende um **serviço consultivo premium** de gestão de delivery (não mais um SaaS self-service), com visual escuro/imponente e copy de autoridade.
 
-### Diagnóstico
+---
 
-- A loja `03fcb0aa-...` existe e pertence ao user logado (`48e83670-...`).
-- RLS de `stores` é simples: `auth.uid() = user_id`.
-- Logs mostram que **uma chamada anterior funcionou (200)** e as seguintes começaram a retornar 404 em ~3s.
-- Causa raiz: na refatoração recente substituímos `supabase.auth.getClaims()` por:
-  ```ts
-  const supabase = createClient(URL, ANON, { global: { headers: { Authorization: authHeader } } });
-  const { data: userData } = await supabase.auth.getUser(token);
-  ```
-  Chamar `getUser(token)` no client criado com header global **invalida a sessão interna** e faz com que as próximas chamadas `.from("stores").select()` saiam **sem o JWT do usuário** (efetivamente como `anon`), o que bloqueia tudo via RLS e retorna 0 linhas → `.single()` falha → caímos no `return 404 "Loja não encontrada"`.
+### 1. Mudanças de copy e estrutura (`src/pages/Index.tsx`)
 
-## Correção
+Reescrever a página inteira com as seguintes seções, nesta ordem:
 
-Em `supabase/functions/ai-consult/index.ts`, separar **autenticação** de **acesso a dados**:
+**Header premium**
+- Logo + nome "Gestor de Delivery" (estilo monograma em vermelho/preto)
+- Links âncora: Como funciona · O que analisamos · Para quem é · Falar com especialista
+- CTA no topo: "Solicitar análise" (vermelho sólido)
+- Remover botões "Entrar" / "Começar grátis" do destaque (acesso ao login fica como link discreto "Área do cliente" no rodapé do header)
 
-1. Criar um client **somente para validar o JWT** (sem header global), usado uma única vez para `auth.getUser(token)`.
-2. Criar um **segundo client** já com `Authorization: Bearer <jwt>` no `global.headers` — esse será usado para todas as queries (`stores`, `products`, etc.) e respeita RLS.
-3. Não misturar `auth.getUser` com o client de queries.
+**Hero (fundo escuro #111111 com detalhes em vermelho/amarelo)**
+- Badge: "Gestão especializada para delivery"
+- H1: "Gestão profissional para restaurantes que querem vender mais no delivery"
+- Subtítulo: "Assumimos a inteligência operacional do seu delivery: cardápio, margem, reputação, campanhas, concorrência, recompra e plano de crescimento para aplicativos e canais próprios."
+- CTA primário (vermelho #EA1D2C): "Solicitar análise do meu delivery"
+- CTA secundário (outline claro): "Ver como funciona"
+- Mock visual lateral: card escuro com mini-dashboard (score, ticket médio, pedidos, evolução) usando a paleta delivery
+- Selos de confiança: "iFood · 99Food · WhatsApp · Cardápio próprio"
 
-### Trecho-alvo (linhas ~155–175)
+**Seção de dores**
+- Título: "O problema não é só vender pouco. É não saber onde o dinheiro está escapando."
+- 6 cards: Margem baixa · Promoções sem lucro · Avaliações ruins · Entrega lenta · Baixa recompra · Concorrência mais forte
+- Cards claros sobre off-white #FFF8F2, borda fina, ícone vermelho
 
-```ts
-const authHeader = req.headers.get("Authorization");
-if (!authHeader?.startsWith("Bearer ")) {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), {
-    status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-const token = authHeader.replace("Bearer ", "");
+**Seção de serviços** (id="como-funciona")
+- Título: "Uma gestão completa para transformar delivery em canal de crescimento."
+- 6 cards: Diagnóstico Comercial · Gestão de Cardápio · Performance em Aplicativos · Campanhas e Promoções · Reputação e Avaliações · Plano de Crescimento
 
-// Client 1: só para validar usuário (sem header global)
-const authClient = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_ANON_KEY")!,
-);
-const { data: userData, error: userErr } = await authClient.auth.getUser(token);
-if (userErr || !userData?.user) {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), {
-    status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+**Seção diferenciadora (fundo grafite #1F1F1F)**
+- Frase forte: "Você não contrata uma plataforma. Você contrata uma equipe olhando para o seu delivery."
+- 3 colunas: Dados · Inteligência Artificial · Visão estratégica humana
+- Frases-âncora: "Você cuida da cozinha. Nós cuidamos da performance do seu delivery."
 
-// Client 2: queries com RLS do usuário
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_ANON_KEY")!,
-  { global: { headers: { Authorization: authHeader } }, auth: { persistSession: false, autoRefreshToken: false } }
-);
-```
+**Seção de processo**
+- 4 etapas numeradas: 1) Raio-X da operação · 2) Diagnóstico estratégico · 3) Plano de ação priorizado · 4) Acompanhamento e otimização
 
-## Validação
+**Seção "Para quem é"** (id="para-quem")
+- Lista visual: Hamburguerias · Pizzarias · Açaíterias · Dark Kitchens · Restaurantes locais · Operações em iFood/99Food/WhatsApp/cardápio próprio
 
-1. Redeploy da função `ai-consult`.
-2. `curl_edge_functions` POST com `{"storeId":"03fcb0aa-..."}` → esperado **200** com `diagnosis`.
-3. Clicar em **"Consultar Gestor IA"** na UI — esperado redirecionamento para `/report` com a análise.
-4. Conferir logs: sem `Loja não encontrada`, mantém `ai_consult.rag` e (se aplicável) `ai_consult.slow`.
+**Seção de indicadores analisados** (id="o-que-analisamos")
+- Grid com: Cardápio, margem, ticket médio, avaliações, tempo de entrega, cancelamentos, concorrência, campanhas, recompra, produtos campeões e produtos problemáticos
+- Estilo: chips/tags escuros sobre fundo claro
 
-## Não-objetivos
+**CTA final (fundo preto #111 com gradiente vermelho)**
+- "Quer descobrir onde seu delivery está perdendo dinheiro?"
+- Botão grande amarelo #FFD000 com texto preto: "Solicitar análise agora"
+- Botão secundário: "Falar com um gestor"
 
-- Não reescrever a lógica de RAG, memória, validação ou regras de aprendizado.
-- Não alterar RLS nem schema.
-- Não tocar em `ai-consult` além desse bloco de auth (~20 linhas).
+**Footer**
+- Nome da empresa, tagline curta, link discreto "Área do cliente" → `/auth`
+
+---
+
+### 2. Direção visual e paleta
+
+Aplicar via classes Tailwind inline (cores arbitrárias `bg-[#EA1D2C]`, `text-[#FFD000]`, etc.) para evitar mexer no design system global e não impactar o resto do app:
+
+- Vermelho principal: `#EA1D2C`
+- Amarelo destaque: `#FFD000`
+- Preto premium: `#111111`
+- Grafite: `#1F1F1F`
+- Off-white: `#FFF8F2`
+- Verde positivo: `#16A34A`
+
+Cards: bordas finas (`border border-black/10` ou `border-white/10`), sombra elegante (`shadow-xl shadow-black/5`), `rounded-2xl`, padding generoso (`p-8`).
+
+Tipografia: títulos grandes e densos (`text-5xl md:text-7xl font-bold tracking-tight`), bom espaçamento entre seções (`py-24`).
+
+Ícones: usar `lucide-react` (já no projeto) — `ChefHat`, `TrendingUp`, `Star`, `Truck`, `Target`, `BarChart3`, `Users`, `MessageCircle`, etc.
+
+---
+
+### 3. CTAs e roteamento
+
+Todos os CTAs principais ("Solicitar análise", "Falar com especialista", "Falar com um gestor") apontam para o mesmo destino. Como ainda não existe formulário de captação:
+
+- **Decisão padrão (a confirmar se preferir outra):** apontar todos os CTAs principais para `/auth?mode=signup` mantendo a rota existente, mas com label de serviço ("Solicitar análise"). Assim a página vende serviço sem quebrar o fluxo atual.
+- "Área do cliente" (link discreto) → `/auth`
+
+Se preferir um link `mailto:` ou WhatsApp, ajusto após aprovação.
+
+---
+
+### 4. Escopo do que NÃO muda
+
+- Nenhuma mudança em `App.tsx`, rotas, autenticação ou backend.
+- `src/index.css` e `tailwind.config.ts` permanecem intactos (cores aplicadas inline na Index para isolar o tema premium da landing).
+- Nenhuma alteração em páginas internas (`/app/*`).
+
+---
+
+### Arquivos alterados
+- `src/pages/Index.tsx` — reescrita completa.
+
+### Resultado esperado
+Landing escura, imponente, com narrativa de serviço consultivo premium para donos de delivery, paleta iFood/99, CTAs de captação ("Solicitar análise") e zero linguagem de SaaS self-service.
