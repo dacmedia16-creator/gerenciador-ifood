@@ -27,6 +27,10 @@ import ActionPlan from "./pages/app/ActionPlan";
 import Report from "./pages/app/Report";
 import ReportTemplate from "./pages/app/ReportTemplate";
 import Onboarding from "./pages/app/Onboarding";
+import NewDiagnosis from "./pages/app/diagnosis/NewDiagnosis";
+import DiagnosisWizard from "./pages/app/diagnosis/DiagnosisWizard";
+import DiagnosisReview from "./pages/app/diagnosis/DiagnosisReview";
+import DiagnosisResult from "./pages/app/diagnosis/DiagnosisResult";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +45,11 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            {/* Diagnosis funnel — fora do AppLayout para tela cheia */}
+            <Route path="/app/diagnosis/new" element={<NewDiagnosis />} />
+            <Route path="/app/diagnosis/:sessionId" element={<DiagnosisWizard />} />
+            <Route path="/app/diagnosis/:sessionId/review" element={<DiagnosisReview />} />
+            <Route path="/app/diagnosis/:sessionId/result" element={<DiagnosisResult />} />
             <Route path="/app" element={<AppLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />

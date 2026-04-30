@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette,
+  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 const general = [
   { title: "Dashboard", url: "/app/dashboard", icon: LayoutDashboard },
+  { title: "Novo Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
   { title: "Lojas", url: "/app/stores", icon: Store },
 ];
 

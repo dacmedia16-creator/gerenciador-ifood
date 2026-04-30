@@ -1,147 +1,154 @@
+# Funil de Diagnóstico Guiado
 
-# Refinamento "Gestor IA de Delivery" — rodada de profissionalização
+Nova jornada principal para criar diagnósticos: um wizard consultivo de múltiplas etapas, com salvamento automático, retomada, revisão final e geração consolidada de score, plano de ação e relatório. As páginas atuais continuam existindo para consulta/edição dos dados depois.
 
-Objetivo: deixar o MVP pronto para apresentar em reunião comercial, com identidade consistente, segurança auditada, jornada coerente e camada de diagnóstico/score/relatório mais sólida. Nada de funcionalidade existente é removido.
+## 1. Banco de Dados (migration)
 
-## Estado atual (auditado)
+Criar 3 novas tabelas com RLS via `has_store_access(store_id)`:
 
-- `package.json` ainda usa `name: "vite_react_shadcn_ts"`; README é o template padrão.
-- Auth, RLS por loja (`has_store_access`) e proteção de rota em `AppLayout` já existem e funcionam.
-- Linter Supabase aponta 2 warnings: (1) bucket `report-logos` público permite listagem; (2) função `SECURITY DEFINER` executável por authenticated.
-- Engine de diagnóstico já cobre 9 regras pedidas; falta diagnóstico de "taxa de entrega vs. concorrentes" e refinos de cobertura.
-- Score já tem 12 áreas e 0–100, mas falta a área "Indicadores financeiros" usar dados reais e faltam textos consultivos por área.
-- Relatório consultivo já existe e responde as 5 perguntas-chave; falta seção "principais oportunidades" e "recomendações estratégicas" explícitas.
-- Estados vazios estão razoáveis em algumas páginas (Stores, Diagnostics) mas inconsistentes em Products / Reviews / Campaigns / Competitors / ActionPlan / Report (vamos padronizar).
-- Uploads já aceita CSV com parser/preview real; falta deixar explícito que XLSX/PDF estão "em breve" e oferecer modo demonstração.
+- **diagnosis_sessions** — `id, user_id, store_id, status (draft|completed|generated), current_step (int), completion_percentage (int), started_at, completed_at, generated_at, created_at, updated_at`
+- **diagnosis_answers** — `id, session_id, store_id, user_id, step_key, question_key, answer_value (jsonb), answer_type (text), created_at, updated_at` + índice `(session_id, step_key, question_key)` único
+- **diagnosis_step_status** — `id, session_id, step_key, is_completed, completion_percentage, missing_required_fields (jsonb), updated_at` + único `(session_id, step_key)`
 
-## Escopo da rodada
+Triggers `touch_updated_at` nas três. Sem alterar tabelas existentes (stores, products, reviews, competitors, campaigns, diagnostics, action_plans, reports, metrics).
 
-### 1. Identidade do produto
-- `package.json`: renomear `name` para `gestor-ia-delivery`.
-- `index.html`: ajustar `<title>`, `meta description`, `og:title`, `og:description`, `author`, `twitter:site` para "Gestor IA de Delivery".
-- Sidebar: header passa de "Gestor IA" para "Gestor IA de Delivery" (com versão curta no estado collapsed).
-- Varrer textos genéricos remanescentes ("Lovable Generated Project", "TODO", placeholders).
+## 2. Estrutura do Funil (frontend)
 
-### 2. README profissional
-Substituir `README.md` por documento contendo:
-- Nome, descrição e objetivo do SaaS.
-- Funcionalidades principais (dashboard, diagnóstico por regras + IA, score 0–100 por área, plano de ação, relatório consultivo, importação CSV, template de PDF por loja).
-- Stack (React 18, Vite 5, TS, Tailwind, shadcn/ui, React Router, TanStack Query, Recharts, Lovable Cloud/Supabase, Edge Functions, Lovable AI Gateway).
-- Como rodar localmente (`npm i`, `npm run dev`, vars `.env` autogeradas).
-- Estrutura de pastas (`src/pages/app`, `src/lib/diagnostics`, `src/lib/seed`, `supabase/functions`).
-- Modelo de dados (lista das tabelas Supabase).
-- Observação clara sobre dados mockados (`seedDemoStore`).
-- Próximos passos planejados (parsing XLSX/PDF real, integrações iFood/Rappi, IA preditiva).
+Nova rota principal:
+- `/app/diagnosis/new` → cria sessão draft e redireciona
+- `/app/diagnosis/:sessionId` → wizard
+- `/app/diagnosis/:sessionId/review` → tela de revisão
+- `/app/diagnosis/:sessionId/result` → resultado pós-geração
 
-### 3. Jornada principal
-- Stores vazio → CTA dupla "Criar minha primeira loja" + "Carregar loja demo" (já existe parcialmente no Onboarding; vamos garantir o mesmo CTA na lista).
-- Após cadastro manual em `NewStore`, oferecer toast com link "Ir para diagnóstico" e seed automático opcional de métricas vazias.
-- StoreOverview: garantir botões claros de "Rodar diagnóstico" e "Ver relatório".
-- Adicionar breadcrumb leve / botão "Voltar para Lojas" no header da loja.
+Card no Dashboard: "Diagnóstico em andamento" com botão "Continuar diagnóstico" (lê última sessão draft do usuário).
 
-### 4. Proteção de rotas e dados
-- `AppLayout` já redireciona não-logado; manter.
-- Adicionar verificação extra: ao entrar em `/app/stores/:id/*`, se `stores.select().eq("id", id).maybeSingle()` retornar `null`, redirecionar para `/app/stores` com toast "Loja não encontrada ou sem acesso" (RLS já bloqueia, mas a UX precisa explicar).
-- Centralizar isso no `useStoreData`.
-
-### 5. Auditoria Supabase
-Migrações:
-- `report-logos`: tornar bucket privado e servir logos via URL assinada, OU manter público mas restringir `SELECT` em `storage.objects` apenas para arquivos próprios + leitura pública só para o path do template (resolve warn 1).
-- Revogar `EXECUTE ... TO authenticated, anon, public` nas funções `SECURITY DEFINER` (`has_store_access`, `handle_new_user`, `touch_updated_at`) — manter execução apenas via policies/triggers (resolve warn 2).
-- Conferir/reaplicar policies `*_all_own` em todas as 11 tabelas listadas (todas já existem segundo o schema; não recriar, apenas auditar via linter pós-migração).
-- Confirmar trigger `on_auth_user_created` para `handle_new_user` (criar se ausente).
-
-### 6. Dados mockados mais realistas
-Reescrever `src/lib/seed/demoStore.ts` para gerar:
-- Loja "Burger House (Demo)" com KPIs já realistas (mantém base atual, ajusta valores).
-- 14–16 produtos cobrindo:
-  - "vende muito + margem baixa" (Batata Rústica, Refrigerante).
-  - "lucrativo + pouco destaque" (Brownie sem foto, Burger Premium).
-  - "vendedor com reclamações" (Burger Bacon).
-- 18–20 avaliações com mistura forte de positivas/negativas, padrões repetidos de "atrasou", "frio", "embalagem", "pedido errado" (alimenta engine).
-- 4 concorrentes com prazos/notas/taxas variando claramente.
-- 3 campanhas: 1 ROI alto (cupom), 1 ROI baixo (ads), 1 neutra (frete grátis).
-- 6 meses de métricas com leve tendência.
-- Roda `runDiagnostics` e cria `action_plans` linkados (já existe; manter).
-
-### 7. Engine de diagnóstico
-Adicionar/ajustar em `src/lib/diagnostics/engine.ts`:
-- Nova regra: `delivery_fee` da loja > média dos concorrentes → diagnóstico "Competitividade de taxa".
-- Nova regra: nenhum produto com foto → severity crítico em "Cardápio / Fotos".
-- Nova regra: ticket médio baixo + ausência de produto categoria "Combos" → reforça diagnóstico de combos.
-- Garantir que toda saída tem os 9 campos pedidos (já tem 8; adicionar `severity` derivado de `priority` quando ausente — já presente).
-- Mesmas regras aplicadas no Edge Function `_shared/diagnostic-rules.ts` para manter paridade.
-
-### 8. Score
-- Acrescentar texto consultivo curto por área no objeto retornado por `calculateScore` (campo `notes: Record<area, string>`).
-- Página `Score`: exibir explicação consultiva geral baseada em faixas (já existe parcialmente) + nota por área usando o novo `notes`.
-- Cores já mapeiam verde/amarelo/vermelho via `scoreColor`.
-
-### 9. Relatório final
-Em `src/pages/app/Report.tsx`:
-- Adicionar seção "Principais oportunidades" (top 5 ações de impacto alto + esforço baixo/médio).
-- Adicionar seção "Recomendações estratégicas" (3 bullets gerados das áreas com menor score).
-- Adicionar seção "Próximos passos" (checklist 30/60/90 dias derivado do plano).
-- Manter as 5 perguntas-chave já presentes.
-- Espelhar as novas seções no Edge Function `generate-report-pdf` (respeitando `report_templates.sections`/`kpi_order`).
-
-### 10. Polimento SaaS premium
-- Padronizar header das páginas de loja: título, subtítulo, ações à direita.
-- Cards: revisar paddings (`p-4`/`p-5`) e usar `shadow-card` consistentemente.
-- Sidebar: agrupar seções da loja em sub-grupos ("Análise", "Operação", "Saída") para reduzir lista longa.
-- Mobile: garantir `flex-wrap` nos headers e tabelas com `overflow-x-auto`.
-- Componentizar `EmptyState` em `src/components/EmptyState.tsx` (ícone + título + descrição + CTA opcional) e usar em Products/Reviews/Campaigns/Competitors/ActionPlan/Report quando vazios.
-- Componentizar `LoadingState` para padronizar o "Carregando…" atual.
-
-### 11. Uploads e exportação
-- `Uploads.tsx`: adicionar callout informando que XLSX e PDF estão "em breve" e botão "Carregar dados de demonstração" que chama `seedDemoStore`-like helper para popular só a categoria importada.
-- Validação de tamanho (<5MB) e mensagem de erro amigável.
-- `Report.tsx`: já tem botão imprimir + baixar PDF via Edge Function; adicionar fallback que abre `window.print()` se a função falhar e toast explicativo.
-
-### 12. Estados vazios e feedback
-Aplicar `EmptyState` em:
-- Products: "Nenhum produto cadastrado" + CTA "Importar via CSV" / "Carregar demo".
-- Reviews: "Sem avaliações" + CTA importar.
-- Campaigns / Competitors: idem.
-- ActionPlan: "Nenhuma ação pendente. Rode um diagnóstico."
-- Report: "Cadastre métricas e produtos para gerar o relatório."
-Loading: trocar todos os `<div>Carregando…</div>` por `<LoadingState />` com skeleton mínimo.
-Erros: padronizar via `toast.error` com mensagem em português.
-
-### 13. Critério de aceite
-Após esta rodada deve ser possível, em ~3 minutos de demo:
-1. Criar conta → login.
-2. Clicar em "Carregar loja demo".
-3. Ver dashboard com score, KPIs, gráficos, alertas críticos.
-4. Abrir Diagnóstico (regras + IA), Score por área, Plano de ação.
-5. Navegar Produtos / Avaliações / Concorrentes / Campanhas / Métricas com dados realistas.
-6. Abrir Relatório consultivo, imprimir e baixar PDF customizado.
-7. Visitar Uploads e ver template + suporte futuro a XLSX/PDF.
-
-## Detalhes técnicos relevantes
-
+### Arquivos novos
 ```text
-Migrações Supabase
-├─ revoke execute em SECURITY DEFINER (auth/anon/public) e re-grant pontual
-├─ ajuste de policy SELECT em storage.objects para bucket report-logos
-└─ (opcional) trigger on_auth_user_created se faltar
+src/lib/diagnosis/
+  steps.ts              -- definição declarativa das 16 etapas (key, title, perguntas, validação)
+  schema.ts             -- tipos TS + zod schemas por etapa
+  autosave.ts           -- hook useAutosave (debounce 800ms → upsert em diagnosis_answers + step_status)
+  session.ts            -- helpers: createSession, loadSession, computeCompletion
+  generate.ts           -- consolidar respostas → criar registros em diagnostics, action_plans, report
+  rules.ts              -- regras de diagnóstico (item 26 do brief)
 
-Código
-├─ package.json: name → gestor-ia-delivery
-├─ index.html: meta tags
-├─ README.md: doc completa
-├─ src/components/EmptyState.tsx, LoadingState.tsx (novos)
-├─ src/components/AppSidebar.tsx: agrupar + nome completo
-├─ src/lib/diagnostics/engine.ts: +2 regras, notes no score
-├─ supabase/functions/_shared/diagnostic-rules.ts: paridade
-├─ src/lib/seed/demoStore.ts: dataset enriquecido
-├─ src/pages/app/Report.tsx: +3 seções
-├─ supabase/functions/generate-report-pdf/index.ts: novas seções
-├─ src/hooks/useStoreData.ts: redirect quando store nula
-├─ src/pages/app/Uploads.tsx: callouts + demo data
-└─ várias páginas: EmptyState/LoadingState
+src/components/diagnosis/
+  WizardShell.tsx       -- layout: header com progresso, sidebar checklist, footer botões
+  StepProgress.tsx
+  StepSidebar.tsx
+  QuestionCard.tsx      -- card padronizado com tooltip
+  fields/
+    YesNo.tsx
+    GoodAttentionBad.tsx
+    NumberField.tsx
+    TextArea.tsx
+    ProductsTable.tsx   -- repetidor para etapa 6
+    CompetitorsTable.tsx-- repetidor para etapa 12
+    FileUpload.tsx      -- etapa 16, salva em bucket "uploads" (criar se não existir)
+  steps/
+    Step01Welcome.tsx
+    Step02BasicInfo.tsx
+    Step03Storefront.tsx
+    Step04Menu.tsx
+    Step05Photos.tsx
+    Step06Products.tsx
+    Step07PriceMargin.tsx
+    Step08Combos.tsx
+    Step09Promotions.tsx
+    Step10Reviews.tsx
+    Step11Delivery.tsx
+    Step12Competitors.tsx
+    Step13Demand.tsx
+    Step14Loyalty.tsx
+    Step15Ads.tsx
+    Step16Uploads.tsx
+
+src/pages/app/diagnosis/
+  NewDiagnosis.tsx      -- cria sessão e redireciona
+  DiagnosisWizard.tsx   -- carrega sessão, monta WizardShell + step atual
+  DiagnosisReview.tsx   -- revisão final com alertas de campos faltantes
+  DiagnosisResult.tsx   -- score + diagnósticos + plano + link relatório
 ```
 
-Estimativa de impacto: ~15 arquivos editados, ~3 criados, 1 migração SQL. Sem breaking changes.
+## 3. Comportamento do Wizard
 
-Se aprovado, executo tudo na próxima rodada em modo build.
+- **Salvamento automático**: cada mudança de campo dispara debounce → `upsert diagnosis_answers` + recomputa `step_status`.
+- **Validação**: zod por etapa; campos obrigatórios marcados; usuário NÃO é bloqueado por opcionais; campos essenciais (item 24) geram alerta visual mas permitem avançar.
+- **Navegação**: Voltar / Salvar e continuar / Continuar depois (sair). Sidebar permite pular para etapas já visitadas.
+- **Sincronização com tabelas existentes**: ao final de etapas-chave, espelhar dados em tabelas reais:
+  - Etapa 2 → upsert em `stores` (cria se ainda não existir; FK `store_id` da sessão)
+  - Etapa 6 → upsert em `products`
+  - Etapa 10 → insert em `reviews` (quando o usuário cola/cadastra)
+  - Etapa 12 → upsert em `competitors`
+  - Etapa 11/13 → atualiza campos de `stores` e cria linha em `metrics`
+  - Etapa 9/15 → upsert em `campaigns`
+- **Tooltips**: cada pergunta com `<Tooltip>` shadcn explicativo.
+
+## 4. Revisão (`/review`)
+
+Lista as 16 etapas com: status (completa/incompleta/parcial), % preenchimento, campos essenciais faltantes, link "Editar etapa". Banner se faltarem essenciais: "Seu diagnóstico pode ficar menos preciso porque algumas informações não foram preenchidas." Botão **Gerar diagnóstico da loja**.
+
+## 5. Geração do Diagnóstico
+
+Função `generateDiagnosis(sessionId)` em `src/lib/diagnosis/generate.ts`:
+1. Carrega todas as respostas + dados espelhados.
+2. Aplica `rules.ts` (regras do item 26) → produz lista de problemas no formato do item 20: `{problema, evidencia, causa_provavel, impacto, solucao, prioridade, acao_pratica, prazo_sugerido, area, severity}`.
+3. Insert em `diagnostics` (uma linha por problema).
+4. Calcula score geral e por área (reusa `src/lib/diagnostics/engine.ts` existente, estendendo entradas).
+5. Gera `action_plans` priorizados por impacto × urgência × esforço.
+6. Cria registro em `reports` com `executive_summary`, `key_problems`, `opportunities`, `recommendations` e `report_data` contendo respostas das 5 perguntas finais do item 21.
+7. Atualiza `diagnosis_sessions.status='generated'` e `generated_at=now()`.
+8. Redireciona para `/app/diagnosis/:sessionId/result`.
+
+## 6. Resultado (`/result`)
+
+Mostra: score geral + situação (bom ≥80 / atenção 60-79 / crítico <60), top 5 problemas, top oportunidades, scores por área (radial), plano de ação priorizado, botões "Ver relatório completo" (`/app/stores/:id/report`) e "Exportar PDF" (reusa edge function `generate-report-pdf` existente).
+
+## 7. Storage para Uploads (Etapa 16)
+
+Criar bucket privado `uploads` com RLS:
+- SELECT/INSERT/DELETE: `auth.uid()::text = (storage.foldername(name))[1]`
+
+Estrutura: `uploads/<user_id>/<session_id>/<filename>`. Por enquanto apenas armazena e mostra "arquivo recebido" — parsing real fica como TODO (já existe `src/lib/import/parsers.ts` para futuro).
+
+## 8. Integração com UI existente
+
+- **AppSidebar**: adicionar item destacado "Novo Diagnóstico" no topo do grupo *Análise*, apontando para `/app/diagnosis/new`.
+- **Dashboard**: card "Diagnóstico em andamento" se houver sessão draft; card "Iniciar novo diagnóstico" caso contrário.
+- **StoreOverview**: botão secundário "Refazer via funil" → cria nova sessão vinculada à loja.
+- Páginas existentes (Diagnostics, Score, Products, etc.) **permanecem intactas** — passam a ser usadas para consulta e ajustes pontuais.
+
+## 9. Regras de diagnóstico (rules.ts — item 26)
+
+Implementar como funções puras `(answers, derivedMetrics) => DiagnosticProblem[]`:
+- nota < 4.5 → reputação
+- tempo entrega > 45min → entrega
+- cancelamento > 5% → cancelamentos
+- margem estimada < 20% → financeiro
+- >40% produtos sem foto → cardápio
+- ticket médio baixo + sem combos → ticket médio
+- sem estratégia recompra → fidelização
+- ROI campanha negativo → anúncios
+- concorrente com prazo/taxa menor → competitividade
+- reviews com keywords (atraso, frio, embalagem, errado) → experiência
+- top vendas com margem baixa → alerta lucro
+- alta margem + baixa venda → sugestão destaque
+
+Reutiliza e estende `supabase/functions/_shared/diagnostic-rules.ts`.
+
+## 10. Critério de aceite
+
+Login → "Novo Diagnóstico" → 16 etapas com autosave → Revisão → "Gerar" → Result com score, problemas, plano, relatório. Sair no meio e voltar pelo card do Dashboard mantém o progresso.
+
+---
+
+## Detalhes técnicos
+
+- **Stack**: React + TS, react-router, react-hook-form + zod, TanStack Query, shadcn/ui, sonner.
+- **Autosave**: hook customizado com debounce, otimista; fila simples para evitar race condition.
+- **Performance**: cada step é code-split (`React.lazy`) dentro do `DiagnosisWizard`.
+- **Migration única**: cria as 3 tabelas + RLS + bucket `uploads` + policies de storage.
+- **Sem alterar** `src/integrations/supabase/{client,types}.ts` — types regeneram após migration.
+- **Sem remover** rotas/páginas atuais.
+
+Estimativa: 1 migration, ~25 arquivos novos, edits em `App.tsx`, `AppSidebar.tsx`, `Dashboard.tsx`.
