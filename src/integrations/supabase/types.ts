@@ -140,6 +140,54 @@ export type Database = {
           },
         ]
       }
+      case_library: {
+        Row: {
+          created_at: string
+          diagnosis: string | null
+          embedding: string | null
+          id: string
+          lesson_learned: string | null
+          metrics_after: Json | null
+          metrics_before: Json | null
+          outcome: string | null
+          problem_rule_id: string | null
+          recommendation: string
+          store_profile: Json
+          user_action: string | null
+          user_feedback: string | null
+        }
+        Insert: {
+          created_at?: string
+          diagnosis?: string | null
+          embedding?: string | null
+          id?: string
+          lesson_learned?: string | null
+          metrics_after?: Json | null
+          metrics_before?: Json | null
+          outcome?: string | null
+          problem_rule_id?: string | null
+          recommendation: string
+          store_profile?: Json
+          user_action?: string | null
+          user_feedback?: string | null
+        }
+        Update: {
+          created_at?: string
+          diagnosis?: string | null
+          embedding?: string | null
+          id?: string
+          lesson_learned?: string | null
+          metrics_after?: Json | null
+          metrics_before?: Json | null
+          outcome?: string | null
+          problem_rule_id?: string | null
+          recommendation?: string
+          store_profile?: Json
+          user_action?: string | null
+          user_feedback?: string | null
+        }
+        Relationships: []
+      }
       competitors: {
         Row: {
           created_at: string
@@ -376,6 +424,45 @@ export type Database = {
           },
         ]
       }
+      knowledge_base: {
+        Row: {
+          area: string
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          source: string
+          tags: string[] | null
+          title: string
+          topic: string | null
+          updated_at: string
+        }
+        Insert: {
+          area: string
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          source?: string
+          tags?: string[] | null
+          title: string
+          topic?: string | null
+          updated_at?: string
+        }
+        Update: {
+          area?: string
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          source?: string
+          tags?: string[] | null
+          title?: string
+          topic?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       metrics: {
         Row: {
           ads_cost: number | null
@@ -611,6 +698,119 @@ export type Database = {
         }
         Relationships: []
       }
+      recommendation_feedback: {
+        Row: {
+          applied: boolean | null
+          comment: string | null
+          created_at: string
+          generated_result: string | null
+          id: string
+          rating: string | null
+          recommendation_id: string
+          user_id: string
+        }
+        Insert: {
+          applied?: boolean | null
+          comment?: string | null
+          created_at?: string
+          generated_result?: string | null
+          id?: string
+          rating?: string | null
+          recommendation_id: string
+          user_id: string
+        }
+        Update: {
+          applied?: boolean | null
+          comment?: string | null
+          created_at?: string
+          generated_result?: string | null
+          id?: string
+          rating?: string | null
+          recommendation_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_feedback_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "recommendation_history"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recommendation_history: {
+        Row: {
+          applied_at: string | null
+          created_at: string
+          expected_impact: string | null
+          id: string
+          metrics_after: Json | null
+          metrics_before: Json | null
+          outcome: string | null
+          outcome_measured_at: string | null
+          recommendation: string
+          report_id: string | null
+          rule_id: string | null
+          source: string
+          source_ref: string | null
+          status: string
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string
+          expected_impact?: string | null
+          id?: string
+          metrics_after?: Json | null
+          metrics_before?: Json | null
+          outcome?: string | null
+          outcome_measured_at?: string | null
+          recommendation: string
+          report_id?: string | null
+          rule_id?: string | null
+          source?: string
+          source_ref?: string | null
+          status?: string
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string
+          expected_impact?: string | null
+          id?: string
+          metrics_after?: Json | null
+          metrics_before?: Json | null
+          outcome?: string | null
+          outcome_measured_at?: string | null
+          recommendation?: string
+          report_id?: string | null
+          rule_id?: string | null
+          source?: string
+          source_ref?: string | null
+          status?: string
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_history_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_history_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_templates: {
         Row: {
           created_at: string
@@ -744,6 +944,50 @@ export type Database = {
           },
         ]
       }
+      store_memory: {
+        Row: {
+          current_goal: string | null
+          last_diagnosis_at: string | null
+          metrics_14d: Json
+          metrics_30d: Json
+          metrics_7d: Json
+          profile: Json
+          recurring_problems: Json
+          store_id: string
+          updated_at: string
+        }
+        Insert: {
+          current_goal?: string | null
+          last_diagnosis_at?: string | null
+          metrics_14d?: Json
+          metrics_30d?: Json
+          metrics_7d?: Json
+          profile?: Json
+          recurring_problems?: Json
+          store_id: string
+          updated_at?: string
+        }
+        Update: {
+          current_goal?: string | null
+          last_diagnosis_at?: string | null
+          metrics_14d?: Json
+          metrics_30d?: Json
+          metrics_7d?: Json
+          profile?: Json
+          recurring_problems?: Json
+          store_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "store_memory_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: true
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stores: {
         Row: {
           average_ticket: number | null
@@ -807,12 +1051,100 @@ export type Database = {
         }
         Relationships: []
       }
+      training_examples: {
+        Row: {
+          ai_response: Json
+          created_at: string
+          exported: boolean
+          human_feedback: Json | null
+          id: string
+          ideal_response: Json | null
+          input_payload: Json
+          outcome: Json | null
+          quality_score: number | null
+          report_id: string | null
+          store_id: string | null
+        }
+        Insert: {
+          ai_response: Json
+          created_at?: string
+          exported?: boolean
+          human_feedback?: Json | null
+          id?: string
+          ideal_response?: Json | null
+          input_payload: Json
+          outcome?: Json | null
+          quality_score?: number | null
+          report_id?: string | null
+          store_id?: string | null
+        }
+        Update: {
+          ai_response?: Json
+          created_at?: string
+          exported?: boolean
+          human_feedback?: Json | null
+          id?: string
+          ideal_response?: Json | null
+          input_payload?: Json
+          outcome?: Json | null
+          quality_score?: number | null
+          report_id?: string | null
+          store_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_examples_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_examples_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
       has_store_access: { Args: { _store_id: string }; Returns: boolean }
+      match_cases: {
+        Args: {
+          filter_rule_id?: string
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          diagnosis: string
+          id: string
+          lesson_learned: string
+          outcome: string
+          problem_rule_id: string
+          recommendation: string
+          similarity: number
+          store_profile: Json
+        }[]
+      }
+      match_knowledge: {
+        Args: {
+          filter_areas?: string[]
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          area: string
+          content: string
+          id: string
+          similarity: number
+          title: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
