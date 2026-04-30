@@ -8,7 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { ScoreBadge } from "@/components/StatusBadges";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { seedDemoStore } from "@/lib/seed/demoStore";
-import { Plus, Sparkles, Store, BarChart3, Star, Clock, AlertTriangle, DollarSign, Users } from "lucide-react";
+import { Plus, Sparkles, Store, BarChart3, Star, Clock, AlertTriangle, DollarSign, Users, RefreshCw } from "lucide-react";
+import { refreshSystem } from "@/lib/system/refresh";
 import { toast } from "sonner";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 
