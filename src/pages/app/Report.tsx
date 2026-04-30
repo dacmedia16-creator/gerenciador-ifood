@@ -1,20 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useStoreData } from "@/hooks/useStoreData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { calculateScore, scoreLabel } from "@/lib/diagnostics/engine";
 import { SeverityBadge, PriorityBadge, ScoreBadge } from "@/components/StatusBadges";
-import { Printer, Download, Sparkles, FileText } from "lucide-react";
+import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Report() {
   const { id } = useParams();
   const data = useStoreData(id);
   const [downloading, setDownloading] = useState(false);
+  const [latestReport, setLatestReport] = useState<any>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    (async () => {
+      const { data } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("store_id", id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) setLatestReport(data);
+    })();
+  }, [id]);
 
   const downloadPdf = async () => {
     if (!id) return;
@@ -22,9 +39,7 @@ export default function Report() {
     try {
       const res = await invokeAI<{ url: string }>("generate-report-pdf", { store_id: id });
       if (res?.url) window.open(res.url, "_blank");
-      else {
-        toast.error("Não foi possível gerar o PDF. Use 'Imprimir' como alternativa.");
-      }
+      else toast.error("Não foi possível gerar o PDF. Use 'Imprimir' como alternativa.");
     } catch {
       toast.error("Erro ao gerar PDF. Use 'Imprimir' como alternativa.");
     } finally {
@@ -37,44 +52,43 @@ export default function Report() {
   const { store, diagnostics, actions, products, reviews } = data;
   const { areas, overall, notes } = calculateScore(data);
 
-  const hasMinimum = products.length > 0 || reviews.length > 0;
+  const hasMinimum = products.length > 0 || reviews.length > 0 || diagnostics.length > 0;
   if (!hasMinimum) {
     return (
       <EmptyState
         icon={FileText}
         title="Cadastre dados para gerar o relatório"
-        description="Adicione produtos, avaliações ou métricas — ou carregue uma loja demo — para gerar um relatório consultivo."
+        description="Rode um diagnóstico no funil ou adicione produtos/avaliações para gerar o relatório consultivo."
         action={
           <Button asChild className="gradient-primary text-primary-foreground">
-            <Link to={`/app/stores/${id}/uploads`}>Importar dados</Link>
+            <Link to={`/app/diagnosis/new`}>Novo Diagnóstico</Link>
           </Button>
         }
       />
     );
   }
 
+  const reportData: any = latestReport?.report_data ?? {};
+  const journey: any[] = reportData?.journey ?? [];
+  const conversion = reportData?.conversion;
+  const sevenDay: any[] = reportData?.seven_day_plan ?? [];
+  const nextBest = reportData?.next_best_action;
+  const sixQ = reportData?.six_questions ?? {};
+  const mainBottleneck = reportData?.main_bottleneck;
+
   const critical = diagnostics.filter((d: any) => d.severity === "critico");
   const warn = diagnostics.filter((d: any) => d.severity === "atencao");
 
-  // Top oportunidades = ações de alta prioridade ou impacto alto/médio
-  const opportunities = [...actions]
-    .sort((a: any, b: any) => {
-      const order: any = { alta: 0, media: 1, baixa: 2 };
-      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-    })
-    .slice(0, 5);
-
-  // Áreas mais fracas → recomendações estratégicas
-  const weakestAreas = Object.entries(areas)
-    .sort((a, b) => (a[1] as number) - (b[1] as number))
-    .slice(0, 3);
-
-  const answer = (q: string, txt: string) => (
-    <div className="border-l-4 border-primary pl-4 my-3">
-      <p className="font-semibold">{q}</p>
-      <p className="text-sm text-muted-foreground">{txt}</p>
-    </div>
+  // Score de oportunidade comercial: maior quanto mais críticos houver
+  const opportunityScore = Math.min(
+    100,
+    Math.round(critical.length * 15 + warn.length * 7 + (conversion?.level === "critico" ? 25 : conversion?.level === "atencao" ? 12 : 0))
   );
+
+  const productsToFix = products.filter((p: any) => !p.has_photo || (p.estimated_margin != null && Number(p.estimated_margin) < 20));
+
+  const stageColor = (s: string) =>
+    s === "critico" ? "border-destructive bg-destructive/5" : s === "atencao" ? "border-warning bg-warning/5" : "border-success bg-success/5";
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -95,122 +109,187 @@ export default function Report() {
           <p className="text-xs text-muted-foreground mt-1">Gerado em {new Date().toLocaleDateString("pt-BR")}</p>
         </header>
 
+        {/* Resumo executivo */}
         <section className="mb-8">
           <h2 className="text-xl font-bold mb-2">Resumo executivo</h2>
-          <p className="text-sm">
-            A loja apresenta um score geral de <strong>{overall}/100 ({scoreLabel(overall)})</strong>.
-            Foram identificados <strong>{critical.length} problemas críticos</strong> e <strong>{warn.length} pontos de atenção</strong> distribuídos
-            entre {Object.keys(areas).length} áreas analisadas. {actions.length} ações foram priorizadas no plano,
-            das quais destacamos as <strong>5 principais oportunidades</strong> abaixo.
+          <p className="text-sm leading-relaxed">
+            {latestReport?.executive_summary ||
+              `A loja apresenta um score geral de ${overall}/100 (${scoreLabel(overall)}). Foram identificados ${critical.length} problemas críticos e ${warn.length} pontos de atenção. ${actions.length} ações foram priorizadas no plano.`}
           </p>
         </section>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Score geral</h2>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="text-5xl font-bold text-gradient">{overall}</div>
-            <ScoreBadge score={overall} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {Object.entries(areas).map(([a, s]) => (
-              <div key={a} className="flex justify-between border-b py-1">
-                <span>{a}</span><span className="font-semibold">{s}</span>
-              </div>
-            ))}
-          </div>
+        {/* Scores */}
+        <section className="mb-8 grid md:grid-cols-2 gap-4">
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground uppercase">Score de performance</p>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="text-4xl font-bold text-gradient">{overall}</div>
+              <ScoreBadge score={overall} />
+            </div>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-muted-foreground uppercase">Score de oportunidade comercial</p>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="text-4xl font-bold text-warning">{opportunityScore}</div>
+              <span className="text-xs text-muted-foreground">{opportunityScore > 60 ? "Muitas alavancas a destravar" : opportunityScore > 30 ? "Oportunidades médias" : "Loja madura"}</span>
+            </div>
+          </Card>
         </section>
 
+        {/* Gargalo principal */}
+        {mainBottleneck && (
+          <section className="mb-8">
+            <h2 className="text-xl font-bold mb-3">Gargalo principal</h2>
+            <Card className={`p-4 border-l-4 ${stageColor(mainBottleneck.status)}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <strong>{mainBottleneck.title}</strong>
+              </div>
+              <p className="text-sm">{mainBottleneck.bottleneck}</p>
+            </Card>
+          </section>
+        )}
+
+        {/* Conversão */}
+        {conversion?.rate != null && (
+          <section className="mb-8">
+            <h2 className="text-xl font-bold mb-3">Conversão da loja</h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="text-4xl font-bold">{conversion.rate}%</div>
+              <Badge variant={conversion.level === "critico" ? "destructive" : conversion.level === "atencao" ? "secondary" : "default"}>
+                {conversion.label}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {conversion.visits ?? "?"} visitas · {conversion.orders ?? "?"} pedidos
+              </span>
+            </div>
+          </section>
+        )}
+
+        {/* Jornada do cliente */}
+        {journey.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-xl font-bold mb-3">Diagnóstico por jornada do cliente</h2>
+            <div className="space-y-2">
+              {journey.map((j: any) => (
+                <Card key={j.stage} className={`p-3 border-l-4 ${stageColor(j.status)}`}>
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm">{j.title}</strong>
+                    <Badge variant={j.status === "critico" ? "destructive" : j.status === "atencao" ? "secondary" : "default"}>
+                      {j.status}
+                    </Badge>
+                  </div>
+                  <p className="text-sm mt-1">{j.bottleneck}</p>
+                  <p className="text-xs text-muted-foreground mt-1">→ {j.solution}</p>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Problemas críticos */}
         <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Principais gargalos</h2>
-          {critical.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum gargalo crítico.</p> :
+          <h2 className="text-xl font-bold mb-3">Problemas críticos</h2>
+          {critical.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum gargalo crítico identificado.</p> :
             <ul className="space-y-3">
               {critical.map((d: any) => (
-                <li key={d.id} className="text-sm">
+                <li key={d.id} className="text-sm border-l-4 border-destructive pl-3">
                   <div className="flex items-center gap-2 mb-1"><SeverityBadge severity={d.severity} /><strong>{d.area}</strong></div>
-                  <p>{d.problem} — {d.recommended_solution}</p>
+                  <p>{d.problem}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{d.recommended_solution}</p>
                 </li>
               ))}
             </ul>}
         </section>
 
+        {/* Produtos que precisam de ajuste */}
+        {productsToFix.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-xl font-bold mb-3">Produtos que precisam de ajuste</h2>
+            <ul className="text-sm space-y-1">
+              {productsToFix.slice(0, 8).map((p: any) => (
+                <li key={p.id} className="flex items-center gap-2">
+                  <Badge variant="destructive" className="text-xs">{!p.has_photo ? "sem foto" : `margem ${Number(p.estimated_margin).toFixed(0)}%`}</Badge>
+                  <span>{p.name}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Riscos de margem */}
         <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Principais oportunidades</h2>
-          {opportunities.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem oportunidades pendentes — execute ou rode novo diagnóstico.</p>
-          ) : (
-            <ol className="space-y-2 text-sm list-decimal list-inside">
-              {opportunities.map((a: any) => (
-                <li key={a.id}>
-                  <strong>{a.title}</strong> <PriorityBadge priority={a.priority} />{" "}
-                  <span className="text-muted-foreground">— {a.area}</span>
-                  {a.description && <p className="ml-5 text-xs text-muted-foreground">{a.description}</p>}
+          <h2 className="text-xl font-bold mb-3">Riscos de margem</h2>
+          <p className="text-sm text-muted-foreground">
+            {diagnostics.filter((d: any) => d.area?.toLowerCase().includes("margem") || d.area?.toLowerCase().includes("lucro")).length > 0
+              ? "Foram detectados riscos de margem. Use o Simulador de Precificação para reprecificar."
+              : "Sem riscos críticos de margem detectados."}
+          </p>
+        </section>
+
+        {/* Plano 7 dias */}
+        {sevenDay.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-xl font-bold mb-3">Plano de ação de 7 dias</h2>
+            <ol className="space-y-2 text-sm">
+              {sevenDay.map((d: any) => (
+                <li key={d.day} className="flex gap-3 border-l-2 border-primary pl-3">
+                  <Badge variant="outline" className="shrink-0">Dia {d.day}</Badge>
+                  <div>
+                    <strong>{d.title}</strong>
+                    <p className="text-xs text-muted-foreground">{d.action} — {d.area}</p>
+                  </div>
                 </li>
               ))}
             </ol>
+          </section>
+        )}
+
+        {/* Próxima melhor ação */}
+        {nextBest && (
+          <section className="mb-8">
+            <h2 className="text-xl font-bold mb-3">Próxima melhor ação</h2>
+            <Card className="p-4 bg-primary/5 border-primary/20">
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowRight className="h-5 w-5 text-primary" />
+                <strong>{nextBest.title}</strong>
+              </div>
+              <p className="text-sm">{nextBest.action}</p>
+              <p className="text-xs text-muted-foreground mt-1">Área: {nextBest.area}</p>
+            </Card>
+          </section>
+        )}
+
+        {/* 6 perguntas */}
+        <section className="mb-8">
+          <h2 className="text-xl font-bold mb-3">Diagnóstico final em 6 perguntas</h2>
+          {[
+            ["Por que as pessoas não entram na loja?", sixQ.por_que_nao_entram],
+            ["Por que entram e não clicam nos produtos?", sixQ.por_que_nao_clicam],
+            ["Por que clicam e não compram?", sixQ.por_que_nao_compram],
+            ["Por que compram pouco?", sixQ.por_que_compram_pouco],
+            ["Por que não voltam?", sixQ.por_que_nao_voltam],
+            ["Por que vende, mas não lucra?", sixQ.por_que_nao_lucram],
+          ].map(([q, a]) =>
+            a ? (
+              <div key={q as string} className="border-l-4 border-primary pl-4 my-3">
+                <p className="font-semibold text-sm">{q}</p>
+                <p className="text-sm text-muted-foreground">{a as string}</p>
+              </div>
+            ) : null
           )}
         </section>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Recomendações estratégicas</h2>
-          <ul className="space-y-2 text-sm">
-            {weakestAreas.map(([area, score]) => (
-              <li key={area} className="border-l-2 border-warning pl-3">
-                <p><strong>{area}</strong> — score atual {String(score)}.</p>
-                <p className="text-muted-foreground text-xs">{notes?.[area] ?? "Atue nesta área no próximo ciclo."}</p>
-              </li>
+        {/* Score por área (mantém) */}
+        <section className="mb-2">
+          <h2 className="text-xl font-bold mb-3">Score por área</h2>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {Object.entries(areas).map(([a, s]) => (
+              <div key={a} className="flex justify-between border-b py-1">
+                <span>{a}</span><span className="font-semibold">{s as number}</span>
+              </div>
             ))}
-          </ul>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Plano de ação priorizado</h2>
-          <ol className="space-y-2 text-sm list-decimal list-inside">
-            {actions.slice(0, 10).map((a: any) => (
-              <li key={a.id}><strong>{a.title}</strong> <PriorityBadge priority={a.priority} /> <span className="text-muted-foreground">— {a.area}</span></li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Próximos passos (30 / 60 / 90 dias)</h2>
-          <div className="grid md:grid-cols-3 gap-3 text-sm">
-            <Card className="p-3">
-              <p className="font-semibold mb-2">30 dias — quick wins</p>
-              <ul className="list-disc list-inside text-xs space-y-1 text-muted-foreground">
-                {actions.filter((a: any) => a.priority === "alta").slice(0, 3).map((a: any) => <li key={a.id}>{a.title}</li>)}
-                {actions.filter((a: any) => a.priority === "alta").length === 0 && <li>Sem ações de alta prioridade.</li>}
-              </ul>
-            </Card>
-            <Card className="p-3">
-              <p className="font-semibold mb-2">60 dias — operação</p>
-              <ul className="list-disc list-inside text-xs space-y-1 text-muted-foreground">
-                {actions.filter((a: any) => a.priority === "media").slice(0, 3).map((a: any) => <li key={a.id}>{a.title}</li>)}
-                {actions.filter((a: any) => a.priority === "media").length === 0 && <li>Sem ações de média prioridade.</li>}
-              </ul>
-            </Card>
-            <Card className="p-3">
-              <p className="font-semibold mb-2">90 dias — crescimento</p>
-              <ul className="list-disc list-inside text-xs space-y-1 text-muted-foreground">
-                <li>Revisar score por área e medir evolução.</li>
-                <li>Lançar 1 nova campanha estruturada.</li>
-                <li>Expandir cardápio com base nos top vendidos.</li>
-              </ul>
-            </Card>
           </div>
-        </section>
-
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Perguntas-chave do negócio</h2>
-          {answer("Por que as pessoas não entram na loja?",
-            store.rating < 4.5 ? `Nota baixa (${store.rating}) reduz visibilidade no app e diminui o clique.` : "A loja tem boa reputação. Otimize fotos e vitrine para aumentar conversão visual.")}
-          {answer("Por que entram e não compram?",
-            products.filter((p: any) => !p.has_photo).length > products.length * 0.3 ? "Muitos produtos sem foto reduzem a conversão drasticamente." : "Conversão visual razoável. Avalie ordem dos produtos e combos no topo.")}
-          {answer("Por que compram pouco?",
-            store.average_ticket < 35 ? `Ticket médio baixo (R$ ${store.average_ticket}) sugere falta de combos e cross-sell.` : "Ticket médio saudável. Foque em fidelização para aumentar frequência.")}
-          {answer("Por que não voltam?",
-            reviews.filter((r: any) => r.sentiment === "negativo").length > 5 ? "Reclamações recorrentes destroem a recompra." : "Recompra está OK. Considere programa de fidelidade.")}
-          {answer("Por que vende, mas não lucra?",
-            "Custos altos, taxa de plataforma e cupons agressivos espremem a margem. Reprecifique top produtos.")}
         </section>
       </Card>
     </div>
