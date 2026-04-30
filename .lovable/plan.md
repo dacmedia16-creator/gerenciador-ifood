@@ -1,303 +1,170 @@
 
-## Objetivo
+# Auditoria — Gestor IA de Delivery
 
-Adicionar uma camada de **aprendizado contínuo** ao Gestor IA, sem fine-tuning, usando 5 pilares no banco + uma evolução do `ai-consult` para consumi-los e citá-los explicitamente.
+## 1. Diagnóstico do estado atual
 
-Mantém arquitetura híbrida atual: **motor de regras = fatos** / **IA = consultoria ancorada**. Agora a IA também recebe **memória, casos, conhecimento e feedback** — e cita a origem de cada recomendação.
+**Fluxos de IA (coexistem hoje):**
+- `ai-consult` (NOVO, completo): RULE_EVIDENCES + STORE_MEMORY + PAST_RECOMMENDATIONS + SIMILAR_CASES + KNOWLEDGE_SNIPPETS, `tool_choice` forçado, validação anti-alucinação por `rule_id`/`source_ref`, persistência em `recommendation_history` + `training_examples`, dispara `update-store-memory`. Usado em `Report.tsx` ("Consultar Gestor IA").
+- `ai-diagnose` (LEGADO): roda só motor de regras antigo (`_shared/diagnostic-rules.ts`) + LLM livre, **sem ancoragem em rule_id**, **sem source**, **sem memória**, **sem RAG**, **sem feedback loop**. Apaga `diagnostics` e `action_plans` da loja a cada chamada (destrutivo). Usado em `Diagnostics.tsx` (botão "Gerar com IA").
 
----
+→ Coexistência cria diagnósticos com qualidade muito diferente. `ai-diagnose` viola as regras invioláveis do projeto.
 
-## 1. Mudanças de banco (uma única migração)
+**Motor de regras (`src/lib/diagnosis/rules.ts` + `_shared/evidences.ts`):**
+- Cobertura razoável de 1ª camada (rating, tempo, cancelamento, conversão, fotos, margem, ticket, recompra, ROI, concorrência, reviews).
+- Faltam regras de 2ª camada que um gestor humano olharia: **tendência 7/14/30d**, faturamento↑ com lucro↓, produto campeão com margem baixa cruzado com reclamações, atraso concentrado em pico, cancelamento por falta de produto, queda de conversão entre snapshots, cardápio inchado, "não mexer no que funciona".
+- Espelho Deno (`evidences.ts`) tem ~10 regras; o TS do front (`rules.ts`) tem ~20. **Divergência** — a IA enxerga menos coisas do que a UI mostra.
 
-### a) `pgvector` (extensão)
-Habilitar `vector` para embeddings semânticos (RAG). Já temos `pgcrypto` e `uuid-ossp`.
+**Loop de aprendizado:**
+- `ai-consult` já grava `metrics_before` na criação da recomendação ✅
+- `record-feedback` atualiza status (aplicada/ignorada) e outcome (positivo/negativo) ✅
+- **Falta:** captura automática de `metrics_after` em 7/14/30d. Hoje `outcome` vem só do auto-relato do usuário; nunca é comparado com métricas reais.
+- **Falta:** transformar casos com outcome positivo em `case_library` (job `extract-case` existe mas não é disparado).
+- **Falta:** `ActionPlan.tsx` casa recomendação por `ilike` no título — frágil. Deveria existir FK `action_plans.recommendation_id`.
 
-### b) Tabela `store_memory` — memória operacional por loja
-Snapshot evolutivo (1 linha por loja, atualizada no fim de cada análise IA):
+**RAG:**
+- `_shared/embeddings.ts` é hashing lexical 768d disfarçado de embedding. **Funciona como busca por sobreposição de keywords**, não semântica. Está documentado no topo do arquivo, mas o resto do código (`findSimilarCases`, `findKnowledgeSnippets`) não sinaliza isso.
+- Falta interface clara para trocar pelo provider real quando disponível (não há feature flag nem `ai_gateway` embed call comentada).
 
-```text
-store_memory(
-  store_id uuid PK,
-  profile jsonb,            -- categoria, ticket, perfil de cliente
-  current_goal text,        -- "aumentar conversão", "reduzir cancelamento" etc
-  recurring_problems jsonb, -- [{rule_id, count, first_seen, last_seen}]
-  metrics_7d  jsonb,        -- snapshot agregado
-  metrics_14d jsonb,
-  metrics_30d jsonb,
-  last_diagnosis_at timestamptz,
-  updated_at timestamptz
-)
-```
+**Segurança:**
+- RLS coerente: tudo via `has_store_access(store_id)` ou `auth.uid() = user_id`. ✅
+- `training_examples` corretamente bloqueado para usuários (apenas service role). ✅
+- `case_library` e `knowledge_base`: leitura pública para autenticados (ok, conhecimento compartilhado).
+- ⚠️ `ai-consult` carrega dados via cliente JWT (RLS aplica), mas grava `recommendation_history` também via JWT — funciona porque a RLS permite, mas o `select("id, rule_id")` depende do RLS. OK.
+- ⚠️ CORS `*` em todas as funções. Aceitável em dev; em produção restringir ao domínio publicado.
+- ⚠️ `ai-diagnose` usa SERVICE_ROLE para tudo após validar `user_id`. Funciona, mas está fora do padrão das outras.
+- ⚠️ Não há rate-limit nem proteção contra spam de `ai-consult` (caro).
 
-RLS via `has_store_access(store_id)`.
-
-### c) Tabela `recommendation_history` — recomendações já dadas
-Toda recomendação que a IA emite vira 1 linha (separado de `action_plans`, que continua sendo o "to-do" do usuário):
-
-```text
-recommendation_history(
-  id uuid PK,
-  store_id uuid,
-  report_id uuid,           -- de qual relatório veio
-  rule_id text,             -- evidência ancorada
-  recommendation text,
-  expected_impact text,
-  source text,              -- 'ai-consult' | 'rules-engine' | 'knowledge-base' | 'similar-case'
-  status text,              -- 'pendente' | 'aplicada' | 'ignorada' | 'em_andamento'
-  applied_at timestamptz,
-  metrics_before jsonb,     -- snapshot no momento da recomendação
-  metrics_after jsonb,      -- snapshot N dias após "aplicada"
-  outcome text,             -- 'positivo' | 'neutro' | 'negativo' | 'inconclusivo'
-  created_at timestamptz
-)
-```
-
-RLS via `has_store_access(store_id)`.
-
-### d) Tabela `recommendation_feedback` — feedback do usuário
-```text
-recommendation_feedback(
-  id uuid PK,
-  recommendation_id uuid,
-  user_id uuid,
-  rating text,              -- 'util' | 'nao_util' | 'errada' | 'falta_contexto' | 'dificil_executar'
-  applied boolean,
-  generated_result text,    -- 'sim' | 'nao' | 'nao_sei'
-  comment text,
-  created_at timestamptz
-)
-```
-
-RLS: usuário só vê/escreve seu próprio feedback (`user_id = auth.uid()`).
-
-### e) Tabela `knowledge_base` — base de conhecimento de delivery
-```text
-knowledge_base(
-  id uuid PK,
-  area text,                -- vendas | ticket | cancelamentos | conversao | combos | etc
-  topic text,
-  title text,
-  content text,             -- markdown (princípios, heurísticas, playbooks)
-  tags text[],
-  source text,              -- 'manual' | 'extracted_from_case'
-  embedding vector(1536),   -- gerado por edge function
-  created_at timestamptz,
-  updated_at timestamptz
-)
-```
-
-RLS: leitura pública para qualquer usuário autenticado (conhecimento é compartilhado), escrita só por service role.
-
-Index HNSW em `embedding` para busca semântica.
-
-### f) Tabela `case_library` — biblioteca de casos reais (anonimizada)
-```text
-case_library(
-  id uuid PK,
-  store_profile jsonb,      -- categoria, faixa de ticket, cidade (sem identificar)
-  problem_rule_id text,
-  metrics_before jsonb,
-  diagnosis text,
-  recommendation text,
-  user_action text,
-  metrics_after jsonb,
-  outcome text,             -- 'sucesso' | 'fracasso' | 'neutro'
-  user_feedback text,
-  lesson_learned text,
-  embedding vector(1536),
-  created_at timestamptz
-)
-```
-
-RLS: leitura para autenticados, escrita só via service role (alimentada por job que olha `recommendation_history` com `outcome` definido).
-
-### g) Tabela `training_examples` — preparação para fine-tuning futuro
-```text
-training_examples(
-  id uuid PK,
-  input_payload jsonb,      -- RULE_EVIDENCES + memória + contexto enviado à IA
-  ai_response jsonb,        -- resposta gerada
-  ideal_response jsonb,     -- corrigida/curada (opcional)
-  human_feedback jsonb,     -- ratings, comentários
-  outcome jsonb,            -- métricas antes/depois
-  quality_score int,        -- 1-5 (calculado por feedback)
-  exported boolean default false,
-  created_at timestamptz
-)
-```
-
-RLS: só service role. Apenas exemplos com `quality_score >= 4` viram dataset.
+**Qualidade da IA:**
+- Validação anti-alucinação por `rule_id`, `recommendation_id`, `case_id`, `kb_id` já existe em `ai-consult` ✅
+- Falta teste automatizado garantindo o comportamento.
+- Falta validação: se `RULE_EVIDENCES` vazio E IA retornar `main_problems` não-vazio, descartar tudo (atualmente o filtro descarta um a um, mas o prompt só "pede").
 
 ---
 
-## 2. Edge functions novas
+## 2. Problemas críticos
 
-### a) `embed-knowledge` (nova)
-Gera embedding via Lovable AI (modelo de embedding) para uma linha de `knowledge_base` ou `case_library`. Chamada após insert/update.
+1. **Dois diagnósticos concorrentes com regras diferentes.** `ai-diagnose` permite a IA inventar problemas sem `rule_id` e ainda apaga histórico. Risco de enganar o usuário.
+2. **`outcome` nunca é medido objetivamente.** O ciclo "aprendizado" depende 100% do auto-relato. Sem `metrics_after`, a IA não tem como diferenciar "achei que funcionou" de "funcionou de fato".
+3. **Espelho de regras divergente entre front e edge.** A IA recebe um subconjunto menor de evidências do que o usuário vê na UI.
+4. **Vínculo recomendação ↔ ação por `ilike`.** `ActionPlan.tsx` pode bater no item errado quando dois títulos se parecem.
 
-### b) `record-feedback` (nova)
-POST `{recommendation_id, rating, applied, generated_result, comment}`. Insere em `recommendation_feedback` e atualiza `recommendation_history.status` + `outcome` quando aplicável.
+## 3. Problemas importantes
 
-### c) `update-store-memory` (nova)
-Job idempotente que recalcula `store_memory` para uma loja: agrega métricas 7/14/30d, detecta recorrência (mesmo `rule_id` aparecendo em 2+ relatórios em 30d), atualiza perfil. Chamada no fim de cada `ai-consult` e no fim de cada `generate-diagnosis`.
+5. Falta regras de 2ª camada (tendência, cruzamentos faturamento/lucro, pico, cardápio inchado).
+6. RAG lexical não sinalizado no código que o usa (só no helper).
+7. Sem `action_plans.recommendation_id` (FK).
+8. Sem job que dispara `extract-case` quando recomendação ganha outcome positivo.
+9. `ai-consult` não tem teste validando descarte de `rule_id` inexistente.
 
-### d) `extract-case` (nova, opcional v1)
-Quando uma `recommendation_history` ganha `outcome` definido + feedback, copia a linha (anonimizada) para `case_library` e dispara `embed-knowledge`.
+## 4. Melhorias opcionais
 
-### e) `ai-consult` (evolução — não recriar do zero)
-Adicionar 4 novas seções no payload enviado ao modelo:
-
-```text
-STORE_MEMORY      -> store_memory + últimas 5 recomendações com outcome
-PAST_RECOMMENDATIONS -> recommendation_history (90d) com status/outcome
-SIMILAR_CASES     -> top 3 case_library por similaridade vetorial
-                     ao vetor do diagnóstico atual
-KNOWLEDGE_SNIPPETS -> top 5 knowledge_base por similaridade às áreas
-                      das evidências atuais
-```
-
-Geração da query vetorial: concatenar `area + recommended_action` das evidências críticas + atenção e gerar embedding via Lovable AI (`google/text-embedding-004` ou equivalente). Buscar com `<->` no pgvector.
-
-**Mudanças no SYSTEM_PROMPT** (acrescentar regras):
-- Toda recomendação em `main_problems` deve declarar `source`: `evidence` | `store_history` | `similar_case` | `knowledge_base`.
-- Quando `source = similar_case`, citar o `case_id`.
-- Quando `source = knowledge_base`, citar o `kb_id`.
-- Quando `source = store_history`, citar o `recommendation_id` anterior e dizer se ela foi aplicada/funcionou.
-- **Não repetir** recomendação que aparece em `PAST_RECOMMENDATIONS` com `status = ignorada` ou `outcome = negativo`, salvo se houver fato novo nas evidências (deve explicar qual).
-- Quando uma recomendação anterior está marcada `aplicada` + `outcome = positivo`, parabenizar e propor próximo passo, não repetir.
-
-**Tool schema**: estender cada item de `main_problems` com `source` (enum) e `source_ref` (string opcional: case_id, kb_id ou recommendation_id).
-
-**Persistência pós-resposta**:
-- Cada item de `main_problems` é gravado em `recommendation_history` com `status='pendente'`, `metrics_before` = snapshot atual.
-- O snapshot ali e a resposta crua viram 1 linha em `training_examples` (sem `ideal_response` ainda).
-- Dispara `update-store-memory` em background.
+- Rate-limit por usuário em `ai-consult` (e.g. 1 chamada / 5 min).
+- CORS restrito ao domínio de produção (config por env).
+- Painel admin para curar `knowledge_base`.
+- Cron diário para varrer `recommendation_history` aplicadas há ≥7/14/30d e calcular `metrics_after`.
 
 ---
 
-## 3. Mudanças no frontend
+## 5. Plano de implementação
 
-### a) `src/components/report/AIConsultReport.tsx`
-- Cada problema agora mostra um chip de **fonte**: "Evidência atual", "Histórico desta loja", "Caso parecido", "Base de conhecimento" — com link expansível mostrando a referência.
-- Botões de feedback embaixo de cada recomendação: `Útil`, `Não útil`, `Apliquei`, `Ignorei`, `Funcionou`, `Não funcionou`. Chamam `record-feedback`.
-- Nova seção **"Evolução desta loja"**: lê `store_memory` e mostra:
-  - problemas recorrentes com badge "X vezes nos últimos 30d"
-  - últimas recomendações com status (aplicada/ignorada) + outcome
-  - delta de métricas 7d / 14d / 30d
-- Banner contextual: "A IA evitou repetir 2 recomendações que você já ignorou" (a partir de `validation` retornado pelo edge).
+### Etapa A — Unificar fluxo (decisão: `ai-consult` é o único)
 
-### b) `src/pages/app/ActionPlan.tsx`
-Quando o usuário marca uma ação como concluída, oferecer modal: "Como foi o resultado?" → grava feedback + atualiza `recommendation_history.outcome`.
+1. **Refatorar `Diagnostics.tsx`**: remover botão "Gerar com IA" que chama `ai-diagnose`; substituir por link/CTA que abre o Relatório (`/app/stores/:id/report`) e roda `ai-consult` lá. A página continua exibindo `diagnostics` (motor de regras), mas a geração consultiva passa a ser exclusiva via `ai-consult`.
+2. **Marcar `ai-diagnose` como legado**:
+   - Adicionar header de comentário "DEPRECATED — usar ai-consult" no `index.ts`.
+   - Manter a função deployada por compatibilidade, mas remover o callsite em `invokeAI("ai-diagnose", ...)`.
+   - Remover do `supabase/config.toml` o bloco `[functions.ai-diagnose]` (mantém default).
+3. (Opcional) Em uma versão futura, deletar a função.
 
-### c) Nova rota `src/pages/app/Knowledge.tsx` (admin/leitura)
-Lista a `knowledge_base` por área. V1: read-only com seed inicial (vamos popular com ~20 entradas curadas para arrancar).
+### Etapa B — Fortalecer motor de regras (camada 2)
 
-### d) Nova rota/aba `src/pages/app/StoreEvolution.tsx`
-Visualização cronológica do que a IA recomendou, o que foi aplicado, e o resultado. Útil para o usuário e como prova de aprendizado.
+Adicionar novas regras em `src/lib/diagnosis/rules.ts` E em `supabase/functions/_shared/evidences.ts` (mantendo paridade):
 
----
+- `tendencia_faturamento_7_30d` — compara `metrics_7d.revenue` vs `metrics_30d.revenue/4`. Marca `severity` se queda > 15%.
+- `faturamento_sobe_lucro_cai` — `revenue` ↑ mas `estimated_profit` ↓ (cruzamento metrics + products).
+- `top_produto_margem_baixa` — top 3 vendidos com margem < 20% (já parcialmente coberto por `lowMarginAlert`, formalizar com `rule_id` próprio).
+- `top_produto_reclamacoes` — top vendido com `complaints_count` > limiar.
+- `campanha_corroe_margem` — campanha ativa com `margin_impact` > 0 mas `revenue_generated/cost` < 1.5.
+- `cancelamento_falta_produto` — reviews com palavras-chave "sem estoque", "faltou".
+- `cardapio_inchado` — > 40 produtos cadastrados E > 30% com vendas < 20% da média.
+- `nao_mexer_no_que_funciona` — sinal POSITIVO: produto top com margem alta + sem reclamações → IA recomenda **não alterar**.
+- `dado_critico_faltando` — meta-regra: lista IDs de regras que ficaram inconclusivas por falta de dado.
 
-## 4. Seed inicial da base de conhecimento
+Cada regra emite `RuleEvidence` completo (`rule_id`, `area`, `metric`, `current_value`, `reference_value`, `severity`, `business_impact`, `probable_cause`, `recommended_action`, `confidence`, `evidence_data`, `missing_data`).
 
-Inserir ~20 entradas curadas em `knowledge_base` cobrindo as áreas pedidas (combos, fotos, ticket, cancelamentos, sazonalidade, recompra, anúncios, concorrência etc). Cada uma com `embedding` gerado.
+**Sincronização front/edge**: extrair as funções comuns para `src/lib/diagnosis/evidences.ts` (já existe parcialmente) e copiar para `_shared/evidences.ts` na hora do deploy. Garantir que ambos exportem o mesmo conjunto de `rule_id`s.
 
-Sem isso, o RAG inicia vazio e a IA não tem o que recuperar nas primeiras análises.
+### Etapa C — Fechar ciclo de aprendizado real
 
----
+1. **FK explícita ação ↔ recomendação**: migration adicionando `action_plans.recommendation_id uuid` (nullable). Em `ai-consult`, ao gravar `main_problems`, criar também as `action_plans` correspondentes já com FK preenchida (em vez de só dependerem de `ai-diagnose`).
+2. **Refatorar `ActionPlan.submitOutcome`**: usar `recommendation_id` direto da FK, abandonar busca por `ilike`.
+3. **Edge function nova `measure-outcomes`** (chamada manual + futuramente cron):
+   - Lista `recommendation_history` com `applied = true` e `outcome IS NULL`.
+   - Para cada uma, calcula `metrics_after` agregando `metrics` da loja entre `applied_at` e `applied_at + 7/14/30d` (escolhe a janela mais longa disponível).
+   - Compara com `metrics_before`: se métrica-alvo melhorou > X% → `positivo`; piorou > X% → `negativo`; entre → `inconclusivo`.
+   - Atualiza `outcome` e `metrics_after`. Dispara `update-store-memory` e (se positivo) `extract-case`.
+   - Mapeamento métrica-alvo por `rule_id` (ex: `tempo_entrega_alto` → `promised_delivery_time`; `cancelamento_alto` → `cancellation_rate`; `ticket_baixo` → `average_ticket`).
+4. **`update-store-memory`**: estender `recurring_problems` com `outcomes_summary` (% positivo / negativo / ignorado). A IA já usa essa info.
 
-## 5. Garantias contra alucinação (mantidas e estendidas)
+### Etapa D — RAG v1 → preparar v2
 
-1. `tool_choice` força função (já existe).
-2. Validação pós-resposta descarta `main_problems` com `rule_id` inválido (já existe).
-3. **Nova:** se `source = similar_case` mas `source_ref` não existe em `case_library`, descarta.
-4. **Nova:** se `source = knowledge_base` mas `source_ref` não existe em `knowledge_base`, descarta.
-5. **Nova:** se `source = store_history` mas `source_ref` não existe em `recommendation_history` da loja, descarta.
+1. Renomear `embedText` para `embedTextLexical` em `_shared/embeddings.ts` e adicionar comentário no topo dos consumidores (`memory.ts`) que explicita "RAG v1 lexical".
+2. Adicionar wrapper `embedText(text)` que tenta um embedding real via Lovable AI Gateway se a env `EMBED_MODEL` estiver definida; cai para lexical como fallback. Documentar o switch.
+3. Adicionar campo `embedding_version smallint default 1` em `knowledge_base` e `case_library` (migration) para permitir reembedar quando trocarmos de modelo.
 
----
+### Etapa E — Segurança e robustez
 
-## 6. Fluxo final
+1. **Validação `storeId` em todas as edges** que recebem store_id: confirmar via `has_store_access` (ou via JWT user_id + select). `ai-consult` já o faz implicitamente via RLS no select; `update-store-memory` e `record-feedback` precisam validar explicitamente que o usuário é dono da loja antes de usar service role.
+2. **CORS**: introduzir helper `getAllowedOrigin(req)` em `_shared/cors.ts` que devolve `*` em dev mas restringe ao domínio publicado em prod (via env `ALLOWED_ORIGIN`).
+3. **Rate limit leve em `ai-consult`**: tabela `ai_consult_calls(user_id, store_id, created_at)` + check "última chamada há < 60s" → 429. (Ou `recommendation_history.created_at` da loja.)
+4. **Hard fail em `ai-consult`** se `ruleEvidences.length === 0` E IA retornar `main_problems`: descartar tudo e devolver apenas `executive_summary` + `missing_data_for_better_diagnosis`.
 
-```text
-Usuário clica "Consultar Gestor IA"
-   │
-   ▼
-ai-consult edge
-   ├── carrega RULE_EVIDENCES (motor de regras, já existe)
-   ├── carrega STORE_MEMORY (snapshot 7/14/30d + recorrências)
-   ├── carrega PAST_RECOMMENDATIONS (90d com outcome)
-   ├── gera embedding do "vetor de problemas atuais"
-   ├── busca SIMILAR_CASES (pgvector top 3)
-   ├── busca KNOWLEDGE_SNIPPETS (pgvector top 5)
-   ├── chama Lovable AI com payload estruturado em 5 seções
-   ├── valida sources (rule_id, case_id, kb_id, rec_id)
-   ├── grava cada main_problem em recommendation_history
-   ├── grava 1 linha em training_examples
-   ├── dispara update-store-memory
-   └── salva report no histórico
-   │
-   ▼
-Frontend renderiza com chips de fonte + botões de feedback
-   │
-   ▼ (usuário interage)
-record-feedback → atualiza recommendation_history + recommendation_feedback
-   │
-   ▼ (após N dias com outcome)
-extract-case (job) → copia caso anonimizado para case_library + embed
-   │
-   ▼ (futuramente)
-exportar training_examples com quality_score>=4 → dataset de fine-tuning
-```
+### Etapa F — Testes de qualidade da IA
+
+Adicionar `supabase/functions/ai-consult/validation_test.ts` (Deno test) cobrindo a lógica pura `isValidSource`/filtros (extrair para função exportada em arquivo separado, ex: `_shared/validate-diagnosis.ts`):
+- rule_id inexistente → descartado.
+- source_ref inválido por tipo → descartado.
+- evidence + source_ref ≠ rule_id → normalizado.
+- avoided_repetitions com id inexistente → descartado.
+
+Testes de regra (TS): garantir que cada novo `rule_id` da Etapa B aparece em ambos os arquivos (front + edge) — teste simples que importa as duas listas e compara conjuntos.
 
 ---
 
-## 7. Arquivos a criar / alterar
+## 6. Arquivos afetados
 
-**Migração SQL** (1 única):
-- extensão `vector`
-- 6 tabelas novas + RLS + índices vector HNSW
-- seed inicial de `knowledge_base` (20 linhas com placeholder de embedding; serão preenchidos pelo edge na primeira chamada)
+**Criados**
+- `supabase/functions/measure-outcomes/index.ts`
+- `supabase/functions/_shared/validate-diagnosis.ts`
+- `supabase/functions/ai-consult/validation_test.ts`
+- `supabase/migrations/<ts>_action_plans_rec_fk_and_embedding_version.sql`
 
-**Edges criadas:**
-- `supabase/functions/embed-knowledge/index.ts`
-- `supabase/functions/record-feedback/index.ts`
-- `supabase/functions/update-store-memory/index.ts`
-- `supabase/functions/extract-case/index.ts`
+**Editados**
+- `src/lib/diagnosis/rules.ts` — +9 regras camada 2
+- `supabase/functions/_shared/evidences.ts` — paridade com rules.ts
+- `supabase/functions/_shared/embeddings.ts` — wrapper + flag
+- `supabase/functions/_shared/memory.ts` — anota RAG v1
+- `supabase/functions/_shared/cors.ts` — origin helper
+- `supabase/functions/ai-consult/index.ts` — usa validate-diagnosis, hard-fail vazio, cria `action_plans` com FK, rate-limit leve, valida storeId
+- `supabase/functions/update-store-memory/index.ts` — outcomes_summary + valida storeId
+- `supabase/functions/record-feedback/index.ts` — confirma RLS basta
+- `src/pages/app/Diagnostics.tsx` — remove "Gerar com IA"; CTA para Relatório
+- `src/pages/app/ActionPlan.tsx` — usa `recommendation_id` da FK
+- `src/lib/ai/invokeAI.ts` — sem mudança
+- `supabase/config.toml` — limpeza opcional
+- `supabase/functions/ai-diagnose/index.ts` — comentário DEPRECATED no topo
 
-**Edges alteradas:**
-- `supabase/functions/ai-consult/index.ts` (estende payload + tool schema + validação + persistência)
-- `supabase/functions/_shared/evidences.ts` (sem mudança; reaproveitada)
-
-**Shared:**
-- `supabase/functions/_shared/embeddings.ts` (helper para chamar Lovable AI embeddings)
-- `supabase/functions/_shared/memory.ts` (helpers: load store memory, past recs, similar cases, kb snippets)
-
-**Frontend criado:**
-- `src/pages/app/Knowledge.tsx`
-- `src/pages/app/StoreEvolution.tsx`
-- `src/components/report/RecommendationFeedback.tsx`
-- `src/components/report/SourceChip.tsx`
-- `src/components/report/StoreEvolutionPanel.tsx`
-
-**Frontend alterado:**
-- `src/components/report/AIConsultReport.tsx` (chip de source + feedback + painel evolução)
-- `src/pages/app/ActionPlan.tsx` (modal de outcome ao concluir)
-- `src/AppSidebar.tsx` ou roteador (entrada "Conhecimento" + "Evolução")
+**Não alterados**: knowledge_base seed, AIConsultReport, SourceChip, RecommendationFeedback, StoreEvolutionPanel, knowledge_base/case_library schemas (só ganham `embedding_version`).
 
 ---
 
-## 8. O que NÃO vou fazer agora
+## 7. O que NÃO vou fazer
 
-- Fine-tuning real (apenas preparar `training_examples`).
-- Painel admin para editar `knowledge_base` (v1 read-only com seed).
-- Job cron automático: `extract-case` rodará sob demanda quando feedback chega; agendamento fica para depois.
-- Mudar o motor de regras (continua intacto e é a fonte de fatos).
+- Reescrever `ai-consult` do zero.
+- Mudar a stack ou substituir o motor de regras por LLM.
+- Implementar embedding real agora (apenas preparar wrapper).
+- Cron automático (`measure-outcomes` será chamado manualmente / sob demanda v1).
+- Painel admin de `knowledge_base`.
+- Deletar `ai-diagnose` (apenas marcar legado).
 
----
-
-## 9. Modelo de embeddings
-
-Vou usar Lovable AI Gateway com modelo de embeddings (verifico no momento da implementação se há `text-embedding-004` ou similar disponível). Se não houver, faço fallback usando `google/gemini-2.5-flash-lite` para gerar uma assinatura textual e busco por keywords full-text — sem perder a arquitetura, apenas o ranking semântico fica menos preciso na v1.
-
----
-
-Aprovando, executo numa única passada: migração + edges + frontend + seed.
+Aprovando, executo as Etapas A–F numa única passada de implementação.

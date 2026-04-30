@@ -29,10 +29,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const authHeader = req.headers.get("Authorization");
-    const supabase = createClient(
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Cliente com JWT do usuário só para validar acesso à loja (RLS aplica).
+    const userClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      authHeader ? { global: { headers: { Authorization: authHeader } } } : undefined
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
     );
 
     const body = await req.json().catch(() => ({}));
@@ -42,6 +49,20 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Valida que o usuário tem acesso à loja (RLS faz isso retornando vazio).
+    const { data: storeCheck } = await userClient.from("stores").select("id").eq("id", storeId).maybeSingle();
+    if (!storeCheck) {
+      return new Response(JSON.stringify({ error: "Loja não encontrada ou sem acesso" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // A partir daqui, service role para escrever em store_memory (bypassa RLS).
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
     const now = Date.now();
     const since = (d: number) => new Date(now - d * 86400000).toISOString().slice(0, 10);

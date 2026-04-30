@@ -1,10 +1,19 @@
-// Helper para gerar embeddings.
+// ============================================================
+// RAG v1 — busca lexical determinística (NÃO é semântica real).
 //
-// O Lovable AI Gateway atualmente não expõe modelos de embedding dedicados.
-// Como fallback robusto, usamos um embedding lexical determinístico baseado em
-// hashing de tokens (768 dims). Não é semântico verdadeiro, mas dá ranking
-// estável por sobreposição de palavras-chave — suficiente para a v1 do RAG.
-// Quando um modelo de embedding ficar disponível, basta reativar o caminho HTTP.
+// Como funciona: tokeniza o texto, remove stopwords e mapeia cada token
+// para 2 buckets de um vetor 768d via hashing FNV-1a. Isso faz a busca
+// por similaridade vetorial (pgvector cosine) se comportar como uma
+// busca por sobreposição de palavras-chave — estável e barata, mas SEM
+// generalização semântica (sinônimos não casam).
+//
+// Quando trocarmos para embeddings reais (v2), basta:
+//   - definir Deno.env EMBED_MODEL com um modelo de embedding suportado
+//     pelo Lovable AI Gateway
+//   - reembedar knowledge_base e case_library (incrementar embedding_version)
+//
+// Enquanto EMBED_MODEL não estiver setada, embedText() cai no lexical.
+// ============================================================
 
 export const EMBED_DIMS = 768;
 
@@ -42,20 +51,34 @@ function l2Normalize(v: number[]): number[] {
   return v.map((x) => x / norm);
 }
 
-export async function embedText(text: string): Promise<number[] | null> {
+/**
+ * RAG v1 — embedding lexical determinístico.
+ * NÃO captura semântica, apenas sobreposição de palavras-chave.
+ */
+export function embedTextLexical(text: string): number[] | null {
   if (!text?.trim()) return null;
   const tokens = tokenize(text);
   if (tokens.length === 0) return null;
 
   const vec = new Array<number>(EMBED_DIMS).fill(0);
   for (const tok of tokens) {
-    // Distribui o token em 2 buckets para reduzir colisões
     const i1 = hash32(tok) % EMBED_DIMS;
     const i2 = hash32("x" + tok) % EMBED_DIMS;
     vec[i1] += 1;
     vec[i2] += 0.5;
   }
   return l2Normalize(vec);
+}
+
+/**
+ * Wrapper público. No futuro tentará embedding real via Lovable AI
+ * Gateway quando EMBED_MODEL estiver definida; hoje usa sempre lexical.
+ */
+export async function embedText(text: string): Promise<number[] | null> {
+  // TODO v2: quando o gateway expor um modelo de embedding, ativar aqui
+  // const model = Deno.env.get("EMBED_MODEL");
+  // if (model) { ...fetch para o gateway, retornar embedding real... }
+  return embedTextLexical(text);
 }
 
 // Converte array para o literal do pgvector (string "[a,b,c]")

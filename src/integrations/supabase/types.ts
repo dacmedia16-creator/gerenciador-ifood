@@ -25,6 +25,7 @@ export type Database = {
           id: string
           impact: string | null
           priority: string | null
+          recommendation_id: string | null
           responsible: string | null
           status: string
           store_id: string
@@ -40,6 +41,7 @@ export type Database = {
           id?: string
           impact?: string | null
           priority?: string | null
+          recommendation_id?: string | null
           responsible?: string | null
           status?: string
           store_id: string
@@ -55,6 +57,7 @@ export type Database = {
           id?: string
           impact?: string | null
           priority?: string | null
+          recommendation_id?: string | null
           responsible?: string | null
           status?: string
           store_id?: string
@@ -66,6 +69,13 @@ export type Database = {
             columns: ["diagnostic_id"]
             isOneToOne: false
             referencedRelation: "diagnostics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "action_plans_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "recommendation_history"
             referencedColumns: ["id"]
           },
           {
@@ -145,6 +155,7 @@ export type Database = {
           created_at: string
           diagnosis: string | null
           embedding: string | null
+          embedding_version: number
           id: string
           lesson_learned: string | null
           metrics_after: Json | null
@@ -160,6 +171,7 @@ export type Database = {
           created_at?: string
           diagnosis?: string | null
           embedding?: string | null
+          embedding_version?: number
           id?: string
           lesson_learned?: string | null
           metrics_after?: Json | null
@@ -175,6 +187,7 @@ export type Database = {
           created_at?: string
           diagnosis?: string | null
           embedding?: string | null
+          embedding_version?: number
           id?: string
           lesson_learned?: string | null
           metrics_after?: Json | null
@@ -430,6 +443,7 @@ export type Database = {
           content: string
           created_at: string
           embedding: string | null
+          embedding_version: number
           id: string
           source: string
           tags: string[] | null
@@ -442,6 +456,7 @@ export type Database = {
           content: string
           created_at?: string
           embedding?: string | null
+          embedding_version?: number
           id?: string
           source?: string
           tags?: string[] | null
@@ -454,6 +469,7 @@ export type Database = {
           content?: string
           created_at?: string
           embedding?: string | null
+          embedding_version?: number
           id?: string
           source?: string
           tags?: string[] | null

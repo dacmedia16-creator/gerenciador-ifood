@@ -8,6 +8,7 @@ import {
   findKnowledgeSnippets,
   buildMetricsSnapshot,
 } from "../_shared/memory.ts";
+import { applyDiagnosisValidation } from "../_shared/validate-diagnosis.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -306,41 +307,23 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
     try { diagnosis = JSON.parse(toolCall.function.arguments); }
     catch (e) { console.error("parse error", e); return new Response(JSON.stringify({ error: "Resposta da IA inválida" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
 
-    // ===== Validação anti-alucinação estendida =====
-    const before = {
-      problems: diagnosis.main_problems?.length ?? 0,
-      ranking: diagnosis.priority_ranking?.length ?? 0,
-      plan7: diagnosis.plan_7_days?.length ?? 0,
-      plan30: diagnosis.plan_30_days?.length ?? 0,
-      avoided: diagnosis.avoided_repetitions?.length ?? 0,
+    // ===== Validação anti-alucinação (lógica pura, testada) =====
+    const sets = {
+      validRuleIds,
+      validRecIds,
+      validCaseIds,
+      validKbIds,
     };
-
-    const isValidSource = (p: any) => {
-      if (!validRuleIds.has(p.rule_id)) return false;
-      if (p.source === "store_history" && !validRecIds.has(p.source_ref)) return false;
-      if (p.source === "similar_case" && !validCaseIds.has(p.source_ref)) return false;
-      if (p.source === "knowledge_base" && !validKbIds.has(p.source_ref)) return false;
-      // source = "evidence" → source_ref deve ser o próprio rule_id
-      if (p.source === "evidence" && p.source_ref !== p.rule_id) {
-        // tolerar — apenas normaliza
-        p.source_ref = p.rule_id;
-      }
-      return true;
-    };
-
-    diagnosis.main_problems = (diagnosis.main_problems ?? []).filter(isValidSource);
-    diagnosis.priority_ranking = (diagnosis.priority_ranking ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
-    diagnosis.plan_7_days = (diagnosis.plan_7_days ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
-    diagnosis.plan_30_days = (diagnosis.plan_30_days ?? []).filter((p: any) => validRuleIds.has(p.rule_id));
-    diagnosis.avoided_repetitions = (diagnosis.avoided_repetitions ?? []).filter((a: any) => validRecIds.has(a.recommendation_id));
-
-    const dropped = {
-      problems: before.problems - diagnosis.main_problems.length,
-      ranking: before.ranking - diagnosis.priority_ranking.length,
-      plan7: before.plan7 - diagnosis.plan_7_days.length,
-      plan30: before.plan30 - diagnosis.plan_30_days.length,
-      avoided: before.avoided - diagnosis.avoided_repetitions.length,
-    };
+    const { dropped, hardFailed } = applyDiagnosisValidation(diagnosis, sets);
+    if (hardFailed) {
+      console.warn("Hard fail: RULE_EVIDENCES vazio mas IA inventou problemas — descartado.");
+      diagnosis.executive_summary =
+        "Não há evidências suficientes para um diagnóstico confiável. Complete os dados da loja antes da próxima análise.";
+      diagnosis.missing_data_for_better_diagnosis = [
+        ...(diagnosis.missing_data_for_better_diagnosis ?? []),
+        "Nenhuma regra do motor disparou — verifique cadastro de loja, métricas e produtos.",
+      ];
+    }
     if (Object.values(dropped).some((n) => n > 0)) {
       console.warn("Itens descartados por referência inválida", dropped);
     }

@@ -1,46 +1,50 @@
-import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useStoreData } from "@/hooks/useStoreData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SeverityBadge, PriorityBadge } from "@/components/StatusBadges";
-import { Sparkles } from "lucide-react";
+import { Sparkles, FileText } from "lucide-react";
 import { LoadingState } from "@/components/LoadingState";
-import { invokeAI } from "@/lib/ai/invokeAI";
-import { toast } from "sonner";
 
 export default function Diagnostics() {
   const { id } = useParams();
-  const { diagnostics, loading, reload } = useStoreData(id);
-  const [running, setRunning] = useState(false);
-
-  const runAI = async () => {
-    if (!id) return;
-    setRunning(true);
-    const res = await invokeAI("ai-diagnose", { store_id: id });
-    setRunning(false);
-    if (res?.success) {
-      toast.success(`Diagnóstico IA gerado: ${res.diagnostics_count} problemas, ${res.actions_count} ações.`);
-      reload();
-    }
-  };
+  const { diagnostics, loading } = useStoreData(id);
 
   if (loading) return <LoadingState />;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">Diagnóstico</h1>
-          <p className="text-sm text-muted-foreground">{diagnostics?.length || 0} diagnósticos ativos.</p>
+          <p className="text-sm text-muted-foreground">
+            {diagnostics?.length || 0} diagnósticos do motor de regras.
+          </p>
         </div>
-        <Button onClick={runAI} disabled={running} className="gradient-primary text-primary-foreground">
-          <Sparkles className={`h-4 w-4 mr-1 ${running ? "animate-pulse" : ""}`} />
-          {running ? "Analisando com IA…" : "Gerar com IA"}
+        <Button asChild className="gradient-primary text-primary-foreground">
+          <Link to={`/app/stores/${id}/report`}>
+            <Sparkles className="h-4 w-4 mr-1" />
+            Consultar Gestor IA
+          </Link>
         </Button>
       </div>
 
-      {(!diagnostics || diagnostics.length === 0) && <Card className="p-6 text-center text-muted-foreground">Nenhum diagnóstico ainda. Use "Gerar com IA" ou volte à visão geral e rode o diagnóstico por regras.</Card>}
+      <Card className="p-4 bg-muted/30 border-dashed text-sm text-muted-foreground">
+        <div className="flex items-start gap-2">
+          <FileText className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            Os diagnósticos abaixo vêm do <strong>motor de regras objetivo</strong>. Para
+            análise consultiva (com memória da loja, casos similares e priorização), use
+            o <strong>Gestor IA</strong> na tela de Relatório.
+          </div>
+        </div>
+      </Card>
+
+      {(!diagnostics || diagnostics.length === 0) && (
+        <Card className="p-6 text-center text-muted-foreground">
+          Nenhum diagnóstico ainda. Rode um diagnóstico no funil ou consulte o Gestor IA pelo Relatório.
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         {diagnostics?.map((d: any) => (

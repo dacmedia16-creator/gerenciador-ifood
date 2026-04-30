@@ -1,4 +1,11 @@
 // Espelho Deno do motor de evidências — roda sobre dados crus do banco.
+// Camada 1: regras objetivas sobre estado atual.
+// Camada 2: cruzamentos, tendências e sinais positivos (gestor humano).
+//
+// CADA regra emite um RuleEvidence com rule_id estável. O ai-consult
+// usa esses rule_ids como única fonte de verdade — qualquer recomendação
+// da IA SEM rule_id válido aqui é descartada.
+
 export type Severity = "critico" | "atencao" | "ok";
 export type Confidence = "alta" | "media" | "baixa";
 
@@ -24,6 +31,37 @@ const num = (v: any): number | null => {
 };
 
 const NEG_KEYWORDS = ["frio", "atrasou", "atras", "errado", "embalagem", "demorou", "péssimo", "pessimo"];
+const FALTA_PRODUTO_KEYWORDS = ["sem estoque", "faltou", "acabou", "indisponivel", "indisponível"];
+
+// Conjunto canônico de rule_ids — usado nos testes para garantir paridade.
+export const KNOWN_RULE_IDS = [
+  // camada 1
+  "reputacao_nota_baixa",
+  "reputacao_sem_dado",
+  "tempo_entrega_alto",
+  "cancelamento_alto",
+  "ticket_baixo",
+  "vendas_sem_dado",
+  "cardapio_nao_cadastrado",
+  "cardapio_sem_fotos",
+  "margem_media_baixa",
+  "produtos_sem_custos",
+  "produtos_baixo_desempenho",
+  "concorrencia_sem_dado",
+  "concorrencia_melhor",
+  "sem_reviews_coletadas",
+  "reclamacoes_operacao",
+  // camada 2
+  "tendencia_faturamento_7_30d",
+  "faturamento_sobe_lucro_cai",
+  "top_produto_margem_baixa",
+  "top_produto_reclamacoes",
+  "campanha_corroe_margem",
+  "cancelamento_falta_produto",
+  "cardapio_inchado",
+  "nao_mexer_no_que_funciona",
+  "dado_critico_faltando",
+] as const;
 
 export function evidencesFromStoreData(input: {
   store: any;
@@ -31,10 +69,15 @@ export function evidencesFromStoreData(input: {
   products: any[];
   reviews: any[];
   competitors: any[];
+  campaigns?: any[];
 }): RuleEvidence[] {
-  const { store, products, reviews, competitors, metrics } = input;
+  const { store, products, reviews, competitors, metrics, campaigns = [] } = input;
   const out: RuleEvidence[] = [];
   const lastMetric = metrics?.[0];
+
+  // ============================================================
+  // CAMADA 1 — sinais objetivos sobre o estado atual
+  // ============================================================
 
   // Reputação
   const rating = num(store?.rating);
@@ -277,7 +320,8 @@ export function evidencesFromStoreData(input: {
     }
   }
 
-  // Reviews
+  // Reviews — operação
+  let faltaProdutoCount = 0;
   if (!reviews || reviews.length === 0) {
     out.push({
       rule_id: "sem_reviews_coletadas",
@@ -300,6 +344,9 @@ export function evidencesFromStoreData(input: {
       NEG_KEYWORDS.forEach((k) => {
         if (c.includes(k)) negHits[k] = (negHits[k] || 0) + 1;
       });
+      FALTA_PRODUTO_KEYWORDS.forEach((k) => {
+        if (c.includes(k)) faltaProdutoCount++;
+      });
     });
     const top = Object.entries(negHits).filter(([, n]) => n >= 2);
     if (top.length) {
@@ -317,6 +364,233 @@ export function evidencesFromStoreData(input: {
         evidence_data: { padroes: Object.fromEntries(top) },
       });
     }
+  }
+
+  // ============================================================
+  // CAMADA 2 — cruzamentos, tendências e sinais positivos
+  // ============================================================
+
+  // Tendência 7/14/30d (precisa de >=2 snapshots de períodos diferentes)
+  if (metrics && metrics.length >= 2) {
+    const recent = metrics.slice(0, Math.min(2, metrics.length));
+    const older = metrics.slice(2, Math.min(6, metrics.length));
+    const sumRev = (arr: any[]) =>
+      arr.reduce((a, m) => a + (num(m?.revenue) ?? 0), 0);
+    const recentRev = sumRev(recent) / Math.max(recent.length, 1);
+    const olderRev = older.length ? sumRev(older) / older.length : null;
+    if (olderRev != null && olderRev > 0) {
+      const delta = (recentRev - olderRev) / olderRev;
+      if (delta < -0.15) {
+        out.push({
+          rule_id: "tendencia_faturamento_7_30d",
+          area: "vendas",
+          metric: "revenue_trend_pct",
+          current_value: Number((delta * 100).toFixed(1)),
+          reference_value: 0,
+          severity: delta < -0.3 ? "critico" : "atencao",
+          business_impact: "Receita média recente caiu vs janelas anteriores",
+          probable_cause: "Sazonalidade, perda de cliente recorrente ou queda de exposição na plataforma",
+          recommended_action: "Investigar funil (visitas, conversão, ticket) e ações dos concorrentes nas últimas semanas",
+          confidence: "media",
+          evidence_data: { recente_avg: Number(recentRev.toFixed(2)), anterior_avg: Number(olderRev.toFixed(2)) },
+        });
+      }
+    }
+
+    // Faturamento sobe, lucro cai
+    const sumProfit = (arr: any[]) =>
+      arr.reduce((a, m) => a + (num(m?.estimated_profit) ?? 0), 0);
+    const recentProfit = sumProfit(recent);
+    const olderProfit = sumProfit(older);
+    const recentRevTotal = sumRev(recent);
+    const olderRevTotal = sumRev(older);
+    if (
+      olderRevTotal > 0 &&
+      olderProfit > 0 &&
+      recentRevTotal > olderRevTotal * 1.05 &&
+      recentProfit < olderProfit * 0.95
+    ) {
+      out.push({
+        rule_id: "faturamento_sobe_lucro_cai",
+        area: "lucro",
+        metric: "revenue_up_profit_down",
+        current_value: `receita +${(((recentRevTotal - olderRevTotal) / olderRevTotal) * 100).toFixed(1)}% / lucro ${(((recentProfit - olderProfit) / olderProfit) * 100).toFixed(1)}%`,
+        reference_value: "lucro acompanhar receita",
+        severity: "critico",
+        business_impact: "Crescer vendendo mais e lucrando menos é armadilha de volume",
+        probable_cause: "Cupons agressivos, mix mudou para itens de baixa margem, ou aumento de custo não repassado",
+        recommended_action: "Revisar cupons ativos, mix de produtos vendidos e custos dos top 5",
+        confidence: "media",
+        evidence_data: {
+          revenue_recent: Number(recentRevTotal.toFixed(2)),
+          revenue_older: Number(olderRevTotal.toFixed(2)),
+          profit_recent: Number(recentProfit.toFixed(2)),
+          profit_older: Number(olderProfit.toFixed(2)),
+        },
+      });
+    }
+  }
+
+  // Top produto com margem baixa (cruzamento sales x margin)
+  if (products && products.length >= 3) {
+    const sorted = [...products]
+      .filter((p) => (num(p.sales_quantity) ?? 0) > 0)
+      .sort((a, b) => (num(b.sales_quantity) ?? 0) - (num(a.sales_quantity) ?? 0));
+    const top3 = sorted.slice(0, 3);
+    const lowMarginTop = top3.filter((p) => {
+      const m = num(p.estimated_margin);
+      return m != null && m < 20;
+    });
+    if (lowMarginTop.length > 0) {
+      out.push({
+        rule_id: "top_produto_margem_baixa",
+        area: "lucro",
+        metric: "top_seller_low_margin_count",
+        current_value: lowMarginTop.length,
+        reference_value: 0,
+        severity: "critico",
+        business_impact: "Produto que mais vende é também o que menos lucra — quanto mais vende, pior fica",
+        probable_cause: "Precificação não acompanhou custos ou taxa da plataforma",
+        recommended_action: "Reprecificar os top vendidos com margem <20% ou trocá-los por combos mais rentáveis",
+        confidence: "alta",
+        evidence_data: {
+          produtos: lowMarginTop.map((p) => ({ nome: p.name, margem_pct: num(p.estimated_margin) })),
+        },
+      });
+    }
+
+    // Top produto com reclamações recorrentes
+    const topComplaint = top3.filter((p) => (num(p.complaints_count) ?? 0) >= 3);
+    if (topComplaint.length > 0) {
+      out.push({
+        rule_id: "top_produto_reclamacoes",
+        area: "produtos",
+        metric: "top_seller_complaints",
+        current_value: topComplaint.length,
+        reference_value: 0,
+        severity: "critico",
+        business_impact: "Carro-chefe gerando reclamação contamina nota geral e recompra",
+        probable_cause: "Receita inconsistente, porção menor que a foto, ou ingrediente em queda de qualidade",
+        recommended_action: "Padronizar receita do top vendido e revisar embalagem antes de qualquer outra ação",
+        confidence: "alta",
+        evidence_data: {
+          produtos: topComplaint.map((p) => ({ nome: p.name, reclamacoes: num(p.complaints_count) })),
+        },
+      });
+    }
+
+    // Sinal POSITIVO: top produto com margem alta + sem reclamações = NÃO MEXER
+    const stars = top3.filter((p) => {
+      const m = num(p.estimated_margin);
+      const c = num(p.complaints_count) ?? 0;
+      return m != null && m >= 30 && c <= 1;
+    });
+    if (stars.length > 0) {
+      out.push({
+        rule_id: "nao_mexer_no_que_funciona",
+        area: "produtos",
+        metric: "stable_top_sellers",
+        current_value: stars.length,
+        reference_value: ">=1",
+        severity: "ok",
+        business_impact: "Produtos que vendem muito, margem boa e poucas reclamações sustentam a operação",
+        probable_cause: "Combinação de preço, percepção e operação funcionando",
+        recommended_action: "Manter receita, foto e preço destes itens. Não testar nada disruptivo neles este ciclo",
+        confidence: "alta",
+        evidence_data: {
+          produtos: stars.map((p) => ({ nome: p.name, margem_pct: num(p.estimated_margin) })),
+        },
+      });
+    }
+
+    // Cardápio inchado
+    const totalP = products.length;
+    if (totalP > 40) {
+      const allSales = products.map((p) => num(p.sales_quantity) ?? 0);
+      const avgS = allSales.reduce((a, b) => a + b, 0) / totalP;
+      if (avgS > 0) {
+        const parados = products.filter((p) => (num(p.sales_quantity) ?? 0) < avgS * 0.2).length;
+        if (parados / totalP > 0.3) {
+          out.push({
+            rule_id: "cardapio_inchado",
+            area: "cardapio",
+            metric: "menu_bloat_ratio",
+            current_value: Math.round((parados / totalP) * 100),
+            reference_value: 30,
+            severity: "atencao",
+            business_impact: "Cardápio gigante com muito item parado dilui atenção e dificulta a escolha",
+            probable_cause: "Acúmulo histórico de produtos sem revisão",
+            recommended_action: "Pausar itens com vendas < 20% da média e focar em 12–18 produtos vencedores",
+            confidence: "media",
+            evidence_data: { total: totalP, parados },
+          });
+        }
+      }
+    }
+  }
+
+  // Campanha que corrói margem
+  if (campaigns && campaigns.length > 0) {
+    const ruim = campaigns.filter((c) => {
+      const cost = num(c.cost) ?? 0;
+      const rev = num(c.revenue_generated) ?? 0;
+      const marg = num(c.margin_impact) ?? 0;
+      return cost > 0 && rev / cost < 1.5 && marg > 0;
+    });
+    if (ruim.length > 0) {
+      out.push({
+        rule_id: "campanha_corroe_margem",
+        area: "anuncios",
+        metric: "low_roi_campaigns",
+        current_value: ruim.length,
+        reference_value: 0,
+        severity: "critico",
+        business_impact: "Campanha vende mas reduz lucro — está pagando para entregar",
+        probable_cause: "Cupom muito agressivo ou produto âncora com margem baixa",
+        recommended_action: "Pausar essas campanhas e refazer com produto âncora de margem ≥30%",
+        confidence: "alta",
+        evidence_data: { campanhas: ruim.map((c) => ({ nome: c.name, roi_estimado: c.estimated_roi })) },
+      });
+    }
+  }
+
+  // Cancelamento por falta de produto
+  if (faltaProdutoCount >= 2) {
+    out.push({
+      rule_id: "cancelamento_falta_produto",
+      area: "cancelamentos",
+      metric: "stockout_complaints",
+      current_value: faltaProdutoCount,
+      reference_value: 0,
+      severity: "critico",
+      business_impact: "Cliente cancela e raramente volta após 'sem estoque'",
+      probable_cause: "Cardápio não atualizado em tempo real — itens fora do estoque continuam ativos",
+      recommended_action: "Pausar produtos sem estoque imediatamente e definir checklist de fechamento por turno",
+      confidence: "media",
+      evidence_data: { mencoes_falta: faltaProdutoCount },
+    });
+  }
+
+  // Meta-regra: dado crítico faltando
+  const missingCritical: string[] = [];
+  if (rating == null) missingCritical.push("nota_loja");
+  if (revenue == null && orders == null) missingCritical.push("faturamento_e_pedidos");
+  if (!products || products.length === 0) missingCritical.push("cardapio");
+  if (missingCritical.length >= 2) {
+    out.push({
+      rule_id: "dado_critico_faltando",
+      area: "meta",
+      metric: "missing_critical_inputs",
+      current_value: missingCritical.length,
+      reference_value: 0,
+      severity: "atencao",
+      business_impact: "Sem esses dados o diagnóstico é parcial e a IA não pode ser confiável",
+      probable_cause: "Cadastro inicial incompleto",
+      recommended_action: "Completar os cadastros faltantes antes da próxima análise consultiva",
+      confidence: "alta",
+      evidence_data: { faltando: missingCritical },
+      missing_data: missingCritical,
+    });
   }
 
   return out;

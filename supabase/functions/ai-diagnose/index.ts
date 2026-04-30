@@ -1,3 +1,14 @@
+// ============================================================
+// DEPRECATED — usar `ai-consult` como único fluxo de diagnóstico IA.
+//
+// Esta função sobreviveu ao redesenho do Gestor IA. Ela:
+//  - NÃO usa rule_evidences ancoradas (permite IA inventar problema sem rule_id)
+//  - NÃO consulta STORE_MEMORY, PAST_RECOMMENDATIONS, casos ou base de conhecimento
+//  - APAGA diagnostics e action_plans da loja a cada chamada (destrutivo)
+//
+// Mantida apenas por compatibilidade. Não há callsite ativo no frontend.
+// Pode ser removida em uma versão futura.
+// ============================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders, jsonResponse, aiErrorResponse } from "../_shared/cors.ts";
 import { runDiagnostics } from "../_shared/diagnostic-rules.ts";
