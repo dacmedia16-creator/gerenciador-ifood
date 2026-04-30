@@ -49,6 +49,9 @@ export default function DiagnosisResult() {
   const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions } = data;
   const { overall, areas } = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
   const critical = diagnostics.filter((d: any) => d.severity === "critico");
+  const attention = diagnostics.filter((d: any) => d.severity === "atencao");
+  const visibleProblems = critical.length > 0 ? critical : attention;
+  const lowDataMode = critical.length === 0 && actions.every((a: any) => a.area === "Cadastro geral" || /sem |não cadastrad|incompleto/i.test(a.title || ""));
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
