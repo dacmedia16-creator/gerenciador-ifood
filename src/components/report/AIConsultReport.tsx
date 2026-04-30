@@ -4,6 +4,9 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowRight, AlertTriangle, Sparkles, CheckCircle2, XCircle, HelpCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { SourceChip } from "./SourceChip";
+import { RecommendationFeedback } from "./RecommendationFeedback";
+import { StoreEvolutionPanel } from "./StoreEvolutionPanel";
 
 const STAGE_LABEL: Record<string, string> = {
   busca: "Busca",
@@ -54,7 +57,7 @@ function TaggedText({ text }: { text: string }) {
   );
 }
 
-export function AIConsultReport({ data }: { data: any }) {
+export function AIConsultReport({ data, storeId }: { data: any; storeId?: string }) {
   if (!data) return null;
 
   // Detecta novo formato (main_problems) vs antigo (problems)
@@ -103,6 +106,7 @@ export function AIConsultReport({ data }: { data: any }) {
                       <Badge variant={confidenceVariant(p.confidence)} className="text-[10px]">
                         {confidenceLabel(p.confidence)}
                       </Badge>
+                      <SourceChip source={p.source} sourceRef={p.source_ref} />
                       <code className="text-[10px] text-muted-foreground">{p.rule_id}</code>
                     </div>
                     {p.evidence_cited && (
@@ -111,9 +115,18 @@ export function AIConsultReport({ data }: { data: any }) {
                       </p>
                     )}
                     <TaggedText text={p.why_it_matters} />
+                    <RecommendationFeedback recommendationId={p.recommendation_id} />
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {storeId && <StoreEvolutionPanel storeId={storeId} />}
+
+          {data.validation?.dropped && Object.values(data.validation.dropped).some((n: any) => n > 0) && (
+            <Card className="p-3 text-xs text-muted-foreground bg-muted/20">
+              A IA evitou repetir recomendações sem base nas evidências atuais.
             </Card>
           )}
 

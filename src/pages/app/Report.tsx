@@ -131,7 +131,7 @@ export default function Report() {
 
       {aiConsult && (
         <Card className="p-6 shadow-elegant border-primary/30">
-          <AIConsultReport data={aiConsult} />
+          <AIConsultReport data={aiConsult} storeId={id} />
         </Card>
       )}
 
@@ -180,7 +180,7 @@ export default function Report() {
             </DialogTitle>
           </DialogHeader>
           {openHistoryItem?.report_data?.ai_consult && (
-            <AIConsultReport data={openHistoryItem.report_data.ai_consult} />
+            <AIConsultReport data={openHistoryItem.report_data.ai_consult} storeId={id} />
           )}
         </DialogContent>
       </Dialog>

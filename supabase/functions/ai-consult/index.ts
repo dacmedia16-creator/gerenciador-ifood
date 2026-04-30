@@ -369,7 +369,8 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
 
     const newReportId = inserted?.id ?? null;
 
-    // Grava cada main_problem em recommendation_history
+    // Grava cada main_problem em recommendation_history e devolve os IDs
+    // para o frontend amarrar feedback a cada recomendação.
     if (diagnosis.main_problems?.length) {
       const rows = diagnosis.main_problems.map((p: any) => ({
         store_id: storeId,
@@ -382,8 +383,28 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
         status: "pendente",
         metrics_before: metricsSnapshot,
       }));
-      const { error: rhErr } = await supabase.from("recommendation_history").insert(rows);
-      if (rhErr) console.warn("rec_history insert failed", rhErr);
+      const { data: insertedRecs, error: rhErr } = await supabase
+        .from("recommendation_history")
+        .insert(rows)
+        .select("id, rule_id");
+      if (rhErr) {
+        console.warn("rec_history insert failed", rhErr);
+      } else if (insertedRecs?.length) {
+        // Mapeia recommendation_id de volta para cada main_problem (ordem preservada).
+        diagnosis.main_problems = diagnosis.main_problems.map((p: any, i: number) => ({
+          ...p,
+          recommendation_id: insertedRecs[i]?.id,
+        }));
+      }
+    }
+
+    // Re-sincroniza enriched + atualiza report_data com os recommendation_ids gerados
+    enriched.main_problems = diagnosis.main_problems;
+    if (newReportId) {
+      const baseData2 = (reportR.data?.report_data as any) ?? {};
+      await supabase.from("reports").update({
+        report_data: { ...baseData2, ai_consult: enriched },
+      }).eq("id", newReportId);
     }
 
     // Grava 1 training_example via service role (RLS bloqueia usuário)

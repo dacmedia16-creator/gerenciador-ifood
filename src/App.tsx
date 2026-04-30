@@ -36,6 +36,8 @@ import NewDiagnosis from "./pages/app/diagnosis/NewDiagnosis";
 import DiagnosisWizard from "./pages/app/diagnosis/DiagnosisWizard";
 import DiagnosisReview from "./pages/app/diagnosis/DiagnosisReview";
 import DiagnosisResult from "./pages/app/diagnosis/DiagnosisResult";
+import Knowledge from "./pages/app/Knowledge";
+import StoreEvolution from "./pages/app/StoreEvolution";
 
 const queryClient = new QueryClient();
 
@@ -79,7 +81,9 @@ const App = () => (
               <Route path="stores/:id/expectation" element={<ExpectationVsDelivery />} />
               <Route path="stores/:id/pricing-simulator" element={<PricingSimulator />} />
               <Route path="stores/:id/best-hours" element={<BestHours />} />
+              <Route path="stores/:id/evolution" element={<StoreEvolution />} />
               <Route path="prospects" element={<Prospects />} />
+              <Route path="knowledge" element={<Knowledge />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
