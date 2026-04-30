@@ -1,39 +1,69 @@
-Vou corrigir o bug de digitação que está fazendo os inputs aceitarem só 1 letra e perderem o foco.
+# Diagnóstico IA Consultivo (especialista iFood)
 
-Plano
+Adicionar uma camada de IA no Relatório que aplica o prompt do gestor especialista em iFood sobre todos os dados já cadastrados da loja e devolve um diagnóstico consultivo estruturado.
 
-1. Corrigir a causa raiz na tela de cadastro de loja
-- Remover o componente de campo definido dentro de `src/pages/app/NewStore.tsx` (`const F = ...`).
-- Substituir por JSX direto ou por um componente extraído fora do `NewStore`.
-- Isso evita que o React recrie o tipo do componente a cada tecla e remonte o input, que é o comportamento clássico que derruba o foco.
+## O que muda para o usuário
 
-2. Auditar outras telas com o mesmo padrão de remount acidental
-- Revisar páginas com componentes definidos dentro do render e que possam envolver inputs.
-- Prioridade de checagem: `src/pages/app/NewStore.tsx`, `src/components/onboarding/OnboardingWizard.tsx`, `src/pages/app/diagnosis/DiagnosisWizard.tsx` e componentes de formulário relacionados.
-- Se houver outros casos parecidos, aplicar o mesmo ajuste para evitar que o problema apareça em mais de uma tela.
+- No Relatório da loja, novo botão **"Gerar análise consultiva (IA)"**.
+- Ao clicar, em ~10-20s aparece um bloco completo "Análise IA do Especialista" com:
+  - Resumo executivo
+  - Score geral + score por área (barras)
+  - Gargalo principal
+  - Diagnóstico por jornada (busca → entrada → clique → compra → entrega → recompra)
+  - Lista de problemas (problema, evidência, causa, impacto, solução, prioridade, prazo)
+  - Produtos que precisam de ajuste
+  - Oportunidades de ticket médio
+  - Riscos de margem
+  - Próxima melhor ação
+  - Plano de 7 dias
+  - Diagnóstico final em 6 perguntas
+- Resultado fica salvo no relatório — abrir de novo mostra a última análise.
 
-3. Validar os pontos mais sensíveis do produto
-- Confirmar que dá para digitar normalmente em:
-  - cadastro de loja
-  - campos do funil de diagnóstico
-  - formulários de produtos, concorrentes e campanhas
-- Verificar especialmente campos lado a lado, como no print (`Bairro`, `Tempo prometido`, `Nota atual`), porque são os mais fáceis de perceber quando o input remonta.
+## Arquitetura
 
-Detalhes técnicos
-- O problema mais provável está em `NewStore.tsx`:
 ```text
-export default function NewStore() {
-  ...
-  const F = (...) => <Input ... />
-}
+Relatório (UI) ──► invoke('ai-consult', { storeId })
+                        │
+                        ▼
+              Edge Function ai-consult
+                        │ valida JWT + RLS
+                        │ coleta dados (stores, products, competitors,
+                        │   reviews, metrics, diagnostics, último report)
+                        ▼
+            Lovable AI Gateway (gemini-2.5-pro)
+              tool_choice: consultive_diagnosis  ◄── prompt do especialista
+                        │
+                        ▼
+              JSON validado ──► merge em reports.report_data.ai_consult
+                        │
+                        ▼
+              Render no <AIConsultReport />
 ```
-- Em React, definir componentes dentro de outro componente faz esse “subcomponente” ganhar uma nova identidade a cada render.
-- Quando o estado do formulário muda ao digitar, o React pode desmontar e montar novamente o campo, fazendo o cursor sair e parecendo que só a primeira letra foi aceita.
-- Isso bate exatamente com o sintoma e com a recomendação oficial do React: não aninhar definições de componentes quando você quer preservar estado/foco.
 
-Resultado esperado após a correção
-- Os inputs voltam a aceitar texto contínuo normalmente.
-- O cursor permanece no campo durante a digitação.
-- O comportamento fica estável tanto no cadastro de loja quanto nos formulários relacionados.
+## Detalhes técnicos
 
-Se você aprovar, eu aplico essa correção agora.
+- **Edge function nova** `supabase/functions/ai-consult/index.ts`
+  - System prompt = texto do especialista iFood + benchmarks (conversão 7/12/15%, 35min, 150 avaliações etc.).
+  - User prompt = JSON com loja, produtos, concorrentes, avaliações (até 40), métricas (3 últimas), diagnósticos existentes e contexto do funil.
+  - **Structured output via tool calling** (`consultive_diagnosis`) com schema cobrindo todos os campos pedidos — evita JSON malformado.
+  - Modelo padrão: `google/gemini-2.5-pro` (raciocínio + contexto). Override por `body.model`.
+  - Trata 429 / 402 retornando mensagens claras.
+  - Persiste em `reports.report_data.ai_consult` (cria relatório se não existir). Sem migration.
+- **Componente novo** `src/components/report/AIConsultReport.tsx`
+  - Renderiza todos os blocos com Card / Badge / Progress.
+  - `react-markdown` + `remark-gfm` no resumo executivo.
+- **Edição** `src/pages/app/Report.tsx`
+  - Botão "Gerar análise consultiva (IA)" com loading.
+  - Carrega `report_data.ai_consult` existente e renderiza `<AIConsultReport />` no topo.
+- **Dependências**: `react-markdown`, `remark-gfm` (instalar).
+- **Segurança**: RLS já garante que o usuário só lê suas próprias lojas; a edge function usa o token do usuário no client Supabase, então só consegue ler/escrever o que ele pode.
+- **Sem mudanças de schema**, sem novos secrets (`LOVABLE_API_KEY` já existe).
+
+## Entregáveis
+
+1. `supabase/functions/ai-consult/index.ts` (novo)
+2. `src/components/report/AIConsultReport.tsx` (novo)
+3. `src/pages/app/Report.tsx` (botão + render)
+4. `package.json` com `react-markdown` + `remark-gfm`
+
+Aprovando, eu implemento tudo num único ciclo.
