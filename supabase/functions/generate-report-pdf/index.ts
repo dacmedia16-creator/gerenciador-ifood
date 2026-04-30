@@ -60,6 +60,11 @@ Deno.serve(async (req) => {
     const { data: store } = await admin.from("stores").select("*").eq("id", store_id).eq("user_id", userData.user.id).maybeSingle();
     if (!store) return jsonResponse({ error: "Loja nao encontrada" }, 404);
 
+    // ⚠️ LEGADO: a tabela `diagnostics` é mantida APENAS para compatibilidade
+    // com este PDF. O fluxo principal hoje é `reports.report_data.ai_consult`
+    // (gerado por ai-consult). `analyze-reviews` não escreve mais aqui.
+    // TODO (pós-piloto): migrar este PDF para consumir reports.report_data.ai_consult
+    // e então deprecar a tabela diagnostics.
     const [{ data: diagnostics }, { data: actions }, { data: lastReport }, { data: template }] = await Promise.all([
       admin.from("diagnostics").select("*").eq("store_id", store_id),
       admin.from("action_plans").select("*").eq("store_id", store_id).order("priority"),
