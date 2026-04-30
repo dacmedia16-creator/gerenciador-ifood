@@ -1,17 +1,29 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useStoreData } from "@/hooks/useStoreData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { calculateScore, scoreLabel } from "@/lib/diagnostics/engine";
 import { SeverityBadge, PriorityBadge, ScoreBadge } from "@/components/StatusBadges";
-import { Printer } from "lucide-react";
+import { Printer, Download, Sparkles } from "lucide-react";
+import { invokeAI } from "@/lib/ai/invokeAI";
 
 export default function Report() {
   const { id } = useParams();
   const data = useStoreData(id);
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadPdf = async () => {
+    if (!id) return;
+    setDownloading(true);
+    const res = await invokeAI<{ url: string }>("generate-report-pdf", { store_id: id });
+    setDownloading(false);
+    if (res?.url) window.open(res.url, "_blank");
+  };
+
   if (data.loading || !data.store) return <div className="text-muted-foreground">Carregando…</div>;
 
-  const { store, diagnostics, actions, products, reviews, competitors } = data;
+  const { store, diagnostics, actions, products, reviews } = data;
   const { areas, overall } = calculateScore(data);
   const critical = diagnostics.filter((d: any) => d.severity === "critico");
   const warn = diagnostics.filter((d: any) => d.severity === "atencao");
@@ -25,11 +37,14 @@ export default function Report() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between no-print">
+      <div className="flex items-center justify-between no-print flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Relatório consultivo</h1>
-        <Button onClick={() => window.print()} className="gradient-primary text-primary-foreground">
-          <Printer className="h-4 w-4 mr-1" /> Exportar PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => window.print()}><Printer className="h-4 w-4 mr-1" /> Imprimir</Button>
+          <Button onClick={downloadPdf} disabled={downloading} className="gradient-primary text-primary-foreground">
+            {downloading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Gerando…</> : <><Download className="h-4 w-4 mr-1" />Baixar PDF</>}
+          </Button>
+        </div>
       </div>
 
       <Card className="p-8 shadow-elegant">
@@ -77,16 +92,6 @@ export default function Report() {
         </section>
 
         <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Principais oportunidades</h2>
-          <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
-            <li>Otimização da margem dos top {Math.min(5, products.length)} produtos</li>
-            <li>Redução do tempo de entrega para abaixo de 40 min</li>
-            <li>Atacar reclamações recorrentes nas avaliações</li>
-            <li>Criar combos para aumentar ticket médio</li>
-          </ul>
-        </section>
-
-        <section className="mb-8">
           <h2 className="text-xl font-bold mb-3">Plano de ação priorizado</h2>
           <ol className="space-y-2 text-sm list-decimal list-inside">
             {actions.slice(0, 10).map((a: any) => (
@@ -104,20 +109,9 @@ export default function Report() {
           {answer("Por que compram pouco?",
             store.average_ticket < 35 ? `Ticket médio baixo (R$ ${store.average_ticket}) sugere falta de combos e cross-sell.` : "Ticket médio saudável. Foque em fidelização para aumentar frequência.")}
           {answer("Por que não voltam?",
-            reviews.filter((r: any) => r.sentiment === "negativo").length > 5 ? "Reclamações recorrentes (frio, atraso, pedido errado) destroem a recompra." : "Recompra está OK. Considere programa de fidelidade para acelerar.")}
+            reviews.filter((r: any) => r.sentiment === "negativo").length > 5 ? "Reclamações recorrentes destroem a recompra." : "Recompra está OK. Considere programa de fidelidade.")}
           {answer("Por que vende, mas não lucra?",
-            "Custos altos, taxa de plataforma e cupons agressivos espremem a margem. Reprecifique top produtos e revise cupons.")}
-        </section>
-
-        <section>
-          <h2 className="text-xl font-bold mb-3">Próximos passos</h2>
-          <ol className="text-sm list-decimal list-inside space-y-1">
-            <li>Atacar os 3 problemas críticos nas próximas 2 semanas</li>
-            <li>Reprecificar produtos com margem &lt; 20%</li>
-            <li>Implementar 2 combos novos no topo do cardápio</li>
-            <li>Responder todas avaliações negativas em 48h</li>
-            <li>Reavaliar score mensalmente</li>
-          </ol>
+            "Custos altos, taxa de plataforma e cupons agressivos espremem a margem. Reprecifique top produtos.")}
         </section>
       </Card>
     </div>

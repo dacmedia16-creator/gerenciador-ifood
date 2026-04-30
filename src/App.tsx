@@ -25,6 +25,7 @@ import Metrics from "./pages/app/Metrics";
 import Uploads from "./pages/app/Uploads";
 import ActionPlan from "./pages/app/ActionPlan";
 import Report from "./pages/app/Report";
+import Onboarding from "./pages/app/Onboarding";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/app" element={<AppLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
+              <Route path="onboarding" element={<Onboarding />} />
               <Route path="stores" element={<Stores />} />
               <Route path="stores/new" element={<NewStore />} />
               <Route path="stores/:id" element={<StoreOverview />} />

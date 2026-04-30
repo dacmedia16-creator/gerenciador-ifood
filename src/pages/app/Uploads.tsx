@@ -1,76 +1,141 @@
-import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Trash2, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Upload, Download, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { parseMetricsCSV, parseProductsCSV, parseReviewsCSV, type ParseResult } from "@/lib/import/parsers";
+import { downloadTemplate } from "@/lib/import/templates";
 
-export default function Uploads() {
-  const { id } = useParams();
-  const { user } = useAuth();
-  const [files, setFiles] = useState<any[]>([]);
-  const [uploading, setUploading] = useState(false);
+type Kind = "metrics" | "products" | "reviews";
 
-  const load = async () => {
-    if (!user || !id) return;
-    const { data } = await supabase.storage.from("reports").list(`${user.id}/${id}`);
-    setFiles(data || []);
-  };
-  useEffect(() => { load(); }, [user, id]);
+const TITLES: Record<Kind, string> = {
+  metrics: "Métricas mensais",
+  products: "Produtos do cardápio",
+  reviews: "Avaliações de clientes",
+};
+
+const PARSERS: Record<Kind, (text: string) => ParseResult<any>> = {
+  metrics: parseMetricsCSV,
+  products: parseProductsCSV,
+  reviews: parseReviewsCSV,
+};
+
+const TABLES: Record<Kind, string> = {
+  metrics: "metrics",
+  products: "products",
+  reviews: "reviews",
+};
+
+function ImporterCard({ kind, storeId, onDone }: { kind: Kind; storeId: string; onDone: () => void }) {
+  const [preview, setPreview] = useState<ParseResult<any> | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (!f || !user || !id) return;
-    setUploading(true);
-    const path = `${user.id}/${id}/${Date.now()}-${f.name}`;
-    const { error } = await supabase.storage.from("reports").upload(path, f);
-    setUploading(false);
-    if (error) return toast.error(error.message);
-    toast.success("Arquivo enviado");
-    load();
+    if (!f) return;
+    const text = await f.text();
+    const res = PARSERS[kind](text);
+    setPreview(res);
   };
 
-  const remove = async (name: string) => {
-    if (!user || !id) return;
-    await supabase.storage.from("reports").remove([`${user.id}/${id}/${name}`]);
-    toast.success("Removido"); load();
-  };
-
-  const simulate = (name: string) => {
-    toast.success(`Simulação: ${name} processado e métricas geradas (mock)`);
+  const confirm = async () => {
+    if (!preview || preview.rows.length === 0) return;
+    setImporting(true);
+    const payload = preview.rows.map((r) => ({ ...r, store_id: storeId }));
+    const { error } = await supabase.from(TABLES[kind] as any).insert(payload);
+    setImporting(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success(`${preview.rows.length} registros importados`);
+      setPreview(null); onDone();
+    }
   };
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Upload de relatórios</h1>
-      <Card className="p-8 text-center shadow-card border-dashed">
-        <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-        <p className="text-sm text-muted-foreground mb-3">Envie planilhas ou relatórios da plataforma (CSV, XLSX, PDF)</p>
-        <input type="file" id="file" className="hidden" accept=".csv,.xlsx,.pdf" onChange={onFile} />
-        <Button onClick={() => document.getElementById("file")?.click()} disabled={uploading} className="gradient-primary text-primary-foreground">
-          {uploading ? "Enviando…" : "Selecionar arquivo"}
+    <Card className="p-5 shadow-card space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">{TITLES[kind]}</h3>
+        <Button variant="ghost" size="sm" onClick={() => downloadTemplate(kind)}>
+          <Download className="h-3 w-3 mr-1" /> Template
         </Button>
-      </Card>
+      </div>
+      <input id={`f-${kind}`} type="file" className="hidden" accept=".csv" onChange={onFile} />
+      <Button variant="outline" className="w-full" onClick={() => document.getElementById(`f-${kind}`)?.click()}>
+        <Upload className="h-4 w-4 mr-1" /> Selecionar CSV
+      </Button>
 
-      <Card className="shadow-card">
-        <div className="p-4 border-b font-semibold">Arquivos enviados</div>
-        {files.length === 0 ? <p className="p-4 text-sm text-muted-foreground">Nenhum arquivo enviado ainda.</p> :
-          <ul>
-            {files.map((f) => (
-              <li key={f.name} className="p-3 border-b last:border-0 flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm"><FileText className="h-4 w-4 text-primary" /> {f.name}</span>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="outline" onClick={() => simulate(f.name)}><Sparkles className="h-3 w-3 mr-1" /> Processar</Button>
-                  <Button size="sm" variant="ghost" onClick={() => remove(f.name)}><Trash2 className="h-3 w-3" /></Button>
-                </div>
-              </li>
-            ))}
-          </ul>}
-      </Card>
+      {preview && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Badge className="bg-success text-success-foreground"><CheckCircle2 className="h-3 w-3 mr-1" />{preview.rows.length} válidos</Badge>
+            {preview.errors.length > 0 && <Badge variant="destructive"><AlertTriangle className="h-3 w-3 mr-1" />{preview.errors.length} erros</Badge>}
+            <span className="text-muted-foreground text-xs">de {preview.total} linhas</span>
+          </div>
+          {preview.errors.length > 0 && (
+            <div className="max-h-32 overflow-auto text-xs bg-destructive/10 p-2 rounded">
+              {preview.errors.slice(0, 5).map((e, i) => (
+                <div key={i}>Linha {e.row}: {e.message}</div>
+              ))}
+              {preview.errors.length > 5 && <div className="text-muted-foreground">+ {preview.errors.length - 5} outros…</div>}
+            </div>
+          )}
+          {preview.rows.length > 0 && (
+            <div className="max-h-40 overflow-auto text-xs border rounded">
+              <table className="w-full">
+                <thead className="bg-muted/50"><tr>{Object.keys(preview.rows[0]).map((k) => <th key={k} className="p-1 text-left">{k}</th>)}</tr></thead>
+                <tbody>
+                  {preview.rows.slice(0, 5).map((r, i) => (
+                    <tr key={i} className="border-t">{Object.values(r).map((v: any, j) => <td key={j} className="p-1">{String(v ?? "")}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Button onClick={confirm} disabled={importing || preview.rows.length === 0} className="w-full gradient-primary text-primary-foreground">
+            {importing ? "Importando…" : `Importar ${preview.rows.length} registros`}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
+}
 
-      <p className="text-xs text-muted-foreground">⚙️ MVP: a leitura automática dos arquivos será implementada em breve. Por enquanto os arquivos são armazenados com segurança no seu espaço privado.</p>
+export default function Uploads() {
+  const { id } = useParams();
+  const [files, setFiles] = useState<any[]>([]);
+  const [version, setVersion] = useState(0);
+
+  const loadFiles = async () => {
+    if (!id) return;
+    const { data } = await supabase.storage.from("reports").list(id);
+    setFiles(data || []);
+  };
+  useEffect(() => { loadFiles(); }, [id, version]);
+
+  if (!id) return null;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Importar dados</h1>
+        <p className="text-sm text-muted-foreground">Importe planilhas CSV exportadas do iFood, Rappi ou outras plataformas. Baixe um template para ver o formato esperado.</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <ImporterCard kind="metrics" storeId={id} onDone={() => setVersion((v) => v + 1)} />
+        <ImporterCard kind="products" storeId={id} onDone={() => setVersion((v) => v + 1)} />
+        <ImporterCard kind="reviews" storeId={id} onDone={() => setVersion((v) => v + 1)} />
+      </div>
+
+      {files.length > 0 && (
+        <Card className="p-4 shadow-card">
+          <h3 className="font-semibold mb-2">Relatórios PDF gerados</h3>
+          <ul className="text-sm space-y-1">{files.map((f) => <li key={f.name} className="text-muted-foreground">{f.name}</li>)}</ul>
+        </Card>
+      )}
     </div>
   );
 }

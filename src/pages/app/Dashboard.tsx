@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -68,19 +68,7 @@ export default function Dashboard() {
   if (loading) return <div className="text-muted-foreground">Carregando…</div>;
 
   if (!stores.length) {
-    return (
-      <div className="max-w-2xl mx-auto mt-12">
-        <Card className="p-8 text-center shadow-card">
-          <Store className="h-12 w-12 mx-auto text-primary mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Bem-vindo!</h2>
-          <p className="text-muted-foreground mb-6">Você ainda não cadastrou nenhuma loja. Comece criando uma loja real ou use nossa loja demo.</p>
-          <div className="flex gap-3 justify-center">
-            <Button onClick={() => navigate("/app/stores/new")} variant="outline"><Plus className="h-4 w-4 mr-1" /> Cadastrar loja</Button>
-            <Button onClick={handleSeed} disabled={seeding} className="gradient-primary text-primary-foreground"><Sparkles className="h-4 w-4 mr-1" /> {seeding ? "Criando…" : "Criar loja demo"}</Button>
-          </div>
-        </Card>
-      </div>
-    );
+    return <Navigate to="/app/onboarding" replace />;
   }
 
   if (!data) return <div className="text-muted-foreground">Carregando dados…</div>;
