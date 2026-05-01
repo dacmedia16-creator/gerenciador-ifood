@@ -39,6 +39,7 @@ import DiagnosisReview from "./pages/app/diagnosis/DiagnosisReview";
 import DiagnosisResult from "./pages/app/diagnosis/DiagnosisResult";
 import Knowledge from "./pages/app/Knowledge";
 import StoreEvolution from "./pages/app/StoreEvolution";
+import Chat from "./pages/app/Chat";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ const App = () => (
               <Route path="stores/:id/evolution" element={<StoreEvolution />} />
               <Route path="prospects" element={<Prospects />} />
               <Route path="knowledge" element={<Knowledge />} />
+              <Route path="chat" element={<Chat />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
