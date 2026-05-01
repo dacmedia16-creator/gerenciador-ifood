@@ -1,74 +1,60 @@
-## Objetivo
+## Problema
 
-Adicionar os 30 chunks da entrevista da **Camila Blanco (Pastel IA / Pastelicia)** à base de conhecimento usada pelo Gestor IA, para que o RAG passe a recuperar esse conteúdo nas respostas de chat e diagnósticos.
+O Dashboard demora a aparecer porque tem 3 etapas de carregamento em série, cada uma mostrando "Carregando…" em texto puro:
 
-## Como vai ficar (visão do usuário)
+1. `useAuth` resolve a sessão (bloqueia o `AppLayout` inteiro)
+2. Query `dashboardStores` busca a lista de lojas
+3. Só depois dispara `dashboardData` com **8 queries** ao Supabase em paralelo, várias trazendo até 500 linhas (`products`, `reviews`) que o Dashboard nem usa em detalhe — só conta/agrega.
 
-- Em **Base de conhecimento** aparecem 30 novos cards com `chunk_id` `CB-001` a `CB-030`, organizados por área.
-- No **Chat do Gestor IA** e nos **diagnósticos**, quando o usuário falar sobre temas como pastel, fritura, promoção de aniversário, garagem virando loja, padrão de entrega, embalagem, bastidores em redes sociais, etc., a IA passa a citar esses princípios.
-- Conteúdo legado (chunks JB-XXX, KB-XXX) continua intacto.
+Resultado: tela em branco/“Carregando…” por vários segundos mesmo em loja pequena, e muito mais em loja com histórico.
 
-## Mapeamento dos 30 chunks
+## Plano de otimização
 
-Os chunks vêm com ID original `RAG-001..030`. Para não conflitar com a convenção interna (`KB-` e `JB-`) e para deixar claro a fonte, vou prefixar como **`CB-001..030`** (CB = Camila Blanco).
+### 1. Reduzir payload das queries do Dashboard
+No `queryFn` de `dashboardData`, trazer só o necessário para os KPIs e gráficos:
+- `products`: apenas `id` (só usamos `.length`) — remover o `select *` e o limit 500
+- `reviews`: já está enxuto, manter
+- `metrics`: limitar aos últimos 12 períodos com `.order("period_start", { ascending: false }).limit(12)` e reverter no client
+- `diagnostics` e `action_plans`: limitar a 10 (mostramos só 5)
+- `competitors`: trocar `select id, name, rating` por `select id` (só `.length`)
+- `campaigns`: idem, só `id`
 
-Cada chunk vai virar uma linha em `public.knowledge_base` com:
+Isso corta drasticamente bytes transferidos e tempo de RLS.
 
-- `chunk_id`: `CB-001` … `CB-030`
-- `chunk_version`: `1`
-- `source`: `entrevista_camila_blanco_pastelia`
-- `source_version`: `1`
-- `status`: `ativo`
-- `area`: mapeada para o vocabulário já existente na base (ex.: `estrategia`, `produto`, `operacao`, `delivery`, `marketing`, `branding`, `pessoas`, `lideranca`, `precificacao`, `experiencia`, `cultura`)
-- `topic`: campo curto (ex.: `origem`, `pivotagem`, `mvp`, `formalizacao`, `reinvestimento`, `fritura`, `automacao`, `pre_preparo`, `padrao`, `embalagem`, `conteudo`, `promocao_aniversario`, `pico_demanda`, `entregadores`, `educacao_mercado`, `mentalidade`, `proposito`)
-- `title`: o título do chunk
-- `content`: o texto consolidado do chunk (Resumo + Conteúdo + “Aplicação prática” + “Importância”), em PT-BR, formatado como o resto da base
-- `tags`: array com as tags do chunk (sem `#`) + tag fixa `pasteliciatentrevista` para rastrear a origem
-- `embedding`: deixado `NULL` na inserção — será preenchido na etapa seguinte
+### 2. Unir as duas queries em uma só cadeia eficiente
+Hoje há `dashboardStores` → seleciona `selectedId` → `dashboardData`. Vamos:
+- Manter `dashboardStores` mas com `select id, name, platform, city` (não precisamos de `*`)
+- Pré-selecionar a primeira loja sincronamente (sem `useEffect` extra)
+- Habilitar `dashboardData` assim que tiver `selectedId`
 
-## Mapeamento de área (resumo)
+### 3. Skeleton em vez de “Carregando…”
+Trocar os textos `"Carregando…"` e `"Carregando dados…"` por um `DashboardSkeleton` (cards/gráficos cinzas com `animate-pulse`) usando o componente `Skeleton` que já existe. Percepção de velocidade muito maior.
 
-| Chunks | Área | Justificativa |
-|---|---|---|
-| 001, 002, 008, 011, 028, 029 | `estrategia` | Origem, pivot, expansão, reinvestimento, posicionamento, mentalidade |
-| 003, 007, 015, 024 | `operacao` | MVP, operação caseira, pré-preparo, pico |
-| 004, 020 | `branding` | Nome, identidade visual, embalagem |
-| 005 | `gestao` | Formalização (MEI/CNPJ) |
-| 006 | `produto` | Validação inicial |
-| 009 | `operacao` | Garagem como loja |
-| 010, 026 | `pessoas` | Equipe familiar, valorização |
-| 012, 016, 018 | `operacao` / `precificacao` | Qualidade do óleo, refrigeração, preço x qualidade |
-| 013, 017, 027 | `delivery` (nova área) | Princípios centrais de delivery e entrega |
-| 014 | `operacao` | Automação / autoatendimento |
-| 019 | `experiencia` | Loja pequena com boa experiência |
-| 021, 022, 023, 025 | `marketing` | Bastidores, promoção, ROI |
-| 030 | `lideranca` | Propósito |
+### 4. Cache mais agressivo + placeholderData
+No `QueryClient` já temos `staleTime: 60s`. Adicionar nas 3 queries do Dashboard:
+- `placeholderData: (prev) => prev` para manter dados antigos ao trocar de loja
+- `staleTime: 5 * 60_000` (5 min) — dashboard não precisa estar “fresco ao segundo”
 
-> Observação: a área `delivery` ainda não existe na base. Vou criar como área nova — não exige migração porque `area` é texto livre.
+### 5. Pré-buscar `dashboardData` da loja padrão
+No mesmo momento em que `dashboardStores` resolve, fazer `queryClient.prefetchQuery` para `dashboardData` da primeira loja, dentro da própria queryFn — assim quando o componente renderiza já tem dados.
 
-## Etapas de execução (modo build)
+### 6. Lazy do Recharts
+`recharts` é pesado (~150KB). Envolver `LineChart` e `PieChart` em `React.lazy` + `Suspense` com skeleton, para o resto do dashboard (KPIs, alertas) aparecer antes dos gráficos.
 
-1. **Criar a migration de seed** (`supabase/migrations/<timestamp>_seed_kb_camila_blanco.sql`) com um único `INSERT ... ON CONFLICT (chunk_id) DO NOTHING` para os 30 registros, deixando `embedding = NULL`.
-2. **Gerar embeddings** chamando a edge function existente `embed-knowledge` com `{ "table": "knowledge_base", "limit": 50 }`. A função já lê os registros com `embedding IS NULL`, gera embedding lexical (RAG v1) e salva em `knowledge_base.embedding`.
-3. **Verificar** com `SELECT count(*) FROM knowledge_base WHERE chunk_id LIKE 'CB-%' AND embedding IS NOT NULL;` (esperado: 30).
-4. **Smoke test** no chat do Gestor IA com perguntas como:
-   - “como faço uma promoção de aniversário sem queimar margem?”
-   - “meu pastel chega mole na casa do cliente, o que faço?”
-   - “preciso trocar óleo toda semana?”
-   - “meus entregadores afetam minha avaliação?”
-   
-   A resposta deve passar a citar princípios desses chunks (e a aba “Base de conhecimento” deve listá-los como ativos).
+### 7. Memoizar cálculos
+`calculateScore` e `sentimentData` são recalculados a cada render. Envolver em `useMemo` dependendo de `data`.
 
-## O que NÃO muda
+## Detalhes técnicos
 
-- Não mexo no código do `chat-gestor`, do `analyze-prospect`, do CORS nem do efeito de digitação.
-- Não toco nos chunks `KB-*` e `JB-*` existentes — eles continuam ativos.
-- Não altero RLS, schema da tabela ou função `match_knowledge`.
+Arquivos a modificar:
+- `src/pages/app/Dashboard.tsx` — queries enxutas, skeleton, lazy charts, memoização
+- novo `src/components/DashboardSkeleton.tsx` — placeholder visual
+- `src/components/AppLayout.tsx` — trocar texto “Carregando…” por skeleton de layout
 
-## Riscos e mitigação
+Não mudaremos schema do banco nem RLS.
 
-- **Risco**: embedding lexical (v1) pode não recuperar todos os chunks com sinônimos. **Mitigação**: títulos e tags ricas + tag de origem `pasteliciatentrevista` para facilitar match por palavra-chave.
-- **Risco**: duplicar chunks se rodar a migration mais de uma vez. **Mitigação**: `ON CONFLICT (chunk_id) DO NOTHING` (chunk_id tem unique pela própria convenção; se não tiver, adiciono `WHERE NOT EXISTS`).
-- **Risco**: limite de tokens no prompt do chat. **Mitigação**: `chat-gestor` já corta cada snippet em 600 chars e usa top-3, então o aumento da base não pesa no prompt.
+## Resultado esperado
 
-Posso seguir com a implementação?
+- Primeira pintura útil (KPIs + score) em < 500ms após auth resolver
+- Gráficos aparecem logo em seguida sem bloquear o resto
+- Trocar de loja não “pisca” a tela em branco
