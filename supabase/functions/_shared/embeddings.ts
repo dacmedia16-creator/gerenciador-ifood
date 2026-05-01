@@ -1,21 +1,22 @@
 // ============================================================
-// RAG v1 — busca lexical determinística (NÃO é semântica real).
+// RAG embeddings — semântico (v2) com fallback lexical (v1).
 //
-// Como funciona: tokeniza o texto, remove stopwords e mapeia cada token
-// para 2 buckets de um vetor 768d via hashing FNV-1a. Isso faz a busca
-// por similaridade vetorial (pgvector cosine) se comportar como uma
-// busca por sobreposição de palavras-chave — estável e barata, mas SEM
-// generalização semântica (sinônimos não casam).
+// v2 (default): chama Lovable AI Gateway com google/text-embedding-004
+//   (768 dims, casa exatamente com a coluna vector(768) das tabelas).
 //
-// Quando trocarmos para embeddings reais (v2), basta:
-//   - definir Deno.env EMBED_MODEL com um modelo de embedding suportado
-//     pelo Lovable AI Gateway
-//   - reembedar knowledge_base e case_library (incrementar embedding_version)
+// v1 (fallback): hashing FNV-1a sobre tokens. NÃO captura semântica,
+//   só sobreposição de palavras. Usado quando o gateway falha
+//   (429/402/timeout) ou quando RAG_MODE=lexical é forçado.
 //
-// Enquanto EMBED_MODEL não estiver setada, embedText() cai no lexical.
+// Convenção de versão: registros embeddados com v2 têm
+// embedding_version = 2 nas tabelas; v1 = 1. Consultas só comparam
+// vetores de mesma versão de forma confiável — por isso, ao mudar
+// de modelo, é preciso reembedar tudo via embed-knowledge.
 // ============================================================
 
 export const EMBED_DIMS = 768;
+export const EMBED_MODEL_VERSION = 2; // v2 = semântico (text-embedding-004)
+export const EMBED_MODEL_NAME = "google/text-embedding-004";
 
 const STOPWORDS = new Set([
   "de","da","do","das","dos","a","o","e","ou","para","com","em","no","na","nos","nas",
@@ -33,7 +34,6 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length > 2 && !STOPWORDS.has(t));
 }
 
-// Hash 32-bit estável (FNV-1a)
 function hash32(str: string): number {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) {
@@ -51,10 +51,7 @@ function l2Normalize(v: number[]): number[] {
   return v.map((x) => x / norm);
 }
 
-/**
- * RAG v1 — embedding lexical determinístico.
- * NÃO captura semântica, apenas sobreposição de palavras-chave.
- */
+/** RAG v1 — embedding lexical determinístico (fallback). */
 export function embedTextLexical(text: string): number[] | null {
   if (!text?.trim()) return null;
   const tokens = tokenize(text);
@@ -76,34 +73,136 @@ export interface EmbedResult {
   vector: number[] | null;
   mode: RagMode;
   reason?: string;
+  /** Versão do modelo usado para gerar o vetor (1 = lexical, 2 = semântico). */
+  version?: number;
+}
+
+// ============================================================
+// Cache em memória (LRU simples) por hash do texto.
+// Reduz custo quando o mesmo texto é embeddado 2x na mesma invocação.
+// ============================================================
+const CACHE_MAX = 200;
+const cache = new Map<string, EmbedResult>();
+function cacheGet(key: string): EmbedResult | undefined {
+  const v = cache.get(key);
+  if (v) {
+    cache.delete(key);
+    cache.set(key, v); // move-to-end
+  }
+  return v;
+}
+function cacheSet(key: string, val: EmbedResult) {
+  cache.set(key, val);
+  if (cache.size > CACHE_MAX) {
+    const firstKey = cache.keys().next().value;
+    if (firstKey !== undefined) cache.delete(firstKey);
+  }
+}
+
+// ============================================================
+// Semântico: chama Lovable AI Gateway.
+// Endpoint compatível com OpenAI: /v1/embeddings
+// ============================================================
+async function embedTextSemantic(
+  text: string,
+  apiKey: string,
+): Promise<{ vector: number[]; reason: string } | { error: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model: EMBED_MODEL_NAME, input: text.slice(0, 8000) }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      if (res.status === 429) return { error: "rate_limited" };
+      if (res.status === 402) return { error: "credits_exhausted" };
+      const body = await res.text().catch(() => "");
+      console.warn("embeddings gateway non-ok", res.status, body.slice(0, 200));
+      return { error: `gateway_${res.status}` };
+    }
+
+    const json = await res.json();
+    const vec: unknown = json?.data?.[0]?.embedding;
+    if (!Array.isArray(vec)) return { error: "no_embedding_in_response" };
+    if (vec.length !== EMBED_DIMS) {
+      return { error: `dim_mismatch_${vec.length}` };
+    }
+    // Garante números (gateway pode devolver strings em alguns casos)
+    const numeric = (vec as unknown[]).map((x) => Number(x));
+    if (numeric.some((x) => !Number.isFinite(x))) return { error: "non_numeric_values" };
+    return { vector: numeric, reason: EMBED_MODEL_NAME };
+  } catch (e) {
+    clearTimeout(timeout);
+    const msg = e instanceof Error ? e.message : "unknown";
+    return { error: `fetch_${msg}` };
+  }
 }
 
 /**
- * Wrapper com metadata. Permite ao chamador saber se o RAG está degradado.
- * Hoje sempre retorna mode="degraded" porque ainda usamos lexical (RAG v1).
- * Quando EMBED_MODEL estiver setada e funcionar, retornará mode="full".
+ * Wrapper principal. Tenta semântico; em qualquer falha, cai no lexical
+ * e retorna mode="degraded" com a razão para observabilidade.
  */
 export async function embedTextWithMeta(text: string): Promise<EmbedResult> {
-  // TODO v2: quando o gateway expor um modelo de embedding, ativar aqui.
-  // const model = Deno.env.get("EMBED_MODEL");
-  // if (model) { ...fetch para o gateway... return { vector, mode: "full" }; }
-  return {
-    vector: embedTextLexical(text),
-    mode: "degraded",
-    reason: "lexical_v1",
-  };
+  if (!text?.trim()) {
+    return { vector: null, mode: "degraded", reason: "empty_text" };
+  }
+
+  const cacheKey = `v${EMBED_MODEL_VERSION}:${text.slice(0, 200)}|${text.length}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
+  const forceLexical = (Deno.env.get("RAG_MODE") ?? "").toLowerCase() === "lexical";
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+
+  if (!forceLexical && apiKey) {
+    const r = await embedTextSemantic(text, apiKey);
+    if ("vector" in r) {
+      const result: EmbedResult = {
+        vector: r.vector,
+        mode: "full",
+        reason: r.reason,
+        version: EMBED_MODEL_VERSION,
+      };
+      cacheSet(cacheKey, result);
+      return result;
+    }
+    // fallback observável
+    console.log(JSON.stringify({
+      evt: "embeddings.fallback",
+      reason: r.error,
+      forced_lexical: false,
+    }));
+    const lex = embedTextLexical(text);
+    const result: EmbedResult = { vector: lex, mode: "degraded", reason: r.error, version: 1 };
+    // Não cacheia falhas transitórias (rate_limit/timeout) para permitir retry.
+    if (!r.error.startsWith("rate_") && !r.error.startsWith("fetch_")) {
+      cacheSet(cacheKey, result);
+    }
+    return result;
+  }
+
+  const lex = embedTextLexical(text);
+  const reason = forceLexical ? "forced_lexical" : "missing_api_key";
+  const result: EmbedResult = { vector: lex, mode: "degraded", reason, version: 1 };
+  cacheSet(cacheKey, result);
+  return result;
 }
 
-/**
- * Wrapper público legado. Mantido para compatibilidade com chamadores
- * que não precisam saber do modo. Use embedTextWithMeta() para observabilidade.
- */
+/** Wrapper legado — mantém compatibilidade. */
 export async function embedText(text: string): Promise<number[] | null> {
   const r = await embedTextWithMeta(text);
   return r.vector;
 }
 
-// Converte array para o literal do pgvector (string "[a,b,c]")
+/** Converte array para o literal pgvector ("[a,b,c]"). */
 export function toPgVector(v: number[]): string {
   return `[${v.join(",")}]`;
 }
