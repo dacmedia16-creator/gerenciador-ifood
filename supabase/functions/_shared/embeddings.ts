@@ -131,7 +131,7 @@ async function embedTextSemantic(
       if (res.status === 429) return { error: "rate_limited" };
       if (res.status === 401 || res.status === 403) return { error: "unauthorized" };
       const body = await res.text().catch(() => "");
-      console.warn("embeddings api non-ok", res.status, body.slice(0, 200));
+      console.warn("embeddings api non-ok", res.status, "url=", url.replace(/key=[^&]+/, "key=***"), "body=", body.slice(0, 400));
       return { error: `gateway_${res.status}` };
     }
 
