@@ -1,58 +1,34 @@
-## Diagnóstico da lentidão
+## Adaptar o Dashboard para mobile
 
-Olhando o código, **três pontos** explicam a sensação de lentidão (e o session replay confirma — múltiplos estados "Carregando…" / "Carregando dados…" em sequência ao trocar de página):
+Hoje o `src/pages/app/Dashboard.tsx` quebra em telas pequenas em três pontos:
 
-### 1. Dashboard faz 8 queries em paralelo, sem cache, a cada troca de loja
-Em `src/pages/app/Dashboard.tsx` (linhas 48–66) e em `src/hooks/useStoreData.ts`, cada navegação ou troca de loja dispara:
-- `stores`, `metrics`, `products`, `reviews`, `competitors`, `campaigns`, `diagnostics`, `action_plans` — todas com `select("*")` sem `limit`.
-- Sem React Query (mesmo com `QueryClientProvider` configurado em `App.tsx`), então não há cache: voltar para a tela refaz tudo.
-- `reviews`/`products` podem ter centenas de linhas cada, e o dashboard só usa contagem/sentimento.
+1. **Cabeçalho** — título da loja, `<select>` de loja, 3 botões e "Novo Diagnóstico" ficam todos numa linha que estoura/transborda no mobile.
+2. **Card do "Diagnóstico em andamento"** — barra de progresso fixa em `w-48` e botão "Continuar" mal acomodam em 360px.
+3. **Card de Score + KPIs** — `text-6xl` no score e `p-6` ocupam muito espaço; KPIs já são `grid-cols-2` no mobile (ok), mas o gap é grande.
 
-Resultado: cada visita ao Dashboard = 8 round-trips + payloads grandes + re-render dos charts.
+Os charts (`recharts`) e os cards de "Alertas críticos" / "Plano de ação" já se comportam bem no mobile (`lg:grid-cols-*` colapsa para 1 coluna), então não mexo neles.
 
-### 2. Bundle inicial pesado (sem code-splitting)
-`src/App.tsx` importa **todas** as 30+ páginas no topo (Dashboard, Diagnóstico, Wizard, Pricing, Reviews, Chat, Knowledge, Recharts, ReactMarkdown…). Tudo entra no bundle inicial, mesmo quando o usuário só abre o Dashboard. Isso piora muito o "tempo até interativo" da primeira visita e de qualquer hard refresh.
+### Mudanças propostas (apenas em `src/pages/app/Dashboard.tsx`)
 
-### 3. Edge function `chat-gestor` faz RAG síncrono antes de começar a streamar
-Em `supabase/functions/chat-gestor/index.ts`, antes do primeiro token aparecer, ela:
-- Cria o client Supabase
-- Roda `findKnowledgeSnippets` (RPC `match_knowledge` + filtro)
-- Só então chama o gateway Lovable AI
+**Cabeçalho:**
+- Container vira `flex-col sm:flex-row` para empilhar no mobile.
+- Título com `text-xl sm:text-2xl` e `truncate` para nome longo.
+- `<select>` ocupa largura disponível (`flex-1 sm:flex-none`).
+- Botões "Loja" e "Atualizar sistema" mostram só ícone no mobile (`<span className="hidden sm:inline">` no rótulo) — economiza espaço sem perder função.
+- "Novo Diagnóstico" mantém rótulo (ação principal).
 
-São facilmente 1–3s de latência "fantasma" antes do streaming aparecer, dando sensação de travado.
+**Card de diagnóstico em andamento:**
+- Layout `flex-col sm:flex-row` e botão "Continuar diagnóstico" com `w-full sm:w-auto`.
+- Barra de progresso `w-full sm:w-48`.
 
----
+**Card de Score:**
+- Padding `p-4 sm:p-6`, número `text-5xl sm:text-6xl`, gaps menores no mobile (`gap-2 sm:gap-3`).
+- Espaçamento vertical da página `space-y-4 sm:space-y-6`.
 
-## Plano de correção
+**KPI tile:**
+- Reduzir o ícone e o padding em telas pequenas para os 8 cards caberem confortáveis em 2 colunas (sem virar 1 coluna, que ficaria longo demais).
 
-### A. Cache + queries enxutas no Dashboard (maior ganho percebido)
-- Migrar `Dashboard.tsx` e `useStoreData.ts` para **React Query** (`useQuery`) com `staleTime: 60_000`. Trocar de loja e voltar passa a ser instantâneo.
-- Substituir `select("*")` por colunas usadas:
-  - `reviews`: só `sentiment` (e `id` para count)
-  - `products`: só `id, name, sale_price, has_photo, sales_quantity`
-  - `metrics`: só `period_start, revenue`
-  - `diagnostics`: `id, problem, area, severity` com `limit(20)`
-  - `action_plans`: `id, title, area, priority` com `limit(20)`
-- Adicionar `limit(500)` defensivo em `reviews`/`products` para não trazer milhares de linhas.
+Sem mudança de comportamento, sem novas dependências, sem alteração no design system. Só classes responsivas Tailwind.
 
-### B. Code-splitting das rotas
-Em `src/App.tsx`, converter os imports de páginas para `React.lazy(() => import(...))` e envolver `<Routes>` em `<Suspense fallback={<LoadingState/>}>`. Manter `Index`, `Auth` e `AppLayout` como import direto. Isso reduz o JS baixado na primeira tela tipicamente em 60–80%.
-
-### C. Acelerar primeira resposta do Chat
-- Em `chat-gestor`, fazer o RAG e a chamada ao gateway **em paralelo** quando possível, ou começar a chamada do gateway com um prompt provisório enquanto o RAG roda — ou simplesmente reduzir `match_count` de 5 para 3 e cortar `s.content` em ~600 chars por trecho (o prompt está enviando textos enormes).
-- Adicionar `console.log` com timestamps para medir quanto tempo o RAG está custando (visível em edge logs).
-
-### D. Verificações rápidas adicionais
-- Conferir se há queries N+1 escondidas em outras páginas frequentes (`StoreOverview`, `Reviews`, `Products`).
-- Validar se a instância do Lovable Cloud não está saturada — se mesmo após A/B/C continuar lento em produção, considerar **upgrade da instância** em Backend → Advanced settings.
-
----
-
-## Ordem de execução
-
-1. Code-splitting em `App.tsx` (rápido, ganho global imediato).
-2. Refatorar `Dashboard.tsx` + `useStoreData.ts` com React Query e selects enxutos.
-3. Otimizar `chat-gestor` (RAG menor + log de tempo).
-4. Medir e, se necessário, sugerir upgrade da instância de Cloud.
-
-Posso aplicar tudo de uma vez ou ir em etapas — me diga se quer começar só pelo Dashboard ou já fazer o pacote completo.
+### Verificação
+Após aplicar, testo com `browser--set_viewport_size` em 375×812 (iPhone) e 768×1024 (tablet) e tiro screenshot para confirmar que nada estoura.

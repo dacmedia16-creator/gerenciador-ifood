@@ -113,50 +113,69 @@ export default function Dashboard() {
   ];
 
   const KPI = ({ icon: Icon, label, value, color = "text-primary" }: any) => (
-    <Card className="p-4 shadow-card">
-      <div className="flex items-center gap-3">
-        <div className={`h-10 w-10 rounded-lg bg-muted flex items-center justify-center ${color}`}><Icon className="h-5 w-5" /></div>
-        <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="text-lg font-bold">{value}</p>
+    <Card className="p-3 sm:p-4 shadow-card">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-muted flex items-center justify-center shrink-0 ${color}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[11px] sm:text-xs text-muted-foreground truncate">{label}</p>
+          <p className="text-base sm:text-lg font-bold truncate">{value}</p>
         </div>
       </div>
     </Card>
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">{store.name}</h1>
-          <p className="text-sm text-muted-foreground">{store.platform} · {store.city}</p>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold truncate">{store.name}</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground truncate">{store.platform} · {store.city}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <select className="border rounded-md px-3 py-2 text-sm bg-background" value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="border rounded-md px-3 py-2 text-sm bg-background flex-1 sm:flex-none min-w-0 max-w-full"
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+          >
             {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <Button variant="outline" size="sm" onClick={() => navigate("/app/stores/new")}><Plus className="h-4 w-4 mr-1" /> Loja</Button>
-          <Button variant="outline" size="sm" onClick={() => refreshSystem()} title="Limpa caches e recarrega para aplicar atualizações"><RefreshCw className="h-4 w-4 mr-1" /> Atualizar sistema</Button>
-          <Button size="sm" onClick={() => navigate("/app/diagnosis/new?new=1")}><Sparkles className="h-4 w-4 mr-1" /> Novo Diagnóstico</Button>
+          <Button variant="outline" size="sm" onClick={() => navigate("/app/stores/new")} title="Nova loja">
+            <Plus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Loja</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshSystem()}
+            title="Limpa caches e recarrega para aplicar atualizações"
+          >
+            <RefreshCw className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Atualizar sistema</span>
+          </Button>
+          <Button size="sm" onClick={() => navigate("/app/diagnosis/new?new=1")} className="flex-1 sm:flex-none">
+            <Sparkles className="h-4 w-4 mr-1" /> Novo Diagnóstico
+          </Button>
         </div>
       </div>
 
       {draftSession && (
         <Card className="p-4 shadow-card border-primary/40 bg-primary/5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary shrink-0">
                 <Sparkles className="h-5 w-5" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold text-sm">Diagnóstico em andamento</p>
                 <p className="text-xs text-muted-foreground">
                   {draftSession.completion_percentage}% concluído · etapa {draftSession.current_step}/16
                 </p>
-                <Progress value={draftSession.completion_percentage} className="h-1.5 mt-1 w-48" />
+                <Progress value={draftSession.completion_percentage} className="h-1.5 mt-1 w-full sm:w-48" />
               </div>
             </div>
-            <Button size="sm" onClick={() => navigate(`/app/diagnosis/${draftSession.id}`)}>
+            <Button size="sm" onClick={() => navigate(`/app/diagnosis/${draftSession.id}`)} className="w-full sm:w-auto">
               Continuar diagnóstico
             </Button>
           </div>
@@ -164,14 +183,14 @@ export default function Dashboard() {
       )}
 
       {/* Score */}
-      <Card className="p-6 shadow-card">
-        <div className="grid md:grid-cols-4 gap-6 items-center">
+      <Card className="p-4 sm:p-6 shadow-card">
+        <div className="grid md:grid-cols-4 gap-4 sm:gap-6 items-center">
           <div className="text-center">
             <p className="text-sm text-muted-foreground mb-2">Score geral</p>
-            <div className="text-6xl font-bold text-gradient">{overall}</div>
+            <div className="text-5xl sm:text-6xl font-bold text-gradient">{overall}</div>
             <ScoreBadge score={overall} />
           </div>
-          <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             <KPI icon={DollarSign} label="Faturamento/mês" value={`R$ ${(store.monthly_revenue || 0).toLocaleString("pt-BR")}`} />
             <KPI icon={BarChart3} label="Pedidos/mês" value={store.monthly_orders || 0} />
             <KPI icon={DollarSign} label="Ticket médio" value={`R$ ${store.average_ticket || 0}`} />
