@@ -21,9 +21,11 @@ const SUGGESTIONS = [
   "Avalie a foto do meu prato (anexe uma imagem)",
 ];
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-gestor`;
 const MAX_IMAGES = 3;
 const MAX_IMAGE_MB = 5;
+// Velocidade do efeito de digitação (caracteres por tick)
+const TYPE_CHARS_PER_TICK = 2;
+const TYPE_TICK_MS = 18;
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
