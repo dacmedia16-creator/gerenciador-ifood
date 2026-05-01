@@ -3,6 +3,8 @@
 const ALLOWED_ORIGINS = [
   "https://gerenciador-ifood.lovable.app",
   "https://id-preview--d02e117f-b437-4313-904c-ca516100cc79.lovable.app",
+  "https://gestordelivery.app",
+  "https://www.gestordelivery.app",
   "http://localhost:5173",
   "http://localhost:8080",
 ];
