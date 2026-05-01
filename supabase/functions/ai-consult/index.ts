@@ -28,7 +28,7 @@ REGRAS DE APRENDIZADO (memória, casos e conhecimento):
    - "evidence" → vem direto de RULE_EVIDENCES (source_ref = rule_id).
    - "store_history" → vem de PAST_RECOMMENDATIONS desta loja (source_ref = recommendation_id).
    - "similar_case" → vem de SIMILAR_CASES (source_ref = case_id).
-   - "knowledge_base" → vem de KNOWLEDGE_SNIPPETS (source_ref = kb_id).
+   - "knowledge_base" → vem de KNOWLEDGE_SNIPPETS (source_ref = chunk_id, ex: "RAG-007"; pode usar "RAG-007@v2" para indicar versão).
 10. Quando uma recomendação aparece em PAST_RECOMMENDATIONS com status "ignorada" OU outcome "negativo", NÃO repita — a menos que haja fato novo nas evidências; nesse caso, explique qual é o fato novo.
 11. Quando uma recomendação anterior está "aplicada" + outcome "positivo", parabenize e proponha o PRÓXIMO passo, não repita.
 12. Use STORE_MEMORY.recurring_problems para diferenciar problema novo de recorrente. Se for recorrente, mencione há quanto tempo persiste.
@@ -234,7 +234,15 @@ Deno.serve(async (req) => {
     const similarCases = similarCasesRes.items;
     const kbSnippets = kbSnippetsRes.items;
     const validCaseIds = new Set(similarCases.map((c: any) => c.id));
-    const validKbIds = new Set(kbSnippets.map((k: any) => k.id));
+    // Aceita UUID, chunk_id ("RAG-007") ou chunk_id@vN como source_ref válido
+    const validKbIds = new Set<string>();
+    for (const k of kbSnippets as any[]) {
+      if (k.id) validKbIds.add(k.id);
+      if (k.chunk_id) {
+        validKbIds.add(k.chunk_id);
+        if (k.chunk_version != null) validKbIds.add(`${k.chunk_id}@v${k.chunk_version}`);
+      }
+    }
 
     // RAG observabilidade — logs estruturados sem expor segredos
     const LOVABLE_API_KEY_PRESENT = !!Deno.env.get("LOVABLE_API_KEY");
