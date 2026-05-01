@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import logoGD from "@/assets/logo-gestor-delivery.png";
 import {
   TrendingDown, AlertTriangle, Star, Clock, Users, Swords,
   ChefHat, BarChart3, Megaphone, MessageSquareHeart, Target, Rocket,
@@ -30,16 +31,12 @@ const Index = () => {
         style={{ backgroundColor: `${C.black}E6`, borderColor: "#ffffff14" }}
       >
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <a href="#top" className="flex items-center gap-2.5">
-            <div
-              className="h-9 w-9 rounded-lg flex items-center justify-center font-black text-white"
-              style={{ backgroundColor: C.red }}
-            >
-              G
-            </div>
-            <span className="font-semibold text-white tracking-tight">
-              Gestor de Delivery<span style={{ color: C.yellow }}>.</span>
-            </span>
+          <a href="#top" className="flex items-center">
+            <img
+              src={logoGD}
+              alt="Gestor de Delivery"
+              className="h-9 w-auto"
+            />
           </a>
 
           <nav className="hidden md:flex items-center gap-7 text-sm text-white/75">

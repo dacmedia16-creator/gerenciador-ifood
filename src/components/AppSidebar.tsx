@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import logoGD from "@/assets/logo-gestor-delivery.png";
 
 const general = [
   { title: "Dashboard", url: "/app/dashboard", icon: LayoutDashboard },
@@ -64,8 +65,11 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
         <NavLink to="/app/dashboard" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center text-primary-foreground font-bold shrink-0">G</div>
-          {!collapsed && <span className="font-semibold leading-tight text-sm">Gestor IA<br/><span className="text-xs text-muted-foreground font-normal">de Delivery</span></span>}
+          {collapsed ? (
+            <img src="/favicon.png" alt="Gestor de Delivery" className="h-8 w-8 shrink-0" />
+          ) : (
+            <img src={logoGD} alt="Gestor de Delivery" className="h-8 w-auto" />
+          )}
         </NavLink>
       </SidebarHeader>
 
