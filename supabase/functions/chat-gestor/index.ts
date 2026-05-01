@@ -21,9 +21,22 @@ REGRAS:
 5. Se a pergunta fugir totalmente do universo de delivery/restaurante, responda educadamente que seu foco é gestão de delivery.
 6. Se o KNOWLEDGE_CONTEXT estiver vazio ou irrelevante, responda com base em boas práticas gerais de delivery, mas avise que não encontrou referência específica na base.`;
 
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface ChatMessage {
   role: "user" | "assistant" | "system";
-  content: string;
+  content: string | ContentPart[];
+}
+
+function extractText(content: string | ContentPart[]): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((p) => p && p.type === "text")
+    .map((p) => (p as { type: "text"; text: string }).text)
+    .join(" ");
 }
 
 Deno.serve(async (req) => {
