@@ -32,7 +32,6 @@ const emptyForm = {
 
 const MAX_IMAGES = 4;
 const MAX_IMAGE_MB = 5;
-const ANALYZE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-prospect`;
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
