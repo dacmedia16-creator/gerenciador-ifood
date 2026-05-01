@@ -66,7 +66,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
-        <NavLink to="/app/dashboard" className="flex items-center gap-2">
+        <NavLink to="/app/dashboard" onClick={closeOnMobile} className="flex items-center gap-2">
           {collapsed ? (
             <img src="/favicon.png" alt="Gestor de Delivery" className="h-8 w-8 shrink-0" />
           ) : (
