@@ -1,54 +1,58 @@
-## Objetivo
+## Diagnóstico da lentidão
 
-Adicionar uma página `/app/chat` onde o usuário conversa livremente com o **Gestor IA de Delivery** — o mesmo "cérebro" usado no diagnóstico, com acesso à base de conhecimento (RAG sobre `knowledge_base`). Streaming de tokens, histórico em memória da sessão, markdown nas respostas.
+Olhando o código, **três pontos** explicam a sensação de lentidão (e o session replay confirma — múltiplos estados "Carregando…" / "Carregando dados…" em sequência ao trocar de página):
 
-## O que será criado
+### 1. Dashboard faz 8 queries em paralelo, sem cache, a cada troca de loja
+Em `src/pages/app/Dashboard.tsx` (linhas 48–66) e em `src/hooks/useStoreData.ts`, cada navegação ou troca de loja dispara:
+- `stores`, `metrics`, `products`, `reviews`, `competitors`, `campaigns`, `diagnostics`, `action_plans` — todas com `select("*")` sem `limit`.
+- Sem React Query (mesmo com `QueryClientProvider` configurado em `App.tsx`), então não há cache: voltar para a tela refaz tudo.
+- `reviews`/`products` podem ter centenas de linhas cada, e o dashboard só usa contagem/sentimento.
 
-### 1. Edge function `supabase/functions/chat-gestor/index.ts`
+Resultado: cada visita ao Dashboard = 8 round-trips + payloads grandes + re-render dos charts.
 
-Recebe `{ messages: [{role,content}, ...] }` e devolve stream SSE.
+### 2. Bundle inicial pesado (sem code-splitting)
+`src/App.tsx` importa **todas** as 30+ páginas no topo (Dashboard, Diagnóstico, Wizard, Pricing, Reviews, Chat, Knowledge, Recharts, ReactMarkdown…). Tudo entra no bundle inicial, mesmo quando o usuário só abre o Dashboard. Isso piora muito o "tempo até interativo" da primeira visita e de qualquer hard refresh.
 
-Fluxo:
-1. Pega a última mensagem do usuário.
-2. Chama `findKnowledgeSnippets` (já existe em `_shared/memory.ts`) para buscar top 5 chunks relevantes na `knowledge_base` — só ativos (já filtrado pelo `match_knowledge` atualizado).
-3. Monta `system prompt` do "Gestor IA de Delivery" + `KNOWLEDGE_CONTEXT` com os chunks encontrados.
-4. Chama `https://ai.gateway.lovable.dev/v1/chat/completions` com `model: google/gemini-2.5-flash`, `stream: true`, e devolve o body cru ao cliente (SSE).
-5. Trata 429/402 com mensagens claras.
+### 3. Edge function `chat-gestor` faz RAG síncrono antes de começar a streamar
+Em `supabase/functions/chat-gestor/index.ts`, antes do primeiro token aparecer, ela:
+- Cria o client Supabase
+- Roda `findKnowledgeSnippets` (RPC `match_knowledge` + filtro)
+- Só então chama o gateway Lovable AI
 
-System prompt resumido:
-- Linguagem simples, PT-BR, markdown.
-- Não inventar números/métricas da loja.
-- Marcar [HIPÓTESE] quando supor.
-- Citar tópico quando usar a base ("Pelo princípio de combos: ...").
-- Recusar educadamente perguntas fora de delivery.
+São facilmente 1–3s de latência "fantasma" antes do streaming aparecer, dando sensação de travado.
 
-A função NÃO persiste histórico — fica apenas na sessão React. (Se o usuário pedir histórico depois, criamos tabela.)
+---
 
-### 2. Página `src/pages/app/Chat.tsx`
+## Plano de correção
 
-UI estilo chat:
-- Cabeçalho: ícone + "Gestor IA de Delivery" + botão "Limpar conversa".
-- Lista de mensagens (user à direita, assistant à esquerda) com `react-markdown` (já instalado).
-- Indicador de digitação enquanto faz stream.
-- Input fixo embaixo + botão enviar (Enter envia, Shift+Enter quebra linha).
-- Sugestões iniciais clicáveis quando a conversa está vazia: "Como aumentar meu ticket médio?", "Como reduzir cancelamentos?", "Vale a pena usar Super Restaurante?", "Como melhorar minha conversão de visita em pedido?".
-- Toasts para erros 429/402 com texto vindo da edge function.
+### A. Cache + queries enxutas no Dashboard (maior ganho percebido)
+- Migrar `Dashboard.tsx` e `useStoreData.ts` para **React Query** (`useQuery`) com `staleTime: 60_000`. Trocar de loja e voltar passa a ser instantâneo.
+- Substituir `select("*")` por colunas usadas:
+  - `reviews`: só `sentiment` (e `id` para count)
+  - `products`: só `id, name, sale_price, has_photo, sales_quantity`
+  - `metrics`: só `period_start, revenue`
+  - `diagnostics`: `id, problem, area, severity` com `limit(20)`
+  - `action_plans`: `id, title, area, priority` com `limit(20)`
+- Adicionar `limit(500)` defensivo em `reviews`/`products` para não trazer milhares de linhas.
 
-Streaming: usa `fetch` direto contra `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-gestor` com `Authorization: Bearer ${VITE_SUPABASE_PUBLISHABLE_KEY}`, parser SSE linha-a-linha (igual ao padrão recomendado).
+### B. Code-splitting das rotas
+Em `src/App.tsx`, converter os imports de páginas para `React.lazy(() => import(...))` e envolver `<Routes>` em `<Suspense fallback={<LoadingState/>}>`. Manter `Index`, `Auth` e `AppLayout` como import direto. Isso reduz o JS baixado na primeira tela tipicamente em 60–80%.
 
-### 3. Registro no app
+### C. Acelerar primeira resposta do Chat
+- Em `chat-gestor`, fazer o RAG e a chamada ao gateway **em paralelo** quando possível, ou começar a chamada do gateway com um prompt provisório enquanto o RAG roda — ou simplesmente reduzir `match_count` de 5 para 3 e cortar `s.content` em ~600 chars por trecho (o prompt está enviando textos enormes).
+- Adicionar `console.log` com timestamps para medir quanto tempo o RAG está custando (visível em edge logs).
 
-- `src/App.tsx`: nova rota `<Route path="chat" element={<Chat />} />` dentro do `AppLayout`.
-- `src/components/AppSidebar.tsx`: novo item no grupo "Geral" — `{ title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare }` — logo abaixo de "Novo Diagnóstico".
+### D. Verificações rápidas adicionais
+- Conferir se há queries N+1 escondidas em outras páginas frequentes (`StoreOverview`, `Reviews`, `Products`).
+- Validar se a instância do Lovable Cloud não está saturada — se mesmo após A/B/C continuar lento em produção, considerar **upgrade da instância** em Backend → Advanced settings.
 
-## O que NÃO muda
+---
 
-- Nenhuma migração de banco. A função usa a `knowledge_base` já versionada.
-- `ai-consult` (do diagnóstico) fica intacto.
-- `client.ts`, `types.ts`, `.env` — preservados.
+## Ordem de execução
 
-## Validação
+1. Code-splitting em `App.tsx` (rápido, ganho global imediato).
+2. Refatorar `Dashboard.tsx` + `useStoreData.ts` com React Query e selects enxutos.
+3. Otimizar `chat-gestor` (RAG menor + log de tempo).
+4. Medir e, se necessário, sugerir upgrade da instância de Cloud.
 
-- Abrir `/app/chat`, perguntar "como aumentar meu ticket médio?" — esperado: resposta em streaming citando combos/complementos (RAG-011 e correlatos).
-- Perguntar algo fora de tema ("me dá receita de bolo") — esperado: recusa educada.
-- Cortar Cloud temporariamente / testar 402 — toast aparece.
+Posso aplicar tudo de uma vez ou ir em etapas — me diga se quer começar só pelo Dashboard ou já fazer o pacote completo.
