@@ -292,7 +292,6 @@ export default function Dashboard() {
           <Button variant="link" size="sm" asChild className="px-0"><Link to={`/app/stores/${store.id}/action-plan`}>Ver plano completo →</Link></Button>
         </Card>
       </div>
-      </div>
     </div>
   );
 }
