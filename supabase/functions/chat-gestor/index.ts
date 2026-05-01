@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
       const ragStart = Date.now();
       try {
         // top 3 (era 5) e cortando conteúdo para reduzir tokens e latência
-        const snippets = await findKnowledgeSnippets(supabase, lastUser.content, null, 3);
+        const snippets = await findKnowledgeSnippets(supabase, lastUserText, null, 3);
         if (snippets.length > 0) {
           kbContext = snippets
             .map((s: any, i: number) => {
