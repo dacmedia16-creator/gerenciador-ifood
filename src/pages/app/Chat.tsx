@@ -36,18 +36,6 @@ export default function Chat() {
     setMessages(next);
     setLoading(true);
 
-    let assistantSoFar = "";
-    const upsertAssistant = (chunk: string) => {
-      assistantSoFar += chunk;
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant") {
-          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
-        }
-        return [...prev, { role: "assistant", content: assistantSoFar }];
-      });
-    };
-
     try {
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -58,44 +46,24 @@ export default function Chat() {
         body: JSON.stringify({ messages: next }),
       });
 
-      if (!resp.ok || !resp.body) {
-        const errBody = await resp.json().catch(() => ({ error: "Erro ao chamar o Gestor IA" }));
+      const data = await resp.json().catch(() => ({} as any));
+
+      if (!resp.ok) {
         toast({
           title: resp.status === 429 ? "Limite atingido" : resp.status === 402 ? "Créditos esgotados" : "Erro",
-          description: errBody.error ?? "Tente novamente.",
+          description: data?.error ?? "Tente novamente.",
           variant: "destructive",
         });
         setMessages((prev) => prev.filter((m, i) => !(i === prev.length - 1 && m.role === "user" && m.content === trimmed)));
         return;
       }
 
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let done = false;
-      while (!done) {
-        const r = await reader.read();
-        if (r.done) break;
-        buf += decoder.decode(r.value, { stream: true });
-        let idx: number;
-        while ((idx = buf.indexOf("\n")) !== -1) {
-          let line = buf.slice(0, idx);
-          buf = buf.slice(idx + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line || line.startsWith(":")) continue;
-          if (!line.startsWith("data: ")) continue;
-          const json = line.slice(6).trim();
-          if (json === "[DONE]") { done = true; break; }
-          try {
-            const parsed = JSON.parse(json);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) upsertAssistant(content);
-          } catch {
-            buf = line + "\n" + buf;
-            break;
-          }
-        }
+      const content: string = data?.content ?? "";
+      if (!content) {
+        toast({ title: "Resposta vazia", description: "Tente reformular sua pergunta.", variant: "destructive" });
+        return;
       }
+      setMessages((prev) => [...prev, { role: "assistant", content }]);
     } catch (e) {
       console.error(e);
       toast({ title: "Erro de conexão", description: "Não foi possível falar com o Gestor IA.", variant: "destructive" });
