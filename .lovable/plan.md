@@ -1,67 +1,69 @@
 ## Objetivo
 
-Aplicar o logo oficial enviado (badge "G" vermelho com recorte diagonal + wordmark "Gestor de Delivery") como identidade visual do projeto: header da landing, sidebar do app autenticado, favicon e imagem de preview social.
+Alimentar a base de conhecimento (RAG) do Gestor IA com os 20 chunks da aula prática de otimização de loja no iFood, para que o Gestor IA passe a citar essas heurísticas como fonte ao gerar diagnósticos e recomendações.
 
-## Arquivos do logo
+## Onde os dados serão inseridos
 
-Copiar `user-uploads://Lgo_GD.png` para o projeto em duas variantes:
+Tabela `knowledge_base` (já usada pela função `match_knowledge` e por `findKnowledgeSnippets` em `ai-consult`). Hoje ela tem 12 entradas seed (1 por área); vamos adicionar 20 novas entradas, mantendo o padrão existente.
 
-- `src/assets/logo-gestor-delivery.png` — versão completa (badge + wordmark) usada em headers
-- `public/favicon.png` — recortar somente o badge "G" para o favicon (substitui o atual)
-- `public/og-image.png` — regerar usando a imagem real enviada (substitui o desenho programático atual)
+Mapeamento de cada chunk para colunas:
+- `area` → área canônica em snake_case (ver mapeamento abaixo)
+- `topic` → subtema curto
+- `title` → título do chunk
+- `content` → "Resumo" + "Conteúdo" + "Aplicação prática" concatenados (texto corrido em PT-BR, é o que o RAG vai indexar)
+- `tags` → array com palavras-chave + tags do chunk + ID do chunk (ex: `RAG-001`) para rastreio
+- `source` → `aula_ifood_v1` (em vez do default `manual`), para conseguirmos filtrar/atualizar no futuro
+- `embedding` → preenchido por uma chamada à edge function `embed-knowledge` logo após o insert
 
-## Alterações de código
+Mapeamento area por chunk:
 
-### 1. `src/pages/Index.tsx` (header da landing)
-
-Trocar o "G" desenhado em CSS (linhas 33-43) pela imagem real:
-
-```tsx
-import logoGD from "@/assets/logo-gestor-delivery.png";
-...
-<a href="#top" className="flex items-center gap-2.5">
-  <img src={logoGD} alt="Gestor de Delivery" className="h-9 w-auto" />
-</a>
+```text
+RAG-001 metricas         RAG-011 cardapio
+RAG-002 horarios         RAG-012 cardapio
+RAG-003 operacao         RAG-013 cardapio
+RAG-004 cancelamentos    RAG-014 promocoes
+RAG-005 reputacao        RAG-015 categoria
+RAG-006 atendimento      RAG-016 conversao
+RAG-007 conversao        RAG-017 entrega
+RAG-008 visibilidade     RAG-018 entrega
+RAG-009 cardapio         RAG-019 promocoes
+RAG-010 conversao        RAG-020 promocoes
 ```
 
-Como o wordmark já vem na imagem, o `<span>Gestor de Delivery.</span>` ao lado é removido para não duplicar a marca.
+Áreas novas que serão criadas (não existem hoje na tabela): `metricas`, `horarios`, `operacao`, `reputacao`, `visibilidade`, `categoria`, `entrega`, `promocoes`. Isso é seguro: `area` é apenas `text` livre, não enum, e `match_knowledge` aceita filtro opcional por área (NULL = todas), então o RAG continuará funcionando sem mudanças de código.
 
-### 2. `src/components/AppSidebar.tsx` (header da sidebar do app)
+## Passos
 
-No `SidebarHeader` (linhas ~70-75): substituir o quadrado vermelho com "G" e o texto "Gestor IA / de Delivery" pela mesma imagem importada de `@/assets/logo-gestor-delivery.png`:
+1. Criar uma migração SQL que faz `INSERT INTO public.knowledge_base (area, topic, title, content, tags, source) VALUES (...)` com os 20 registros, usando `source = 'aula_ifood_v1'` e `ON CONFLICT DO NOTHING` numa chave lógica (title + source) para tornar reexecutável.
+   - Como não há unique constraint hoje, a migração começa com `CREATE UNIQUE INDEX IF NOT EXISTS knowledge_base_title_source_uniq ON public.knowledge_base (title, source);` para suportar o `ON CONFLICT`.
 
-- Estado expandido: mostra logo completo (`h-8 w-auto`)
-- Estado `collapsed`: mostra apenas o badge — nesse caso usar `public/favicon.png` (badge isolado) com `h-8 w-8`
+2. Após a migração, gerar embeddings invocando a edge function existente `embed-knowledge` com `{ "table": "knowledge_base", "limit": 50 }`. Ela já varre linhas com `embedding IS NULL`, calcula o vetor lexical (RAG v1) e atualiza a coluna. Nenhum código novo de função é necessário.
 
-### 3. Favicon e og-image
+3. Validar com:
+   - `SELECT area, COUNT(*) FROM knowledge_base WHERE source='aula_ifood_v1' GROUP BY area;` → confirma 20 inseridos
+   - `SELECT COUNT(*) FROM knowledge_base WHERE source='aula_ifood_v1' AND embedding IS NULL;` → deve ser 0
+   - Chamar `match_knowledge` com a query "como aumentar ticket médio com complementos" para confirmar que RAG-011 aparece no topo.
 
-- `public/favicon.png`: gerar a partir do logo enviado, recortando a área do badge vermelho (quadrado ~512×512) com Pillow. `index.html` já aponta para `/favicon.png`, sem mudanças.
-- `public/og-image.png`: regerar 1200×630 com fundo preto e o logo enviado centralizado + tagline "Gestão premium do seu delivery" abaixo. Substitui o desenho atual gerado programaticamente, garantindo fidelidade total à marca.
+## O que NÃO muda
 
-`index.html` já referencia ambos os arquivos — nenhuma mudança em meta tags.
+- Nenhuma alteração em `src/integrations/supabase/types.ts`, `client.ts` ou `.env`.
+- Nenhuma alteração em `ai-consult` ou em `_shared/memory.ts` — eles já consomem `knowledge_base` automaticamente.
+- Nenhum componente de UI muda. A página `src/pages/app/Knowledge.tsx` (Base de conhecimento) já lista tudo da tabela, então os 20 novos itens aparecem automaticamente, agrupados por área, com tags e busca.
 
 ## Detalhes técnicos
 
-Geração das variantes via script Python/Pillow em `/tmp`:
+- O embedding atual é lexical (RAG v1, ver `supabase/functions/_shared/embeddings.ts`). Ele indexa por sobreposição de palavras-chave; por isso o `content` será escrito em PT-BR sem jargão e os `tags` repetirão as palavras-chave principais para reforçar o casamento. Quando migrarmos para embeddings semânticos reais, basta rodar `embed-knowledge` de novo com `embedding_version` incrementado — sem reescrever os chunks.
+- O campo `tags` armazenará também o `RAG-XXX` ID para conseguirmos atualizar/remover por chunk via `WHERE 'RAG-007' = ANY(tags)`.
+- Tamanho estimado por chunk: ~1.5–2.5 KB de texto em `content`. Total ~40 KB — irrelevante para a tabela.
 
-```text
-Logo original (1920×~640, fundo preto)
-   │
-   ├── recorte do badge → resize 512×512 → public/favicon.png
-   ├── cópia integral   →                  src/assets/logo-gestor-delivery.png
-   └── canvas 1200×630 preto + logo centralizado + tagline → public/og-image.png
-```
+## Riscos / mitigação
 
-Nada de cores hardcoded fora do `Index.tsx` (que já tem paleta isolada documentada). A sidebar continua usando os tokens semânticos do design system.
+- **Áreas novas**: `Knowledge.tsx` agrupa por `area` dinamicamente; novas áreas só viram novos cabeçalhos. Sem risco.
+- **Reexecução da migração**: o índice único `(title, source)` + `ON CONFLICT DO NOTHING` tornam idempotente.
+- **embed-knowledge falhar**: a função é tolerante (loga e continua); rodá-la novamente reprocessa os pendentes.
 
-## Cache do WhatsApp
+## Entregável final
 
-Após publicar, compartilhar uma vez `https://gestordelivery.app/?v=5` para forçar atualização do preview social.
-
-## Arquivos afetados
-
-- `src/assets/logo-gestor-delivery.png` (novo)
-- `public/favicon.png` (substituído)
-- `public/og-image.png` (substituído)
-- `src/pages/Index.tsx` (header)
-- `src/components/AppSidebar.tsx` (cabeçalho da sidebar)
+- 1 migração SQL com índice único + 20 inserts.
+- 1 invocação de `embed-knowledge` para popular os vetores.
+- Validação por SQL e via UI em `/app/knowledge`.
