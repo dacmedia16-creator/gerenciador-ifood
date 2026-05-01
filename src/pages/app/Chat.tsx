@@ -104,40 +104,67 @@ export default function Chat() {
         return { role: m.role, content: m.content };
       });
 
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ messages: apiMessages }),
+      const { data, error } = await supabase.functions.invoke("chat-gestor", {
+        body: { messages: apiMessages },
       });
 
-      const data = await resp.json().catch(() => ({} as any));
-
-      if (!resp.ok) {
+      if (error) {
+        const ctx = (error as any).context;
+        let parsed: any = null;
+        if (ctx?.body) {
+          try { parsed = typeof ctx.body === "string" ? JSON.parse(ctx.body) : ctx.body; } catch { /* ignore */ }
+        }
+        const status = ctx?.status ?? 0;
         toast({
-          title: resp.status === 429 ? "Limite atingido" : resp.status === 402 ? "Créditos esgotados" : "Erro",
-          description: data?.error ?? "Tente novamente.",
+          title: status === 429 ? "Limite atingido" : status === 402 ? "Créditos esgotados" : "Erro",
+          description: parsed?.error ?? error.message ?? "Tente novamente.",
           variant: "destructive",
         });
         setMessages((prev) => prev.slice(0, -1));
         return;
       }
 
-      const content: string = data?.content ?? "";
+      const content: string = (data as any)?.content ?? "";
       if (!content) {
         toast({ title: "Resposta vazia", description: "Tente reformular sua pergunta.", variant: "destructive" });
         return;
       }
-      setMessages((prev) => [...prev, { role: "assistant", content }]);
+
+      // Adiciona a mensagem vazia em modo "typing" e revela aos poucos
+      setMessages((prev) => [...prev, { role: "assistant", content: "", typing: true }]);
+      await typeOutAssistant(content);
     } catch (e) {
       console.error(e);
       toast({ title: "Erro de conexão", description: "Não foi possível falar com o Gestor IA.", variant: "destructive" });
+      setMessages((prev) => (prev[prev.length - 1]?.role === "user" ? prev.slice(0, -1) : prev));
     } finally {
       setLoading(false);
     }
   }
+
+  // Revela o texto do assistente progressivamente, atualizando a última mensagem.
+  function typeOutAssistant(full: string): Promise<void> {
+    return new Promise((resolve) => {
+      let i = 0;
+      const tick = () => {
+        i = Math.min(full.length, i + TYPE_CHARS_PER_TICK);
+        setMessages((prev) => {
+          if (prev.length === 0) return prev;
+          const last = prev[prev.length - 1];
+          if (last.role !== "assistant") return prev;
+          const updated: Msg = { ...last, content: full.slice(0, i), typing: i < full.length };
+          return [...prev.slice(0, -1), updated];
+        });
+        if (i < full.length) {
+          setTimeout(tick, TYPE_TICK_MS);
+        } else {
+          resolve();
+        }
+      };
+      tick();
+    });
+  }
+
 
   function clearChat() {
     setMessages([]);
