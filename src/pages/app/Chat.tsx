@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ImagePlus, MessageSquare, Send, Sparkles, Trash2, User, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 type Msg = {
   role: "user" | "assistant";
   content: string;
   images?: string[]; // data URLs (somente exibição local / envio)
+  typing?: boolean;  // true enquanto a resposta está sendo "digitada" no UI
 };
 
 const SUGGESTIONS = [
