@@ -10,8 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 type Msg = {
   role: "user" | "assistant";
   content: string;
-  images?: string[]; // data URLs (somente exibição local / envio)
-  typing?: boolean;  // true enquanto a resposta está sendo "digitada" no UI
+  images?: string[];          // imagens anexadas pelo usuário (data URLs)
+  generatedImages?: string[]; // imagens geradas pela IA (signed URLs)
+  typing?: boolean;
 };
 
 const SUGGESTIONS = [
