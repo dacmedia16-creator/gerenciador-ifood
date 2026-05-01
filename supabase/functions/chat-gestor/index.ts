@@ -54,16 +54,22 @@ Deno.serve(async (req) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
+      const ragStart = Date.now();
       try {
-        const snippets = await findKnowledgeSnippets(supabase, lastUser.content, null, 5);
+        // top 3 (era 5) e cortando conteúdo para reduzir tokens e latência
+        const snippets = await findKnowledgeSnippets(supabase, lastUser.content, null, 3);
         if (snippets.length > 0) {
           kbContext = snippets
-            .map((s: any, i: number) => `[${i + 1}] ${s.title} (${s.area}${s.chunk_id ? ` · ${s.chunk_id}` : ""}):\n${s.content}`)
+            .map((s: any, i: number) => {
+              const content = (s.content || "").slice(0, 600);
+              return `[${i + 1}] ${s.title} (${s.area}${s.chunk_id ? ` · ${s.chunk_id}` : ""}):\n${content}`;
+            })
             .join("\n\n");
         }
       } catch (e) {
         console.warn("rag lookup failed", e);
       }
+      console.log(JSON.stringify({ evt: "chat_gestor.rag", elapsed_ms: Date.now() - ragStart, has_context: !!kbContext }));
     }
 
     const systemMsg = `${SYSTEM_PROMPT}\n\nKNOWLEDGE_CONTEXT (top 5 trechos da base):\n${kbContext || "(nenhum trecho relevante encontrado)"}`;

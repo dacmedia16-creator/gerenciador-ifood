@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -15,55 +16,69 @@ import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, 
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [stores, setStores] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
-  const [draftSession, setDraftSession] = useState<any>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!user) return;
-    supabase
-      .from("diagnosis_sessions")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "draft")
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setDraftSession(data));
-  }, [user]);
+  const { data: draftSession } = useQuery({
+    queryKey: ["draftSession", user?.id],
+    enabled: !!user,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("diagnosis_sessions")
+        .select("id, completion_percentage, current_step, updated_at")
+        .eq("user_id", user!.id)
+        .eq("status", "draft")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
 
-  useEffect(() => {
-    (async () => {
+  const { data: stores = [], isLoading: loading, refetch: refetchStores } = useQuery({
+    queryKey: ["dashboardStores"],
+    staleTime: 60_000,
+    queryFn: async () => {
       const { data } = await supabase.from("stores").select("*").order("created_at");
-      setStores(data || []);
-      if (data?.[0]) setSelectedId(data[0].id);
-      setLoading(false);
-    })();
-  }, []);
+      return data || [];
+    },
+  });
 
   useEffect(() => {
-    if (!selectedId) return;
-    (async () => {
+    if (!selectedId && stores.length) setSelectedId(stores[0].id);
+  }, [stores, selectedId]);
+
+  const { data } = useQuery({
+    queryKey: ["dashboardData", selectedId],
+    enabled: !!selectedId,
+    staleTime: 60_000,
+    queryFn: async () => {
       const [s, m, p, r, c, ca, d, a] = await Promise.all([
         supabase.from("stores").select("*").eq("id", selectedId).single(),
-        supabase.from("metrics").select("*").eq("store_id", selectedId).order("period_start"),
-        supabase.from("products").select("*").eq("store_id", selectedId),
-        supabase.from("reviews").select("*").eq("store_id", selectedId),
-        supabase.from("competitors").select("*").eq("store_id", selectedId),
-        supabase.from("campaigns").select("*").eq("store_id", selectedId),
-        supabase.from("diagnostics").select("*").eq("store_id", selectedId).order("created_at", { ascending: false }),
-        supabase.from("action_plans").select("*").eq("store_id", selectedId).order("created_at", { ascending: false }),
+        supabase.from("metrics")
+          .select("id, period_start, period_end, revenue, orders, average_ticket, cancellation_rate")
+          .eq("store_id", selectedId).order("period_start"),
+        supabase.from("products").select("*").eq("store_id", selectedId).limit(500),
+        supabase.from("reviews")
+          .select("id, sentiment, rating")
+          .eq("store_id", selectedId).limit(500),
+        supabase.from("competitors").select("id, name, rating").eq("store_id", selectedId),
+        supabase.from("campaigns").select("id, name, status").eq("store_id", selectedId),
+        supabase.from("diagnostics")
+          .select("id, area, problem, severity")
+          .eq("store_id", selectedId).order("created_at", { ascending: false }).limit(50),
+        supabase.from("action_plans")
+          .select("id, title, area, priority, status")
+          .eq("store_id", selectedId).order("created_at", { ascending: false }).limit(50),
       ]);
-      setData({
+      return {
         store: s.data, metrics: m.data || [], products: p.data || [], reviews: r.data || [],
         competitors: c.data || [], campaigns: ca.data || [], diagnostics: d.data || [], actions: a.data || [],
-      });
-    })();
-  }, [selectedId]);
+      };
+    },
+  });
 
   const handleSeed = async () => {
     if (!user) return;
@@ -71,8 +86,7 @@ export default function Dashboard() {
     try {
       const store = await seedDemoStore(user.id);
       toast.success("Loja demo criada!");
-      const { data } = await supabase.from("stores").select("*").order("created_at");
-      setStores(data || []);
+      const res = await refetchStores();
       setSelectedId(store.id);
     } catch (e: any) {
       toast.error(e.message || "Erro ao criar loja demo");
