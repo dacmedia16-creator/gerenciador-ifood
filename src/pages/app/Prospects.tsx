@@ -115,20 +115,19 @@ export default function Prospects() {
     }
     setAnalyzing(true);
     try {
-      const resp = await fetch(ANALYZE_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ images: pendingImages, note: aiNote }),
+      const { data, error } = await supabase.functions.invoke("analyze-prospect", {
+        body: { images: pendingImages, note: aiNote },
       });
-      const data = await resp.json().catch(() => ({} as any));
-      if (!resp.ok) {
-        toast.error(data?.error ?? "Falha na análise.");
+      if (error) {
+        const ctx = (error as any).context;
+        let parsed: any = null;
+        if (ctx?.body) {
+          try { parsed = typeof ctx.body === "string" ? JSON.parse(ctx.body) : ctx.body; } catch { /* ignore */ }
+        }
+        toast.error(parsed?.error ?? error.message ?? "Falha na análise.");
         return;
       }
-      const d = data?.data ?? {};
+      const d = (data as any)?.data ?? {};
       // mescla no formulário, convertendo números para string (inputs são strings)
       setForm((prev: any) => ({
         ...prev,
