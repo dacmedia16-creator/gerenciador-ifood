@@ -1,12 +1,15 @@
 // ============================================================
 // RAG embeddings — semântico (v2) com fallback lexical (v1).
 //
-// v2 (default): chama Lovable AI Gateway com google/text-embedding-004
-//   (768 dims, casa exatamente com a coluna vector(768) das tabelas).
+// v2 (default): chama Google Generative Language API diretamente
+//   (text-embedding-004, 768 dims) usando GEMINI_API_KEY.
+//   Casa exatamente com a coluna vector(768) das tabelas.
+//   Obs: o Lovable AI Gateway hoje só expõe modelos de chat/imagem,
+//   por isso vamos direto na API do Google para embeddings.
 //
 // v1 (fallback): hashing FNV-1a sobre tokens. NÃO captura semântica,
-//   só sobreposição de palavras. Usado quando o gateway falha
-//   (429/402/timeout) ou quando RAG_MODE=lexical é forçado.
+//   só sobreposição de palavras. Usado quando a API falha
+//   (429/5xx/timeout) ou quando RAG_MODE=lexical é forçado.
 //
 // Convenção de versão: registros embeddados com v2 têm
 // embedding_version = 2 nas tabelas; v1 = 1. Consultas só comparam
@@ -16,7 +19,7 @@
 
 export const EMBED_DIMS = 768;
 export const EMBED_MODEL_VERSION = 2; // v2 = semântico (text-embedding-004)
-export const EMBED_MODEL_NAME = "google/text-embedding-004";
+export const EMBED_MODEL_NAME = "gemini-embedding-001";
 
 const STOPWORDS = new Set([
   "de","da","do","das","dos","a","o","e","ou","para","com","em","no","na","nos","nas",
@@ -100,8 +103,9 @@ function cacheSet(key: string, val: EmbedResult) {
 }
 
 // ============================================================
-// Semântico: chama Lovable AI Gateway.
-// Endpoint compatível com OpenAI: /v1/embeddings
+// Semântico: Google Generative Language API direta.
+// Endpoint: models/text-embedding-004:embedContent
+// Auth: ?key=GEMINI_API_KEY (chave do Google AI Studio).
 // ============================================================
 async function embedTextSemantic(
   text: string,
@@ -110,32 +114,34 @@ async function embedTextSemantic(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/embeddings", {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL_NAME}:embedContent?key=${encodeURIComponent(apiKey)}`;
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model: EMBED_MODEL_NAME, input: text.slice(0, 8000) }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: `models/${EMBED_MODEL_NAME}`,
+        content: { parts: [{ text: text.slice(0, 8000) }] },
+        taskType: "RETRIEVAL_DOCUMENT",
+        outputDimensionality: EMBED_DIMS, // 768 — combina com o schema vector(768)
+      }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
     if (!res.ok) {
       if (res.status === 429) return { error: "rate_limited" };
-      if (res.status === 402) return { error: "credits_exhausted" };
+      if (res.status === 401 || res.status === 403) return { error: "unauthorized" };
       const body = await res.text().catch(() => "");
-      console.warn("embeddings gateway non-ok", res.status, body.slice(0, 200));
+      console.warn("embeddings api non-ok", res.status, "url=", url.replace(/key=[^&]+/, "key=***"), "body=", body.slice(0, 400));
       return { error: `gateway_${res.status}` };
     }
 
     const json = await res.json();
-    const vec: unknown = json?.data?.[0]?.embedding;
+    const vec: unknown = json?.embedding?.values;
     if (!Array.isArray(vec)) return { error: "no_embedding_in_response" };
     if (vec.length !== EMBED_DIMS) {
       return { error: `dim_mismatch_${vec.length}` };
     }
-    // Garante números (gateway pode devolver strings em alguns casos)
     const numeric = (vec as unknown[]).map((x) => Number(x));
     if (numeric.some((x) => !Number.isFinite(x))) return { error: "non_numeric_values" };
     return { vector: numeric, reason: EMBED_MODEL_NAME };
@@ -160,7 +166,7 @@ export async function embedTextWithMeta(text: string): Promise<EmbedResult> {
   if (cached) return cached;
 
   const forceLexical = (Deno.env.get("RAG_MODE") ?? "").toLowerCase() === "lexical";
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
 
   if (!forceLexical && apiKey) {
     const r = await embedTextSemantic(text, apiKey);
