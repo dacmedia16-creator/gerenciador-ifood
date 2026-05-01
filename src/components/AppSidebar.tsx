@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator, Target, Clock, BookOpen, TrendingUp, MessageSquare,
+  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator, Target, Clock, BookOpen, TrendingUp, MessageSquare, Settings,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -12,21 +12,19 @@ import { useAuth } from "@/hooks/useAuth";
 import logoGD from "@/assets/logo-gestor-delivery.png";
 
 const general = [
-  { title: "Dashboard", url: "/app/dashboard", icon: LayoutDashboard },
-  { title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare },
+  { title: "Painel do Dono", url: "/app/dashboard", icon: LayoutDashboard },
   { title: "Novo Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
-  { title: "Lojas", url: "/app/stores", icon: Store },
-  { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
-  { title: "Base de conhecimento", url: "/app/knowledge", icon: BookOpen },
+  { title: "Minhas lojas", url: "/app/stores", icon: Store },
+  { title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare },
 ];
 
 const storeAnalysis = (id: string) => [
   { title: "Visão geral", url: `/app/stores/${id}`, icon: Home },
   { title: "Diagnóstico", url: `/app/stores/${id}/diagnostics`, icon: Stethoscope },
   { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
-  { title: "Plano de ação", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
-  { title: "Evolução IA", url: `/app/stores/${id}/evolution`, icon: TrendingUp },
-  { title: "Relatório", url: `/app/stores/${id}/report`, icon: FileText },
+  { title: "Plano de melhoria", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
+  { title: "Evolução da loja", url: `/app/stores/${id}/evolution`, icon: TrendingUp },
+  { title: "Relatório da minha loja", url: `/app/stores/${id}/report`, icon: FileText },
 ];
 
 const storeOperations = (id: string) => [
@@ -45,7 +43,15 @@ const storeOperations = (id: string) => [
 
 const storeData = (id: string) => [
   { title: "Importar dados", url: `/app/stores/${id}/uploads`, icon: Upload },
-  { title: "Template do PDF", url: `/app/stores/${id}/report/template`, icon: Palette },
+];
+
+const adminGeneral = [
+  { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
+  { title: "Base de conhecimento", url: "/app/knowledge", icon: BookOpen },
+];
+
+const adminStore = (id: string) => [
+  { title: "Configurações do relatório", url: `/app/stores/${id}/report/template`, icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -56,7 +62,6 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
 
-  // detect storeId from URL
   const match = pathname.match(/\/app\/stores\/([0-9a-f-]{36})/);
   const storeId = match?.[1] || params.id;
 
@@ -94,7 +99,7 @@ export function AppSidebar() {
         {storeId && (
           <>
             <SidebarGroup>
-              <SidebarGroupLabel>Análise</SidebarGroupLabel>
+              <SidebarGroupLabel>Análise da minha loja</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {storeAnalysis(storeId).map((item) => (
@@ -124,7 +129,7 @@ export function AppSidebar() {
             </SidebarGroup>
 
             <SidebarGroup>
-              <SidebarGroupLabel>Dados & Saída</SidebarGroupLabel>
+              <SidebarGroupLabel>Dados</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {storeData(storeId).map((item) => (
@@ -139,6 +144,29 @@ export function AppSidebar() {
             </SidebarGroup>
           </>
         )}
+
+        {/* Admin / avançado — itens que não são para o uso diário do dono */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Admin</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminGeneral.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              {storeId && adminStore(storeId).map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t p-2">
