@@ -1,53 +1,82 @@
-## Plano: Adicionar conteúdo "EP 10 — Alô Frango (João Neto e Mirna)" na Base de Conhecimento RAG
+## Plano: Expandir base RAG com conteúdo complementar do EP10 — Alô Frango
 
 ### Resumo
-Inserir os **16 chunks** (`RAG-001` a `RAG-016`) do episódio sobre o Alô Frango em `public.knowledge_base`, sob nova fonte `alo-frango-ep10-2024`, e gerar embeddings para que a IA passe a usar esse conteúdo nas consultas. Resultado esperado: base sobe de **253 para 269 chunks ativos**.
+A base já tem 16 chunks `RAG-ALO-001..016` (resumos do episódio). Este plano adiciona **35 novos chunks** com o material estruturado que você acabou de mandar — **Q&A, regras práticas, checklists, diagnósticos, exemplos, glossário** — sob a mesma fonte `alo-frango-ep10-2024`, com prefixos próprios para não colidir com os IDs existentes.
 
-Como os IDs `RAG-001`..`RAG-016` já existem na base (de outras fontes — cancelamentos iFood etc.), os novos chunks serão inseridos com **prefixo próprio** para evitar colisão: `RAG-ALO-001` a `RAG-ALO-016`.
+Resultado esperado: base passa de **269 → 304 chunks ativos**, sendo **51 do Alô Frango** no total.
 
-### O que será feito
+### O que será inserido (35 chunks)
 
-**1. INSERT idempotente em `public.knowledge_base`** (16 registros)
+Todos com `source = alo-frango-ep10-2024`, `status = ativo`, tags base `{alo-frango, ep10}` + tags específicas, e `content` consolidando o item completo (texto otimizado para busca lexical do RAG v1).
 
-Metadados comuns:
-- `source`: `alo-frango-ep10-2024`
-- `source_version`: 1, `chunk_version`: 1, `embedding_version`: 1, `status`: `ativo`
-- `tags` base: `{alo-frango, ep10, frango-assado, casal-empreendedor}` + tags específicas de cada chunk
-- `content`: consolida resumo + corpo + perguntas que responde + aplicação prática num único texto otimizado para RAG lexical
-- Idempotência via `WHERE NOT EXISTS` por `chunk_id`
+**Perguntas e respostas (10 chunks)** — `area = exemplos`
+| chunk_id | Pergunta |
+|---|---|
+| RAG-ALO-QA-001 | Principal mudança operacional do Alô Frango |
+| RAG-ALO-QA-002 | Por que vender melhor é melhor que vender mais |
+| RAG-ALO-QA-003 | O que prejudicava a entrega antes da mudança |
+| RAG-ALO-QA-004 | Por que fotos do cardápio são importantes |
+| RAG-ALO-QA-005 | Como o Alô Frango aumentou ticket médio |
+| RAG-ALO-QA-006 | Erro do João ao tentar diversificar |
+| RAG-ALO-QA-007 | O dono deve sair da operação? |
+| RAG-ALO-QA-008 | O que fez o Alô Frango crescer após mentorias |
+| RAG-ALO-QA-009 | Diferencial do produto |
+| RAG-ALO-QA-010 | Planos futuros (expansão / multiculinária) |
 
-Distribuição (mantendo a categorização original do material):
+**Regras práticas (7 chunks)** — `area = estrategia` / `operacao` / `marketing` / `vendas` / `gestao` / `expansao`
+- `RAG-ALO-RG-001` Limite de entregas por motoboy
+- `RAG-ALO-RG-002` Cardápio precisa vender visualmente
+- `RAG-ALO-RG-003` Ticket médio como prioridade estratégica
+- `RAG-ALO-RG-004` Produtos lucrativos precisam de destaque ativo
+- `RAG-ALO-RG-005` Não diversificar antes de consolidar
+- `RAG-ALO-RG-006` Conhecimento precisa virar ação operacional
+- `RAG-ALO-RG-007` Expansão deve replicar cultura e processo
 
-| `chunk_id` | Título | `area` |
-|---|---|---|
-| RAG-ALO-001 | Vender melhor é mais importante do que vender mais | estrategia |
-| RAG-ALO-002 | Limitar entregas por motoboy melhora qualidade | operacao |
-| RAG-ALO-003 | Reclamações de entrega afetam saúde emocional da equipe | atendimento |
-| RAG-ALO-004 | Cardápio no delivery funciona como fachada da loja | marketing |
-| RAG-ALO-005 | Produto, embalagem e entrega trabalham juntos | produto |
-| RAG-ALO-006 | Adicionais e combos aumentam ticket médio e margem | vendas |
-| RAG-ALO-007 | Produtos de combate devem ser destacados | vendas |
-| RAG-ALO-008 | Dono presente na operação em fases críticas | gestao |
-| RAG-ALO-009 | Diversificar cedo demais prejudica negócio principal | estrategia |
-| RAG-ALO-010 | Conhecimento só gera resultado quando aplicado | execucao |
-| RAG-ALO-011 | Origem do Alô Frango: oportunidade local | exemplos |
-| RAG-ALO-012 | Receita, preparo e marinada como diferenciais | produto |
-| RAG-ALO-013 | Influenciadores e clientes locais aceleram a marca | marketing |
-| RAG-ALO-014 | Crescimento sem qualidade de entrega gera perda de clientes | delivery |
-| RAG-ALO-015 | Empreender em casal exige alinhamento e propósito | cultura |
-| RAG-ALO-016 | Expansão deve preservar cultura, produto e método | expansao |
+**Checklists (5 chunks)** — `area = checklists`
+- `RAG-ALO-CK-001` Revisão de delivery
+- `RAG-ALO-CK-002` Cardápio vendedor
+- `RAG-ALO-CK-003` Aumento de ticket médio
+- `RAG-ALO-CK-004` Antes de abrir outra unidade
+- `RAG-ALO-CK-005` Gestão do dono
 
-**2. Gerar embeddings (RAG v1 lexical)**
-- `POST /functions/v1/embed-knowledge` com `{"table":"knowledge_base","limit":100}` para popular o vetor `embedding` dos 16 novos registros.
+**Diagnósticos (5 chunks)** — `area = diagnostico`
+- `RAG-ALO-DG-001` Muitas reclamações de entrega
+- `RAG-ALO-DG-002` Produto bom, vendas abaixo do potencial
+- `RAG-ALO-DG-003` Faturamento alto, negócio estagnado
+- `RAG-ALO-DG-004` Operação sobrecarregada por excesso de volume
+- `RAG-ALO-DG-005` Expansão com risco de perda de padrão
 
-**3. Verificação final**
-- `SELECT count(*)` filtrando por `source = 'alo-frango-ep10-2024'` para confirmar 16 registros, todos com `status='ativo'` e `embedding IS NOT NULL`.
-- Reportar contagem total final da base.
+**Exemplos práticos (6 chunks)** — `area = exemplos`
+- `RAG-ALO-EX-001` Motoboys com 4–5 entregas
+- `RAG-ALO-EX-002` Cardápio profissional sem desejo
+- `RAG-ALO-EX-003` Combo frango + 2 linguiças (R$40)
+- `RAG-ALO-EX-004` João tirou foco do Alô Frango
+- `RAG-ALO-EX-005` Influenciador acelerou demanda
+- `RAG-ALO-EX-006` Unidade Maraponga premium e padronizada
+
+**Glossário (8 chunks)** — `area = glossario`
+- `RAG-ALO-GL-001` Frango atropelado
+- `RAG-ALO-GL-002` Ticket médio
+- `RAG-ALO-GL-003` Produto de combate
+- `RAG-ALO-GL-004` Roteirização
+- `RAG-ALO-GL-005` Valor percebido
+- `RAG-ALO-GL-006` Fachada do delivery
+- `RAG-ALO-GL-007` Ficha técnica
+- `RAG-ALO-GL-008` Multiculinária
+
+### Detalhes técnicos
+
+1. **INSERT idempotente** em `public.knowledge_base` (35 linhas) via `WHERE NOT EXISTS` por `chunk_id`. Sem migração de schema — só dados.
+2. **Tags**: cada chunk recebe `{alo-frango, ep10}` + as tags específicas do material (ex.: `#delivery #logistica #operacao`, `#combo #ticketmedio #vendas`, etc.).
+3. **Embeddings**: chamar `POST /functions/v1/embed-knowledge` com `{"table":"knowledge_base","limit":100}` para popular o vetor dos 35 novos.
+4. **Pontos a validar** (seção 10 do material): NÃO viram chunks isolados (não são heurísticas). Ficam como uma nota num único chunk `RAG-ALO-NOTE-001` (`area = notas`) flagando o que precisa de validação numérica, para a IA evitar afirmar como fato.
+   - Total real então: **36 chunks** novos.
+5. **Verificação final**: `SELECT count(*) WHERE source = 'alo-frango-ep10-2024'` → esperado **52** (16 + 36); todos `status = 'ativo'` e `embedding IS NOT NULL`.
 
 ### Fora do escopo
-- Não alterar UI da página **Base de conhecimento** (chunks aparecem automaticamente agrupados por `area`).
-- Não tocar nos 253 chunks existentes.
+- Não mexer nos 269 chunks atuais.
+- Não alterar UI da página **Base de conhecimento** (vai aparecer agrupado por `area` automaticamente — surgirão novas seções `checklists`, `diagnostico`, `glossario`, `notas`).
 - Não trocar o RAG lexical v1 por embeddings semânticos.
 
 ### Confirma?
-Posso prosseguir com a inserção dos 16 chunks do Alô Frango?
+Posso prosseguir com a inserção dos 36 chunks (Q&A + regras + checklists + diagnósticos + exemplos + glossário + nota de validação)?
