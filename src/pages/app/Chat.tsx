@@ -3,47 +3,110 @@ import ReactMarkdown from "react-markdown";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, Send, Sparkles, Trash2, User } from "lucide-react";
+import { ImagePlus, MessageSquare, Send, Sparkles, Trash2, User, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = {
+  role: "user" | "assistant";
+  content: string;
+  images?: string[]; // data URLs (somente exibição local / envio)
+};
 
 const SUGGESTIONS = [
   "Como aumentar meu ticket médio?",
   "Como reduzir cancelamentos?",
   "Vale a pena entrar no Super Restaurante?",
-  "Como melhorar minha conversão de visita em pedido?",
+  "Avalie a foto do meu prato (anexe uma imagem)",
 ];
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-gestor`;
+const MAX_IMAGES = 3;
+const MAX_IMAGE_MB = 5;
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function Chat() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
-  async function send(text: string) {
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const remaining = MAX_IMAGES - pendingImages.length;
+    if (remaining <= 0) {
+      toast({ title: "Limite de imagens", description: `Máximo ${MAX_IMAGES} imagens por mensagem.`, variant: "destructive" });
+      return;
+    }
+    const accepted: string[] = [];
+    for (const file of Array.from(files).slice(0, remaining)) {
+      if (!file.type.startsWith("image/")) {
+        toast({ title: "Arquivo inválido", description: "Envie apenas imagens.", variant: "destructive" });
+        continue;
+      }
+      if (file.size > MAX_IMAGE_MB * 1024 * 1024) {
+        toast({ title: "Imagem muito grande", description: `Máx ${MAX_IMAGE_MB}MB por imagem.`, variant: "destructive" });
+        continue;
+      }
+      try {
+        accepted.push(await fileToDataUrl(file));
+      } catch {
+        toast({ title: "Erro ao ler imagem", variant: "destructive" });
+      }
+    }
+    if (accepted.length) setPendingImages((prev) => [...prev, ...accepted]);
+  }
+
+  async function send(text: string, imagesOverride?: string[]) {
     const trimmed = text.trim();
-    if (!trimmed || loading) return;
+    const images = imagesOverride ?? pendingImages;
+    if ((!trimmed && images.length === 0) || loading) return;
     setInput("");
-    const userMsg: Msg = { role: "user", content: trimmed };
+    setPendingImages([]);
+    const userMsg: Msg = {
+      role: "user",
+      content: trimmed || (images.length ? "Avalie esta(s) imagem(ns)." : ""),
+      images: images.length ? images : undefined,
+    };
     const next = [...messages, userMsg];
     setMessages(next);
     setLoading(true);
 
     try {
+      // Converte para o formato esperado pelo backend (texto + image parts)
+      const apiMessages = next.map((m) => {
+        if (m.images && m.images.length > 0) {
+          return {
+            role: m.role,
+            content: [
+              { type: "text", text: m.content },
+              ...m.images.map((url) => ({ type: "image_url", image_url: { url } })),
+            ],
+          };
+        }
+        return { role: m.role, content: m.content };
+      });
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ messages: apiMessages }),
       });
 
       const data = await resp.json().catch(() => ({} as any));
@@ -54,7 +117,7 @@ export default function Chat() {
           description: data?.error ?? "Tente novamente.",
           variant: "destructive",
         });
-        setMessages((prev) => prev.filter((m, i) => !(i === prev.length - 1 && m.role === "user" && m.content === trimmed)));
+        setMessages((prev) => prev.slice(0, -1));
         return;
       }
 
@@ -75,6 +138,7 @@ export default function Chat() {
   function clearChat() {
     setMessages([]);
     setInput("");
+    setPendingImages([]);
   }
 
   return (
@@ -89,7 +153,7 @@ export default function Chat() {
         )}
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        Faça perguntas livres sobre sua operação de delivery. O Gestor IA responde com base na mesma base de conhecimento usada no diagnóstico.
+        Faça perguntas livres ou anexe imagens (foto de prato, embalagem, print do iFood) para a IA avaliar.
       </p>
 
       <Card className="flex-1 overflow-hidden flex flex-col shadow-card">
@@ -99,7 +163,7 @@ export default function Chat() {
               <MessageSquare className="h-12 w-12 text-muted-foreground/40" />
               <div>
                 <p className="font-medium">Comece a conversar</p>
-                <p className="text-sm text-muted-foreground">Escolha uma sugestão ou digite sua pergunta abaixo.</p>
+                <p className="text-sm text-muted-foreground">Escolha uma sugestão, digite sua pergunta ou anexe uma imagem.</p>
               </div>
               <div className="grid sm:grid-cols-2 gap-2 max-w-2xl w-full">
                 {SUGGESTIONS.map((s) => (
@@ -122,12 +186,24 @@ export default function Chat() {
                 {m.role === "user" ? <User className="h-4 w-4" /> : <Sparkles className="h-4 w-4 text-primary" />}
               </div>
               <div className={`max-w-[85%] rounded-2xl px-4 py-2 ${m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                {m.images && m.images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {m.images.map((src, idx) => (
+                      <img
+                        key={idx}
+                        src={src}
+                        alt={`anexo ${idx + 1}`}
+                        className="h-32 w-32 object-cover rounded-lg border border-border/50"
+                      />
+                    ))}
+                  </div>
+                )}
                 {m.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-headings:my-2">
                     <ReactMarkdown>{m.content || "…"}</ReactMarkdown>
                   </div>
                 ) : (
-                  <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                  m.content && <p className="text-sm whitespace-pre-wrap">{m.content}</p>
                 )}
               </div>
             </div>
@@ -149,10 +225,46 @@ export default function Chat() {
           )}
         </div>
 
+        {pendingImages.length > 0 && (
+          <div className="border-t px-3 pt-3 flex flex-wrap gap-2">
+            {pendingImages.map((src, idx) => (
+              <div key={idx} className="relative">
+                <img src={src} alt={`preview ${idx + 1}`} className="h-16 w-16 object-cover rounded-md border border-border" />
+                <button
+                  type="button"
+                  onClick={() => setPendingImages((prev) => prev.filter((_, i) => i !== idx))}
+                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow"
+                  aria-label="Remover imagem"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form
           onSubmit={(e) => { e.preventDefault(); send(input); }}
           className="border-t p-3 flex gap-2 items-end"
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || pendingImages.length >= MAX_IMAGES}
+            title="Anexar imagem"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -162,12 +274,12 @@ export default function Chat() {
                 send(input);
               }
             }}
-            placeholder="Pergunte algo ao Gestor IA…"
+            placeholder={pendingImages.length ? "Descreva o que quer avaliar (opcional)…" : "Pergunte algo ou anexe uma imagem…"}
             rows={1}
             className="min-h-[40px] max-h-32 resize-none"
             disabled={loading}
           />
-          <Button type="submit" disabled={loading || !input.trim()} size="icon">
+          <Button type="submit" disabled={loading || (!input.trim() && pendingImages.length === 0)} size="icon">
             <Send className="h-4 w-4" />
           </Button>
         </form>
