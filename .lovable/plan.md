@@ -1,70 +1,121 @@
+# Editor/Gerador de Imagens no Chat com inteligência da base RAG
+
 ## Objetivo
+Permitir que, dentro do chat (`/app/chat`), o usuário peça **banners**, **imagens promocionais** ou **melhorias de fotos de produto**. A IA decide sozinha quando gerar/editar imagem (via tool-calling) e usa as regras visuais da base RAG (foto de prato, composição, cores) para guiar o resultado.
 
-Validar a qualidade da base RAG completa (**614 chunks ativos, 12 fontes, embeddings Gemini v2**) executando uma bateria de perguntas que exercite cada fonte e as principais áreas de conhecimento.
+---
 
-## Cobertura atual da base
+## Arquitetura
 
-| Fonte | Chunks |
-|---|---|
-| entrevista_camila_blanco_pastelia | 80 |
-| cozinha-delivery-ana-flavia-2024 | 76 |
-| conta-ai-joao-3lojas-2024 | 71 |
-| analise-loja-ifood-visao-cliente-2024 | 64 |
-| alo-frango-ep10-2024 | 58 |
-| fala-parceiro-ep05-precificacao-2024 | 58 |
-| embalagens-delivery-2024 | 56 |
-| aula_ifood_v1 | 55 |
-| fala-parceiro-ep06-promocoes-2024 | 54 |
-| maikon_rangel_just_burger | 20 |
-| manual | 12 |
-| ifood-cancelamentos-2024 | 10 |
+```text
+Usuário no Chat
+   │  "faça um banner de hambúrguer artesanal"
+   │  ou: "melhora essa foto" + imagem anexada
+   ▼
+chat-gestor (gemini-2.5-flash) ─── já tem RAG ───┐
+   │                                              │
+   ├─► Tool-calling decide:                       │
+   │     • só texto?  → fluxo atual               │
+   │     • imagem?    → chama tool                │
+   │                                              ▼
+   ├─► Busca extra na knowledge_base com query
+   │   "fotografia de produto, banner, composição visual"
+   │
+   ├─► Monta prompt enriquecido (regras RAG + pedido do user)
+   │
+   ├─► POST gateway (google/gemini-2.5-flash-image)
+   │
+   ├─► Recebe base64 → upload no bucket chat-images
+   │
+   └─► Retorna { content: "texto explicativo", images: [signedUrl] }
+   ▼
+Chat.tsx renderiza imagem inline + texto
+```
 
-## Plano de execução
+**Por que Storage e não base64 direto:** uma imagem em base64 pesa 500KB–2MB. Mantê-la no histórico estoura payload do gateway nas próximas mensagens. Salvar em bucket privado e devolver signed URL resolve.
 
-### 1. Teste de recuperação semântica direta (SQL)
-Para cada uma das 12 fontes, executar 1 pergunta-âncora via `match_knowledge` (RPC vetorial) e verificar se o top-1 vem da fonte esperada. Mede precisão de recall por fonte.
+---
 
-### 2. Teste end-to-end via `chat-gestor`
-Disparar 12 perguntas reais, uma por área-tema, simulando o usuário no app:
+## Decisões já tomadas
+- **Modelo:** `google/gemini-2.5-flash-image` (Nano Banana Flash) — ~$0,04/imagem.
+- **Limite:** 3 imagens por conversa (anti-abuso).
+- **Bucket:** `chat-images` privado, signed URLs de 7 dias.
+- **RAG genérica:** busca semântica já cobre os chunks visuais existentes; sem necessidade de re-tagging agora.
 
-| # | Pergunta | Fonte esperada |
-|---|---|---|
-| 1 | Qual CMV ideal para delivery? | ep05-precificacao |
-| 2 | Como criar combos que vendem mais? | ep06-promocoes |
-| 3 | Como reduzir cancelamentos no iFood? | ifood-cancelamentos |
-| 4 | Que embalagem usar para hambúrguer delivery? | embalagens-delivery |
-| 5 | Como a Camila escalou a Pastelia? | camila_blanco_pastelia |
-| 6 | Como organizar cozinha de dark kitchen? | cozinha-delivery-ana-flavia |
-| 7 | Como gerenciar 3 lojas no iFood? | conta-ai-joao-3lojas |
-| 8 | O que avaliar na visão do cliente no app? | analise-loja-ifood |
-| 9 | Estratégias do Aló Frango para crescer? | alo-frango-ep10 |
-| 10 | Como o Maikon estruturou o Just Burger? | maikon_rangel_just_burger |
-| 11 | Boas práticas básicas de iFood? | aula_ifood_v1 |
-| 12 | Como precificar produto isca? | manual / ep05 |
+---
 
-### 3. Teste de áreas críticas
-3 perguntas cruzando áreas (precificacao + promocoes + cancelamentos) para validar que o retrieval combina chunks de fontes diferentes quando a dúvida é multi-tópico.
+## Passos de implementação
 
-### 4. Métricas coletadas
-- **has_context**: se o RAG trouxe chunks (log `chat_gestor.rag`)
-- **elapsed_ms** do retrieval
-- **fonte do top-1** vs fonte esperada
-- **qualidade da resposta**: a IA cita a fonte corretamente e responde em PT-BR direto
+### 1. Migration — bucket de Storage
+Criar bucket privado `chat-images` + policies RLS:
+- INSERT: service role (edge function escreve).
+- SELECT: dono do arquivo (path prefixado por `user_id/`).
 
-### 5. Relatório final
-Tabela consolidada com:
-- ✅/⚠️/❌ por pergunta
-- Latência média de RAG
-- Fontes sub-utilizadas (que nunca apareceram no top-3)
-- Recomendações (se houver chunks "órfãos" sem recall)
+### 2. Refatorar `supabase/functions/chat-gestor/index.ts`
+- Definir tool `generate_or_edit_image` no payload do `gemini-2.5-flash`:
+  - parâmetros: `prompt` (string), `mode` ("generate" | "edit"), `style_hint` (string opcional).
+- Loop de tool-calling (max 2 iterações):
+  1. Chamar `gemini-2.5-flash` com tools.
+  2. Se `tool_calls` presente: executar `callImageModel()`, fazer upload, devolver resultado como `tool` message, voltar ao modelo para escrever a resposta final em texto.
+  3. Se sem tool_calls: usar `content` direto (fluxo atual).
+- Nova função `callImageModel(prompt, inputImageDataUrl?)`:
+  - Busca extra na `knowledge_base` com query visual + concatena regras no prompt.
+  - POST `https://ai.gateway.lovable.dev/v1/chat/completions` com `model: "google/gemini-2.5-flash-image"`, `modalities: ["image", "text"]`.
+  - Extrai `data.choices[0].message.images[0].image_url.url` (base64).
+- Nova função `uploadGeneratedImage(base64, userId)`:
+  - Decodifica base64 → upload em `chat-images/{userId}/{uuid}.png`.
+  - Gera signed URL (7 dias) e retorna.
+- Contagem de imagens já geradas: percorre `messages[]` e conta entradas com `images` no role assistant. Se ≥ 3, retorna texto educado pedindo nova conversa.
+- Logs estruturados: `evt: "chat_gestor.image_generated"` com `elapsed_ms`, `mode`, `kb_hits`.
+- Tratamento 402/429 do modelo de imagem com mensagens claras.
 
-## Detalhes técnicos
+### 3. Frontend — `src/pages/app/Chat.tsx`
+- Ampliar tipo `Msg` para aceitar `generatedImages?: string[]` (URLs do backend).
+- Após receber resposta, se `data.images` vier preenchido, anexar à mensagem do assistant.
+- Renderização: grid de imagens abaixo do texto, com:
+  - Click → abrir em nova aba.
+  - Botão "Baixar" (download via fetch + blob).
+- Manter o efeito de typing apenas para o texto; imagens entram ao final.
+- Toast específico se backend devolver erro de limite (3 imagens).
 
-- Usar `supabase--curl_edge_functions` em `/chat-gestor` com sessão autenticada
-- Usar `supabase--read_query` com `SELECT ... FROM knowledge_base ORDER BY embedding <=> query_embedding` para teste de recall puro (gerando embedding da query via função `embed-knowledge` ou aproximação por título)
-- Inspecionar `supabase--edge_function_logs` (`chat-gestor`) para capturar `evt: chat_gestor.rag`
-- Nenhuma alteração de schema ou código — somente leitura e invocações
+### 4. QA manual após deploy
+Cenários a testar:
+- "gera um banner para promoção de hambúrguer artesanal" → deve gerar.
+- "melhora essa foto" + imagem anexada → deve editar.
+- "como aumentar ticket médio?" → **NÃO** deve gerar (validar tool-calling condicional).
+- 4ª imagem na mesma conversa → deve recusar com mensagem clara.
 
-## Entregável
+### 5. Logs e observabilidade
+Após primeiros usos reais, conferir em `supabase--edge_function_logs`:
+- Latência média `chat_gestor.image_generated` (alvo: < 8s).
+- Frequência de 402/429 do modelo de imagem.
+- Quantos chunks RAG foram injetados no prompt.
 
-Resposta no chat com a tabela de resultados das 15 perguntas (12 por fonte + 3 cruzadas), latências e diagnóstico final da saúde da base RAG.
+---
+
+## O que NÃO entra agora
+- Variações múltiplas (gerar 4 opções) — fica para v2 se demanda surgir.
+- Editor visual no front (recortar, redimensionar) — usuário baixa e edita por fora.
+- Tags `foto-produto` / `banner` específicas na knowledge_base — busca semântica genérica já cobre.
+- Histórico persistente das imagens em tabela — ficam no bucket, signed URL expira em 7d.
+
+---
+
+## Arquivos afetados
+
+```text
+supabase/
+├── functions/chat-gestor/index.ts                   ← refatorado
+└── migrations/<timestamp>_chat_images_bucket.sql    ← novo
+
+src/pages/app/Chat.tsx                                ← renderiza imagens
+```
+
+Sem novas tabelas, sem nova edge function. Tudo consolidado no `chat-gestor`.
+
+---
+
+## Custo estimado em produção
+- Nano Banana Flash: **~$0,04/imagem (~R$ 0,22)**.
+- Limite de 3/conversa + RAG só busca quando tool é chamada → custo extra controlado.
+- $1 grátis mensal cobre ~25 imagens; depois debita do AI balance.
