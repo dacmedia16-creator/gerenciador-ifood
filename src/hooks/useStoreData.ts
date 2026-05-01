@@ -1,43 +1,78 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 export function useStoreData(storeId?: string) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [refresh, setRefresh] = useState(0);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!storeId) return;
-    setLoading(true);
-    (async () => {
+  const query = useQuery({
+    queryKey: ["storeData", storeId],
+    enabled: !!storeId,
+    staleTime: 60_000,
+    queryFn: async () => {
       const [s, m, p, r, c, ca, d, a] = await Promise.all([
-        supabase.from("stores").select("*").eq("id", storeId).maybeSingle(),
-        supabase.from("metrics").select("*").eq("store_id", storeId).order("period_start"),
-        supabase.from("products").select("*").eq("store_id", storeId).order("sales_quantity", { ascending: false }),
-        supabase.from("reviews").select("*").eq("store_id", storeId).order("created_at", { ascending: false }),
-        supabase.from("competitors").select("*").eq("store_id", storeId),
-        supabase.from("campaigns").select("*").eq("store_id", storeId),
-        supabase.from("diagnostics").select("*").eq("store_id", storeId).order("created_at", { ascending: false }),
-        supabase.from("action_plans").select("*").eq("store_id", storeId).order("created_at", { ascending: false }),
+        supabase.from("stores").select("*").eq("id", storeId!).maybeSingle(),
+        supabase.from("metrics")
+          .select("id, period_start, period_end, revenue, orders, average_ticket, cancellation_rate")
+          .eq("store_id", storeId!)
+          .order("period_start"),
+        supabase.from("products")
+          .select("id, name, sale_price, cost_price, estimated_margin, has_photo, sales_quantity, category")
+          .eq("store_id", storeId!)
+          .order("sales_quantity", { ascending: false })
+          .limit(500),
+        supabase.from("reviews")
+          .select("id, rating, sentiment, comment, created_at")
+          .eq("store_id", storeId!)
+          .order("created_at", { ascending: false })
+          .limit(500),
+        supabase.from("competitors").select("*").eq("store_id", storeId!),
+        supabase.from("campaigns").select("*").eq("store_id", storeId!),
+        supabase.from("diagnostics")
+          .select("id, area, problem, severity, recommendation, created_at")
+          .eq("store_id", storeId!)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase.from("action_plans")
+          .select("id, title, area, priority, status, impact, effort, description, created_at")
+          .eq("store_id", storeId!)
+          .order("created_at", { ascending: false })
+          .limit(50),
       ]);
 
-      // RLS-aware redirect: store inexistente ou sem acesso
-      if (!s.data) {
-        toast.error("Loja não encontrada ou sem acesso.");
-        navigate("/app/stores", { replace: true });
-        return;
-      }
+      return {
+        store: s.data,
+        metrics: m.data || [],
+        products: p.data || [],
+        reviews: r.data || [],
+        competitors: c.data || [],
+        campaigns: ca.data || [],
+        diagnostics: d.data || [],
+        actions: a.data || [],
+      };
+    },
+  });
 
-      setData({
-        store: s.data, metrics: m.data || [], products: p.data || [], reviews: r.data || [],
-        competitors: c.data || [], campaigns: ca.data || [], diagnostics: d.data || [], actions: a.data || [],
-      });
-      setLoading(false);
-    })();
-  }, [storeId, refresh, navigate]);
+  useEffect(() => {
+    if (query.data && !query.data.store) {
+      toast.error("Loja não encontrada ou sem acesso.");
+      navigate("/app/stores", { replace: true });
+    }
+  }, [query.data, navigate]);
 
-  return { ...(data || {}), loading, reload: () => setRefresh((x) => x + 1) };
+  const data = query.data;
+  return {
+    store: data?.store,
+    metrics: data?.metrics ?? [],
+    products: data?.products ?? [],
+    reviews: data?.reviews ?? [],
+    competitors: data?.competitors ?? [],
+    campaigns: data?.campaigns ?? [],
+    diagnostics: data?.diagnostics ?? [],
+    actions: data?.actions ?? [],
+    loading: query.isLoading,
+    reload: () => query.refetch(),
+  };
 }
