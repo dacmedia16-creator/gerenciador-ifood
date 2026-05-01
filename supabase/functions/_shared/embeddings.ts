@@ -1,12 +1,15 @@
 // ============================================================
 // RAG embeddings — semântico (v2) com fallback lexical (v1).
 //
-// v2 (default): chama Lovable AI Gateway com google/text-embedding-004
-//   (768 dims, casa exatamente com a coluna vector(768) das tabelas).
+// v2 (default): chama Google Generative Language API diretamente
+//   (text-embedding-004, 768 dims) usando GEMINI_API_KEY.
+//   Casa exatamente com a coluna vector(768) das tabelas.
+//   Obs: o Lovable AI Gateway hoje só expõe modelos de chat/imagem,
+//   por isso vamos direto na API do Google para embeddings.
 //
 // v1 (fallback): hashing FNV-1a sobre tokens. NÃO captura semântica,
-//   só sobreposição de palavras. Usado quando o gateway falha
-//   (429/402/timeout) ou quando RAG_MODE=lexical é forçado.
+//   só sobreposição de palavras. Usado quando a API falha
+//   (429/5xx/timeout) ou quando RAG_MODE=lexical é forçado.
 //
 // Convenção de versão: registros embeddados com v2 têm
 // embedding_version = 2 nas tabelas; v1 = 1. Consultas só comparam
