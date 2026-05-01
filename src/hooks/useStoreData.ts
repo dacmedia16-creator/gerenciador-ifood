@@ -19,12 +19,12 @@ export function useStoreData(storeId?: string) {
           .eq("store_id", storeId!)
           .order("period_start"),
         supabase.from("products")
-          .select("id, name, sale_price, cost_price, estimated_margin, has_photo, sales_quantity, category")
+          .select("*")
           .eq("store_id", storeId!)
           .order("sales_quantity", { ascending: false })
           .limit(500),
         supabase.from("reviews")
-          .select("id, rating, sentiment, comment, created_at")
+          .select("*")
           .eq("store_id", storeId!)
           .order("created_at", { ascending: false })
           .limit(500),
