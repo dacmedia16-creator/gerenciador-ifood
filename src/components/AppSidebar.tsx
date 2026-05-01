@@ -49,7 +49,7 @@ const storeData = (id: string) => [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
   const params = useParams();
@@ -61,6 +61,7 @@ export function AppSidebar() {
   const storeId = match?.[1] || params.id;
 
   const isActive = (url: string) => pathname === url;
+  const closeOnMobile = () => { if (isMobile) setOpenMobile(false); };
 
   return (
     <Sidebar collapsible="icon">
