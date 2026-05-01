@@ -240,6 +240,45 @@ export default function Chat() {
                     {m.typing && (
                       <span className="inline-block w-1.5 h-4 align-[-2px] ml-0.5 bg-primary/70 animate-pulse rounded-sm" />
                     )}
+                    {!m.typing && m.generatedImages && m.generatedImages.length > 0 && (
+                      <div className="not-prose mt-3 grid gap-2 sm:grid-cols-2">
+                        {m.generatedImages.map((url, idx) => (
+                          <div key={idx} className="group relative overflow-hidden rounded-lg border border-border bg-background">
+                            <a href={url} target="_blank" rel="noreferrer">
+                              <img
+                                src={url}
+                                alt={`imagem gerada ${idx + 1}`}
+                                className="w-full h-auto object-cover transition-transform group-hover:scale-[1.02]"
+                                loading="lazy"
+                              />
+                            </a>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(url);
+                                  const blob = await res.blob();
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = blobUrl;
+                                  a.download = `gestor-ia-${Date.now()}.png`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  a.remove();
+                                  URL.revokeObjectURL(blobUrl);
+                                } catch {
+                                  toast({ title: "Falha no download", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              Baixar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   m.content && <p className="text-sm whitespace-pre-wrap">{m.content}</p>
