@@ -18,8 +18,8 @@ type Msg = {
 const SUGGESTIONS = [
   "Como aumentar meu ticket médio?",
   "Como reduzir cancelamentos?",
-  "Vale a pena entrar no Super Restaurante?",
-  "Avalie a foto do meu prato (anexe uma imagem)",
+  "Crie um banner de promoção de hambúrguer",
+  "Melhore esta foto do meu prato (anexe uma imagem)",
 ];
 
 const MAX_IMAGES = 3;
