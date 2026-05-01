@@ -51,7 +51,7 @@ export default function Report() {
     const res = await invokeAI<{ diagnosis: any }>("ai-consult", { storeId: id });
     if (res?.diagnosis) {
       setAiConsult(res.diagnosis);
-      toast.success("Análise consultiva gerada!");
+      toast.success("Relatório gerado!");
       await loadReports();
     }
     setAiLoading(false);
@@ -82,7 +82,7 @@ export default function Report() {
       <EmptyState
         icon={FileText}
         title="Cadastre dados para gerar o relatório"
-        description="Rode um diagnóstico no funil ou adicione produtos/avaliações para gerar o relatório consultivo."
+        description="Rode um diagnóstico no funil ou adicione produtos/avaliações para gerar o relatório da loja."
         action={
           <Button asChild className="gradient-primary text-primary-foreground">
             <Link to={`/app/diagnosis/new`}>Novo Diagnóstico</Link>
@@ -117,7 +117,7 @@ export default function Report() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between no-print flex-wrap gap-2">
-        <h1 className="text-2xl font-bold">Relatório consultivo</h1>
+        <h1 className="text-2xl font-bold">Relatório da minha loja</h1>
         <div className="flex gap-2 flex-wrap">
           <Button onClick={runAIConsult} disabled={aiLoading} variant="default" className="gradient-primary text-primary-foreground">
             {aiLoading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Analisando…</> : <><Sparkles className="h-4 w-4 mr-1" />{aiConsult ? "Atualizar consultoria IA" : "Consultar Gestor IA"}</>}

@@ -16,7 +16,7 @@ export default function Score() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Score detalhado</h1>
-        <p className="text-sm text-muted-foreground">Análise consultiva por área operacional.</p>
+        <p className="text-sm text-muted-foreground">Análise por área da sua operação.</p>
       </div>
 
       <Card className="p-8 text-center shadow-elegant">
