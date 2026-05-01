@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
 
     const systemMsg = `${SYSTEM_PROMPT}\n\nKNOWLEDGE_CONTEXT (top 5 trechos da base):\n${kbContext || "(nenhum trecho relevante encontrado)"}`;
 
+    // Resposta NÃO-streaming: mais robusta em redes mobile/proxies que bufferam SSE.
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -82,7 +83,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        stream: true,
+        stream: false,
         messages: [
           { role: "system", content: systemMsg },
           ...messages.filter((m) => m.role === "user" || m.role === "assistant"),
@@ -108,8 +109,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(aiResp.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+    const data = await aiResp.json();
+    const content: string = data?.choices?.[0]?.message?.content ?? "";
+    return new Response(JSON.stringify({ content }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("chat-gestor error", e);
