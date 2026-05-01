@@ -1,96 +1,97 @@
-# Plano — Ativar RAG semântico real
+# Adicionar episódio "Fala Parceiro #6 — Promoções e Vendas no iFood" à base RAG
 
-Hoje `embedTextWithMeta` sempre devolve `mode: "degraded"` com vetores lexicais (FNV hash de palavras). Os 502 chunks da `knowledge_base` estão vetorizados, mas com o **mesmo esquema lexical** — então mesmo "ligando" o gateway, é preciso **reembedar tudo** para que query e índice falem a mesma língua.
+## Objetivo
+Incorporar todo o material da transcrição (chunks RAG-001 a RAG-015, FAQs, regras práticas, checklists, diagnósticos, exemplos e glossário) na tabela `knowledge_base`, gerando embeddings semânticos com Gemini para que a IA consultiva (chat-gestor, ai-consult, ai-diagnose) passe a recuperar esse conhecimento em respostas, diagnósticos e recomendações.
 
-A coluna `embedding` é `vector(768)` em `knowledge_base` e `case_library` — combina exatamente com `google/text-embedding-004` do Lovable AI Gateway (768 dims). Sem migration de schema.
+## Fonte e versionamento
+- `source`: `fala-parceiro-ep06-promocoes-2024`
+- `source_version`: 1
+- `chunk_version`: 1
+- `embedding_version`: 0 na inserção → atualizado para 2 pela função `embed-knowledge`
+- `status`: `ativo`
+- Prefixo de `chunk_id`: `RAG-FP06-...` (segue o padrão das outras fontes como `RAG-CAJ-...`)
 
----
+## Mapa de chunks a inserir (≈ 60 registros)
 
-## Mudanças
+### 1. Conhecimento principal (15 chunks — áreas variadas)
+Mapeamento direto dos chunks RAG-001 a RAG-015 da transcrição para `area` existente na base:
 
-### 1. `supabase/functions/_shared/embeddings.ts`
-Implementar embedding real via Lovable AI Gateway, com fallback automático para o lexical atual.
+| chunk_id | area | título curto |
+|---|---|---|
+| RAG-FP06-001 | estrategia | iFood cresce junto com o parceiro |
+| RAG-FP06-002 | operacao | Constância na plataforma aumenta vendas |
+| RAG-FP06-003 | vendas | Campanha inteligente para novos clientes |
+| RAG-FP06-004 | vendas | Frete grátis aumenta conversão |
+| RAG-FP06-005 | estrategia | Precificação que sustenta promoção |
+| RAG-FP06-006 | diagnostico | Nota, cancelamento e tempo afetam ranking |
+| RAG-FP06-007 | cardapio | Cardápio atrativo converte visita em pedido |
+| RAG-FP06-008 | cardapio | Não alterar best sellers sem necessidade |
+| RAG-FP06-009 | marketing | Anúncio dá visibilidade, não garante venda |
+| RAG-FP06-010 | estrategia | Datas sazonais geram picos relevantes |
+| RAG-FP06-011 | vendas | Pós-feriado é oportunidade de demanda |
+| RAG-FP06-012 | operacao | Preparação operacional em datas de pico |
+| RAG-FP06-013 | vendas | Cupom para novo cliente reduz barreira |
+| RAG-FP06-014 | atendimento | Experiência completa determina recompra |
+| RAG-FP06-015 | diagnostico | Métricas do Portal do Parceiro |
 
-- Nova função `embedTextSemantic(text)`: chama `https://ai.gateway.lovable.dev/v1/embeddings` com modelo `google/text-embedding-004` usando `LOVABLE_API_KEY`.
-- `embedTextWithMeta` passa a:
-  - Tentar semântico primeiro (se `LOVABLE_API_KEY` presente e `RAG_MODE !== "lexical"`).
-  - Em sucesso → `{ vector, mode: "full", reason: "text-embedding-004" }`.
-  - Em erro (429/402/timeout/dim mismatch) → cai no `embedTextLexical` com `mode: "degraded"` e `reason` explicando ("rate_limited" | "credits_exhausted" | "gateway_error" | "lexical_fallback").
-- Cache em memória (Map LRU pequeno, ~200 entradas) por hash do texto, para não pagar embedding 2x na mesma invocação.
-- Constante `EMBED_MODEL_VERSION = 2` exportada para gravar em `embedding_version`.
+### 2. Perguntas e respostas (9 chunks)
+- area: `qa` / `faq`
+- chunk_ids: `RAG-FP06-QA-001` a `RAG-FP06-QA-009`
+- Cobrem: interesse do iFood, campanha inteligente, frete grátis, visita sem pedido, anúncio, indicadores, alterar cardápio, datas sazonais, preparo para pico.
 
-### 2. `supabase/functions/embed-knowledge/index.ts`
-Adaptar para reembedar em massa com o novo modelo.
+### 3. Regras práticas (6 chunks)
+- area: `estrategia` / `checklist`
+- chunk_ids: `RAG-FP06-RP-001` a `RAG-FP06-RP-006`
+- Cobrem: diagnosticar antes de culpar plataforma, arrumar cardápio antes de anunciar, promoção dentro da precificação, controlar nota/cancelamento antes de buscar demanda, não mexer em best seller, preparar datas sazonais.
 
-- Aceitar `body.force = true` para reembedar mesmo registros que já têm embedding (filtro por `embedding_version < 2` ao invés de `embedding IS NULL`).
-- Após gerar o vetor, gravar `embedding` + `embedding_version = 2`.
-- Processar em lotes pequenos (10 por chamada do gateway) com `Promise.all` controlado para evitar 429.
-- Retornar contadores: `updated`, `skipped`, `mode_full`, `mode_degraded` para conferir se tudo virou semântico.
+### 4. Checklists (5 chunks)
+- area: `checklists`
+- chunk_ids: `RAG-FP06-CK-001` a `RAG-FP06-CK-005`
+- Itens: diagnóstico de loja sem vendas, cardápio atrativo, preparação para data sazonal, anúncios patrocinados, experiência do cliente.
 
-### 3. `supabase/functions/_shared/memory.ts`
-Pequenos ajustes para tirar proveito do RAG semântico:
+### 5. Diagnósticos guiados (4 chunks)
+- area: `diagnostico`
+- chunk_ids: `RAG-FP06-DG-001` a `RAG-FP06-DG-004`
+- Cobrem: visitas sem conversão, queda de nota, campanhas sem resultado, alta demanda em data sazonal causando atraso.
 
-- Subir `match_count` padrão de KB para 6 (era 5) já que a precisão melhora.
-- Manter os filtros de similaridade (`> 0.5` casos, `> 0.4` knowledge) — com embeddings reais vão filtrar de verdade, não pseudo-ruído.
-- Sem mudança de assinatura — `findKnowledgeSnippetsMeta` / `findSimilarCasesMeta` continuam iguais para `ai-consult/index.ts`.
+### 6. Exemplos práticos (5 chunks)
+- area: `exemplos`
+- chunk_ids: `RAG-FP06-EX-001` a `RAG-FP06-EX-005`
+- Cobrem: Recoba na pandemia, frete grátis com preço ajustado, queda de nota por mudança operacional, combo de Dia dos Namorados, Natal/Ano Novo.
 
-### 4. Migration SQL
-Backfill de versão e índice HNSW para acelerar busca:
+### 7. Glossário (10 chunks)
+- area: `glossario`
+- chunk_ids: `RAG-FP06-GL-001` a `RAG-FP06-GL-010`
+- Termos: campanha inteligente, frete grátis, desconto em item, anúncio patrocinado, conversão, taxa de cancelamento, nota da loja, mise en place, best seller, listas promocionais.
 
-```sql
--- Marca os 502 chunks atuais como v1 (lexical) para o reembed pegar todos
-UPDATE public.knowledge_base SET embedding_version = 1
- WHERE embedding_version IS NULL OR embedding_version = 1;
+## Conteúdo dos chunks
+Cada `content` será composto pelo resumo + corpo + aplicação prática + tags (formato similar aos chunks já existentes, p. ex. `RAG-CAJ-*`), preservando palavras-chave em português para reforçar a busca semântica e híbrida.
 
--- Índice HNSW cosine para busca rápida quando a base crescer
-CREATE INDEX IF NOT EXISTS knowledge_base_embedding_hnsw
-  ON public.knowledge_base USING hnsw (embedding vector_cosine_ops)
-  WHERE status = 'ativo';
+## Etapas de execução
 
-CREATE INDEX IF NOT EXISTS case_library_embedding_hnsw
-  ON public.case_library USING hnsw (embedding vector_cosine_ops)
-  WHERE archived_at IS NULL;
-```
+1. **Migração de dados** (insert tool, sem alterar schema):
+   - `INSERT INTO knowledge_base (chunk_id, area, title, content, source, source_version, chunk_version, embedding_version, status, tags, topic)` para os ~60 chunks. `embedding_version = 0` para ficarem na fila do `embed-knowledge`.
 
-(`match_knowledge` e `match_cases` já usam `<=>` cosine — nada a alterar nas RPCs.)
+2. **Embeddings semânticos**:
+   - Invocar a edge function `embed-knowledge` para a fonte `fala-parceiro-ep06-promocoes-2024`. Ela já chama o Gemini (`gemini-embedding-001`, 768d) e marca `embedding_version = 2`.
+   - Validar via `match_knowledge` com queries-amostra ("frete grátis vale a pena", "minha loja tem visitas mas não vende", "como preparar para o Dia do Hambúrguer") confirmando que os novos chunks aparecem no top-K.
 
-### 5. Reembedar os 502 chunks (ação única, pós-deploy)
-Após deploy das funções, invocar `embed-knowledge` em loop com `{ table: "knowledge_base", force: true, limit: 50 }` até cobrir todos. Validar com:
-```sql
-SELECT count(*) FILTER (WHERE embedding_version = 2) AS semantic,
-       count(*) FILTER (WHERE embedding_version = 1) AS lexical
-  FROM public.knowledge_base WHERE status = 'ativo';
-```
-Esperado: `semantic = 502, lexical = 0`.
-
-### 6. Observabilidade
-- Log `ai_consult.rag` já existe e expõe `rag_mode` — passará a registrar `"full"` quando o gateway responder. Sem mudança no `ai-consult/index.ts`.
-- Adicionar log `embeddings.fallback` quando o semântico falhar e cair no lexical, para detectar problema de gateway rapidamente.
-
----
+3. **Verificação**:
+   - `SELECT count(*) FROM knowledge_base WHERE source='fala-parceiro-ep06-promocoes-2024' AND embedding_version=2;` deve retornar o total inserido.
+   - Conferir que o índice HNSW (`knowledge_base_embedding_hnsw`) está sendo usado nas buscas.
 
 ## Detalhes técnicos
+- Sem mudança de schema: tabela `knowledge_base` já comporta todos os campos.
+- Sem mudança nas edge functions: `embed-knowledge` já lida com fontes novas via filtro por `source`.
+- Sem mudança no front-end: o conteúdo passa a ser usado automaticamente por `chat-gestor`, `ai-consult` e `ai-diagnose` via `_shared/memory.ts` (modo semântico v2).
+- O conteúdo respeita as áreas existentes (`estrategia`, `operacao`, `vendas`, `cardapio`, `marketing`, `diagnostico`, `atendimento`, `qa`, `checklists`, `exemplos`, `glossario`) — sem criar áreas novas.
 
-**Endpoint do gateway** (igual ao já usado em `ai-consult` para chat):
-```
-POST https://ai.gateway.lovable.dev/v1/embeddings
-Authorization: Bearer ${LOVABLE_API_KEY}
-{ "model": "google/text-embedding-004", "input": "<texto>" }
-```
-Resposta padrão OpenAI-compatible: `data[0].embedding` = `number[768]`.
+## Itens marcados como "a validar" pela transcrição
+Os pontos da seção 10 (valores de subsídio, % de pedidos com frete grátis, regras do selo Super, etc.) **não** entrarão como afirmações na base. Serão omitidos para evitar que a IA repita números sem fonte oficial. Caso queira incluí-los como contexto de cautela, posso adicionar 1 chunk em `area: a_validar` listando esses pontos como "informações que dependem de consulta ao Portal do Parceiro".
 
-**Validação de dimensão**: se `vector.length !== 768`, descarta e cai no fallback (proteção contra trocar de modelo sem reembedar).
-
-**Custo**: 502 chunks × ~300 tokens médios ≈ 150k tokens — embedding é barato, roda em poucos minutos divididos em lotes de 50.
-
-**Rollback**: setar env `RAG_MODE=lexical` força o caminho antigo sem redeploy. Os vetores v1 e v2 não são compatíveis entre si — se precisar voltar, é só rodar `embed-knowledge` apontando para o lexical (a função detecta pelo `mode`).
-
-**Sem mudança em**: `ai-consult/index.ts`, `chat-gestor`, `extract-case` (continuam usando `embedText` que agora é semântico transparente), tipos do Supabase, frontend.
-
----
-
-## Critério de sucesso
-
-1. `SELECT count(*) FROM knowledge_base WHERE embedding_version = 2 AND status='ativo'` = 502.
-2. Próximo `ai-consult` loga `rag_mode: "full"` em vez de `"degraded"`.
-3. Busca por "demora na entrega" retorna chunks sobre "tempo de preparo", "atraso", "promessa de entrega" — sinônimos que hoje não casam.
+## Resultado esperado
+Após aprovação, a IA passará a:
+- Citar boas práticas de promoções, frete grátis, campanha inteligente, cupons e datas sazonais com base em fonte real.
+- Diagnosticar lojas com "visitas sem conversão" usando o framework do episódio.
+- Sugerir checklist operacional para datas de pico (Dia do Hambúrguer, Dia dos Namorados, Natal).
+- Explicar por que não se deve trocar best sellers, e como precificar antes de promover.
