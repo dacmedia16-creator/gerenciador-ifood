@@ -1,44 +1,51 @@
-# Análise de Prospect por Imagem
+Vou corrigir em dois pontos: estabilidade da chamada ao backend e experiência visual da resposta.
 
-Hoje o usuário precisa digitar todos os campos do prospect (nome, nota, avaliações, tempo, fotos, combos, etc.) manualmente. Vamos adicionar a **opção de enviar imagens** (prints da loja no iFood/Rappi) para a IA analisar e preencher automaticamente o formulário, mantendo a entrada manual como alternativa.
+1. Corrigir a causa do erro de conexão
+- Ajustar o CORS compartilhado em `supabase/functions/_shared/cors.ts`.
+- Hoje ele libera preview, domínio Lovable publicado e localhost, mas não inclui os domínios customizados `gestordelivery.app` e `www.gestordelivery.app`.
+- Como o erro apareceu no domínio customizado, essa é a causa mais provável do bloqueio no navegador.
+- Vou liberar explicitamente os domínios publicados do projeto no helper compartilhado, para que `chat-gestor` e outras funções que usam esse helper voltem a responder corretamente.
 
-## Como vai funcionar para o usuário
+2. Tornar a chamada do chat mais robusta
+- Refatorar `src/pages/app/Chat.tsx` para parar de usar `fetch` manual com `Authorization: Bearer <publishable key>`.
+- Trocar para o cliente integrado do backend (`supabase.functions.invoke`) ou, se necessário, usar a sessão autenticada real do usuário.
+- Isso evita falhas de autenticação/cabeçalhos, melhora compatibilidade com o ambiente publicado e deixa o tratamento de erro mais consistente.
+- Vou manter o suporte a imagens no payload multimodal.
 
-No card "Novo prospect":
-- Aparecem duas abas: **Por imagens (IA)** e **Manual**
-- Em "Por imagens": usuário sobe 1–4 prints (capa da loja, cardápio, avaliações), opcionalmente escreve uma observação, clica em **Analisar com IA**
-- A IA lê os prints e devolve: nome da loja, categoria, nota, nº avaliações, tempo de entrega, taxa, se tem fotos, combos, cupons, nomes genéricos, observações
-- O formulário manual é preenchido com os valores extraídos — usuário revisa, ajusta o que quiser e clica em **Salvar e calcular score** (mesmo fluxo de hoje)
-- Os prints ficam anexados ao prospect e podem ser revistos depois no card
+3. Aplicar o mesmo endurecimento no Radar de Prospects
+- `src/pages/app/Prospects.tsx` usa o mesmo padrão frágil de `fetch` manual para `analyze-prospect`.
+- Vou alinhar essa tela também para evitar que o mesmo erro apareça ali quando o usuário enviar prints.
 
-## O que será construído
+4. Melhorar a exibição da resposta com efeito digitado suave
+- Atualizar `src/pages/app/Chat.tsx` para que a resposta do assistente apareça gradualmente, com animação leve e legível.
+- Implementação prevista:
+  - a resposta chega completa do backend;
+  - no frontend, o texto é revelado aos poucos com temporização suave;
+  - enquanto estiver “digitando”, a bolha mostra o texto parcial;
+  - ao concluir, renderiza normalmente com `ReactMarkdown`.
+- Isso evita travamentos visuais e reduz glitches de markdown durante a animação.
 
-### 1. Backend — nova edge function `analyze-prospect`
-- Recebe: array de imagens (data URLs) + texto opcional
-- Chama Lovable AI Gateway (`google/gemini-2.5-flash`, que tem visão) com prompt instruindo a extrair os campos do prospect em JSON estruturado
-- Retorna JSON pronto para preencher o formulário: `{ name, category, city, neighborhood, rating, reviews_count, delivery_time, delivery_fee, price_range, has_photos, has_combos, has_coupons, generic_names, notes }`
-- Trata erros 429 (rate limit) e 402 (créditos) com mensagens claras
+5. Ajustes de UX do chat
+- Impedir envio duplicado durante a animação/carregamento.
+- Garantir autoscroll acompanhando a digitação.
+- Preservar o loader atual até a resposta começar a aparecer.
+- Manter fallback de erro claro caso o backend realmente falhe.
 
-### 2. Storage — bucket `prospect-images`
-- Bucket privado (apenas o dono enxerga)
-- Políticas RLS por `user_id` (pasta `{user_id}/...`)
+6. Validação após a implementação
+- Verificar o fluxo do chat no ambiente publicado/custom domain.
+- Confirmar envio com texto simples e com imagem.
+- Confirmar que a resposta animada termina corretamente sem cortar markdown.
 
-### 3. Banco — campo `images` em `prospects`
-- Adiciona coluna `images text[]` (paths no bucket)
+Detalhes técnicos
+- Arquivos a alterar:
+  - `supabase/functions/_shared/cors.ts`
+  - `src/pages/app/Chat.tsx`
+  - `src/pages/app/Prospects.tsx`
+- Problema identificado no código atual:
+  - CORS compartilhado não contempla os domínios customizados.
+  - O chat usa `fetch` direto para a função com cabeçalho de autorização incorreto para esse fluxo.
+- Efeito de digitação:
+  - será feito no frontend, sem streaming no backend;
+  - a resposta será animada localmente para manter compatibilidade e estabilidade em mobile.
 
-### 4. Frontend — `src/pages/app/Prospects.tsx`
-- Tabs "Por imagens (IA)" / "Manual" dentro do card de novo prospect
-- Componente de upload com preview (até 4 imagens, 5MB cada)
-- Botão "Analisar com IA" → chama edge function → preenche o `form` state
-- Após análise, mostra o formulário manual já preenchido para revisão
-- No `save`: faz upload das imagens para o storage e salva os paths em `images`
-- Nos cards de prospect existentes: mostra miniatura das imagens quando houver
-
-## Detalhes técnicos
-
-- Modelo: `google/gemini-2.5-flash` (multimodal, mesmo já usado no chat)
-- Limite: 4 imagens × 5MB no frontend
-- Formato enviado à IA: OpenAI-compatible content parts (`type: "image_url"` com data URL)
-- Output estruturado: prompt pede JSON puro; backend valida com try/catch e retorna 422 se inválido
-- Score continua sendo calculado client-side por `scoreProspect` após o usuário confirmar — IA só extrai os dados brutos, não inventa score
-- Migrations: bucket + coluna `images` em uma única migration
+Assim que você aprovar, eu implemento essas correções.
