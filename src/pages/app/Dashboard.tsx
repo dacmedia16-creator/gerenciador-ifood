@@ -240,13 +240,31 @@ export default function Dashboard() {
         </div>
       </Card>
 
+      {/* Perguntas que este painel responde — atalhos para o dono */}
+      <Card className="p-4 shadow-card">
+        <h3 className="font-semibold mb-3 text-sm">Perguntas que este painel responde</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { q: "Onde estou perdendo dinheiro?", to: `/app/stores/${store.id}/pricing` },
+            { q: "Quais produtos prejudicam minha margem?", to: `/app/stores/${store.id}/products` },
+            { q: "O que devo corrigir primeiro?", to: `/app/stores/${store.id}/action-plan` },
+            { q: "Quais reclamações mais aparecem?", to: `/app/stores/${store.id}/reviews` },
+            { q: "Meus anúncios estão dando retorno?", to: `/app/stores/${store.id}/campaigns` },
+          ].map((p) => (
+            <Button key={p.q} asChild variant="outline" size="sm" className="rounded-full text-xs h-8">
+              <Link to={p.to}>{p.q}</Link>
+            </Button>
+          ))}
+        </div>
+      </Card>
+
       <Suspense fallback={<ChartsFallback />}>
         <DashboardCharts revenueData={revenueData} sentimentData={sentimentData} />
       </Suspense>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-4 shadow-card">
-          <h3 className="font-semibold mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> Alertas críticos</h3>
+          <h3 className="font-semibold mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> O que está travando sua loja agora</h3>
           {criticalAlerts.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum alerta crítico.</p> : (
             <ul className="space-y-2">
               {criticalAlerts.slice(0, 5).map((d: any) => (
@@ -260,7 +278,7 @@ export default function Dashboard() {
           <Button variant="link" size="sm" asChild className="px-0"><Link to={`/app/stores/${store.id}/diagnostics`}>Ver todos →</Link></Button>
         </Card>
         <Card className="p-4 shadow-card">
-          <h3 className="font-semibold mb-3">Plano de ação recomendado</h3>
+          <h3 className="font-semibold mb-3">Plano de melhoria da sua loja</h3>
           {actions.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma ação pendente.</p> : (
             <ul className="space-y-2">
               {actions.slice(0, 5).map((a: any) => (
@@ -273,6 +291,7 @@ export default function Dashboard() {
           )}
           <Button variant="link" size="sm" asChild className="px-0"><Link to={`/app/stores/${store.id}/action-plan`}>Ver plano completo →</Link></Button>
         </Card>
+      </div>
       </div>
     </div>
   );
