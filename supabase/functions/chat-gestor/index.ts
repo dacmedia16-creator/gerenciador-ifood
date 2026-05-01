@@ -61,8 +61,9 @@ Deno.serve(async (req) => {
 
     // Pega a última mensagem do usuário para fazer RAG na knowledge_base
     const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    const lastUserText = lastUser ? extractText(lastUser.content) : "";
     let kbContext = "";
-    if (lastUser?.content) {
+    if (lastUserText) {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
