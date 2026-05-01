@@ -1,10 +1,9 @@
 // Helpers de memória, RAG e histórico para o Gestor IA.
 //
-// IMPORTANTE — RAG v1: a função embedText() deste módulo usa um embedding
-// LEXICAL determinístico (ver _shared/embeddings.ts). Isso significa que
-// findSimilarCases / findKnowledgeSnippets fazem busca por sobreposição de
-// palavras-chave, NÃO por significado. Sinônimos não casam. Quando trocarmos
-// para embeddings reais, a interface destas funções não muda.
+// RAG v2: embedText() agora usa embeddings semânticos reais (Lovable AI
+// Gateway, google/text-embedding-004, 768d) com fallback automático para
+// lexical em caso de falha. Sinônimos passam a casar quando mode="full".
+// Ver _shared/embeddings.ts para detalhes.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { embedText, embedTextWithMeta, toPgVector, type RagMode } from "./embeddings.ts";
 import type { RuleEvidence } from "./evidences.ts";
@@ -122,7 +121,7 @@ export async function findKnowledgeSnippetsMeta(
   supabase: SupabaseClient,
   queryText: string,
   areas: string[] | null = null,
-  limit = 5,
+  limit = 6,
 ): Promise<RagSearchResult<any>> {
   const meta = await embedTextWithMeta(queryText);
   if (!meta.vector) return { items: [], mode: meta.mode, reason: meta.reason };
