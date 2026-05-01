@@ -232,6 +232,9 @@ export default function Chat() {
                 {m.role === "assistant" ? (
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-headings:my-2">
                     <ReactMarkdown>{m.content || "…"}</ReactMarkdown>
+                    {m.typing && (
+                      <span className="inline-block w-1.5 h-4 align-[-2px] ml-0.5 bg-primary/70 animate-pulse rounded-sm" />
+                    )}
                   </div>
                 ) : (
                   m.content && <p className="text-sm whitespace-pre-wrap">{m.content}</p>
