@@ -49,7 +49,7 @@ const storeData = (id: string) => [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
   const params = useParams();
@@ -61,11 +61,12 @@ export function AppSidebar() {
   const storeId = match?.[1] || params.id;
 
   const isActive = (url: string) => pathname === url;
+  const closeOnMobile = () => { if (isMobile) setOpenMobile(false); };
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b p-4">
-        <NavLink to="/app/dashboard" className="flex items-center gap-2">
+        <NavLink to="/app/dashboard" onClick={closeOnMobile} className="flex items-center gap-2">
           {collapsed ? (
             <img src="/favicon.png" alt="Gestor de Delivery" className="h-8 w-8 shrink-0" />
           ) : (
@@ -82,7 +83,7 @@ export function AppSidebar() {
               {general.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -99,7 +100,7 @@ export function AppSidebar() {
                   {storeAnalysis(storeId).map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -114,7 +115,7 @@ export function AppSidebar() {
                   {storeOperations(storeId).map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -129,7 +130,7 @@ export function AppSidebar() {
                   {storeData(storeId).map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -144,7 +145,7 @@ export function AppSidebar() {
         {!collapsed && user && (
           <div className="px-2 py-1 text-xs text-muted-foreground truncate">{user.email}</div>
         )}
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={async () => { await signOut(); navigate("/"); }}>
+        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={async () => { closeOnMobile(); await signOut(); navigate("/"); }}>
           <LogOut className="h-4 w-4" />{!collapsed && <span className="ml-2">Sair</span>}
         </Button>
       </SidebarFooter>
