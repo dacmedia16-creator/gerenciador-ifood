@@ -83,7 +83,7 @@ export function AppSidebar() {
               {general.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -100,7 +100,7 @@ export function AppSidebar() {
                   {storeAnalysis(storeId).map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -115,7 +115,7 @@ export function AppSidebar() {
                   {storeOperations(storeId).map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -130,7 +130,7 @@ export function AppSidebar() {
                   {storeData(storeId).map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
@@ -145,7 +145,7 @@ export function AppSidebar() {
         {!collapsed && user && (
           <div className="px-2 py-1 text-xs text-muted-foreground truncate">{user.email}</div>
         )}
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={async () => { await signOut(); navigate("/"); }}>
+        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={async () => { closeOnMobile(); await signOut(); navigate("/"); }}>
           <LogOut className="h-4 w-4" />{!collapsed && <span className="ml-2">Sair</span>}
         </Button>
       </SidebarFooter>
