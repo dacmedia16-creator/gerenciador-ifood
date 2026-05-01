@@ -19,7 +19,7 @@
 
 export const EMBED_DIMS = 768;
 export const EMBED_MODEL_VERSION = 2; // v2 = semântico (text-embedding-004)
-export const EMBED_MODEL_NAME = "google/text-embedding-004";
+export const EMBED_MODEL_NAME = "gemini-embedding-001";
 
 const STOPWORDS = new Set([
   "de","da","do","das","dos","a","o","e","ou","para","com","em","no","na","nos","nas",
@@ -114,14 +114,15 @@ async function embedTextSemantic(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8000);
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${encodeURIComponent(apiKey)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBED_MODEL_NAME}:embedContent?key=${encodeURIComponent(apiKey)}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "models/text-embedding-004",
+        model: `models/${EMBED_MODEL_NAME}`,
         content: { parts: [{ text: text.slice(0, 8000) }] },
         taskType: "RETRIEVAL_DOCUMENT",
+        outputDimensionality: EMBED_DIMS, // 768 — combina com o schema vector(768)
       }),
       signal: controller.signal,
     });
