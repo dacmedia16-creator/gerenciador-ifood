@@ -1,29 +1,70 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { Link, useNavigate, Navigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreBadge } from "@/components/StatusBadges";
 import { calculateScore } from "@/lib/diagnostics/engine";
-import { seedDemoStore } from "@/lib/seed/demoStore";
 import { Plus, Sparkles, Store, BarChart3, Star, Clock, AlertTriangle, DollarSign, Users, RefreshCw } from "lucide-react";
 import { refreshSystem } from "@/lib/system/refresh";
-import { toast } from "sonner";
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { DashboardSkeleton } from "@/components/DashboardSkeleton";
+
+const DashboardCharts = lazy(() => import("@/components/dashboard/DashboardCharts"));
+
+const ChartsFallback = () => (
+  <div className="grid lg:grid-cols-3 gap-4">
+    <Card className="p-4 shadow-card lg:col-span-2"><Skeleton className="h-5 w-40 mb-3" /><Skeleton className="h-64 w-full" /></Card>
+    <Card className="p-4 shadow-card"><Skeleton className="h-5 w-40 mb-3" /><Skeleton className="h-64 w-full" /></Card>
+  </div>
+);
+
+async function fetchDashboardData(storeId: string) {
+  const [s, m, p, r, c, ca, d, a] = await Promise.all([
+    supabase.from("stores").select("*").eq("id", storeId).single(),
+    supabase.from("metrics")
+      .select("id, period_start, revenue")
+      .eq("store_id", storeId)
+      .order("period_start", { ascending: false })
+      .limit(12),
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+    supabase.from("reviews")
+      .select("id, sentiment")
+      .eq("store_id", storeId).limit(500),
+    supabase.from("competitors").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+    supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+    supabase.from("diagnostics")
+      .select("id, area, problem, severity")
+      .eq("store_id", storeId).order("created_at", { ascending: false }).limit(10),
+    supabase.from("action_plans")
+      .select("id, title, area, priority, status")
+      .eq("store_id", storeId).order("created_at", { ascending: false }).limit(10),
+  ]);
+  return {
+    store: s.data,
+    metrics: (m.data || []).slice().reverse(),
+    productsCount: p.count || 0,
+    reviews: r.data || [],
+    competitorsCount: c.count || 0,
+    campaignsCount: ca.count || 0,
+    diagnostics: d.data || [],
+    actions: a.data || [],
+  };
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string>("");
-  const [seeding, setSeeding] = useState(false);
   const navigate = useNavigate();
 
   const { data: draftSession } = useQuery({
     queryKey: ["draftSession", user?.id],
     enabled: !!user,
-    staleTime: 30_000,
+    staleTime: 60_000,
     queryFn: async () => {
       const { data } = await supabase
         .from("diagnosis_sessions")
@@ -37,12 +78,24 @@ export default function Dashboard() {
     },
   });
 
-  const { data: stores = [], isLoading: loading, refetch: refetchStores } = useQuery({
+  const { data: stores = [], isLoading: loadingStores } = useQuery({
     queryKey: ["dashboardStores"],
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase.from("stores").select("*").order("created_at");
-      return data || [];
+      const { data } = await supabase
+        .from("stores")
+        .select("id, name, platform, city")
+        .order("created_at");
+      const list = data || [];
+      // Pré-busca os dados da primeira loja em paralelo
+      if (list[0]) {
+        queryClient.prefetchQuery({
+          queryKey: ["dashboardData", list[0].id],
+          queryFn: () => fetchDashboardData(list[0].id),
+          staleTime: 5 * 60_000,
+        });
+      }
+      return list;
     },
   });
 
@@ -53,64 +106,48 @@ export default function Dashboard() {
   const { data } = useQuery({
     queryKey: ["dashboardData", selectedId],
     enabled: !!selectedId,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const [s, m, p, r, c, ca, d, a] = await Promise.all([
-        supabase.from("stores").select("*").eq("id", selectedId).single(),
-        supabase.from("metrics")
-          .select("id, period_start, period_end, revenue, orders, average_ticket, cancellation_rate")
-          .eq("store_id", selectedId).order("period_start"),
-        supabase.from("products").select("*").eq("store_id", selectedId).limit(500),
-        supabase.from("reviews")
-          .select("id, sentiment, rating")
-          .eq("store_id", selectedId).limit(500),
-        supabase.from("competitors").select("id, name, rating").eq("store_id", selectedId),
-        supabase.from("campaigns").select("id, name, status").eq("store_id", selectedId),
-        supabase.from("diagnostics")
-          .select("id, area, problem, severity")
-          .eq("store_id", selectedId).order("created_at", { ascending: false }).limit(50),
-        supabase.from("action_plans")
-          .select("id, title, area, priority, status")
-          .eq("store_id", selectedId).order("created_at", { ascending: false }).limit(50),
-      ]);
-      return {
-        store: s.data, metrics: m.data || [], products: p.data || [], reviews: r.data || [],
-        competitors: c.data || [], campaigns: ca.data || [], diagnostics: d.data || [], actions: a.data || [],
-      };
-    },
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+    queryFn: () => fetchDashboardData(selectedId),
   });
 
-  const handleSeed = async () => {
-    if (!user) return;
-    setSeeding(true);
-    try {
-      const store = await seedDemoStore(user.id);
-      toast.success("Loja demo criada!");
-      const res = await refetchStores();
-      setSelectedId(store.id);
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao criar loja demo");
-    } finally {
-      setSeeding(false);
-    }
-  };
+  const score = useMemo(() => {
+    if (!data?.store) return null;
+    return calculateScore({
+      store: data.store,
+      metrics: data.metrics,
+      products: [],
+      reviews: data.reviews,
+      competitors: [],
+      campaigns: [],
+    });
+  }, [data]);
 
-  if (loading) return <div className="text-muted-foreground">Carregando…</div>;
+  const sentimentData = useMemo(() => {
+    const reviews = data?.reviews || [];
+    return [
+      { name: "Positivo", value: reviews.filter((r: any) => r.sentiment === "positivo").length, color: "hsl(var(--success))" },
+      { name: "Neutro", value: reviews.filter((r: any) => r.sentiment === "neutro").length, color: "hsl(var(--warning))" },
+      { name: "Negativo", value: reviews.filter((r: any) => r.sentiment === "negativo").length, color: "hsl(var(--destructive))" },
+    ];
+  }, [data]);
+
+  const revenueData = useMemo(
+    () => (data?.metrics || []).map((m: any) => ({ mes: m.period_start?.slice(0, 7), receita: Number(m.revenue) })),
+    [data]
+  );
+
+  if (loadingStores) return <DashboardSkeleton />;
 
   if (!stores.length) {
     return <Navigate to="/app/onboarding" replace />;
   }
 
-  if (!data) return <div className="text-muted-foreground">Carregando dados…</div>;
+  if (!data || !data.store || !score) return <DashboardSkeleton />;
 
-  const { store, metrics, products, reviews, competitors, campaigns, diagnostics, actions } = data;
-  const { overall } = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
+  const { store, diagnostics, actions, productsCount, competitorsCount } = data;
+  const { overall } = score;
   const criticalAlerts = diagnostics.filter((d: any) => d.severity === "critico");
-  const sentimentData = [
-    { name: "Positivo", value: reviews.filter((r: any) => r.sentiment === "positivo").length, color: "hsl(var(--success))" },
-    { name: "Neutro", value: reviews.filter((r: any) => r.sentiment === "neutro").length, color: "hsl(var(--warning))" },
-    { name: "Negativo", value: reviews.filter((r: any) => r.sentiment === "negativo").length, color: "hsl(var(--destructive))" },
-  ];
 
   const KPI = ({ icon: Icon, label, value, color = "text-primary" }: any) => (
     <Card className="p-3 sm:p-4 shadow-card">
@@ -197,43 +234,15 @@ export default function Dashboard() {
             <KPI icon={Star} label="Nota" value={store.rating || "-"} color="text-warning" />
             <KPI icon={Clock} label="Entrega" value={`${store.promised_delivery_time || 0} min`} />
             <KPI icon={AlertTriangle} label="Cancelamento" value={`${store.cancellation_rate || 0}%`} color="text-destructive" />
-            <KPI icon={Users} label="Concorrentes" value={competitors.length} />
-            <KPI icon={Store} label="Produtos" value={products.length} />
+            <KPI icon={Users} label="Concorrentes" value={competitorsCount} />
+            <KPI icon={Store} label="Produtos" value={productsCount} />
           </div>
         </div>
       </Card>
 
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="p-4 shadow-card lg:col-span-2">
-          <h3 className="font-semibold mb-3">Faturamento mensal</h3>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <LineChart data={[...metrics].reverse().map((m: any) => ({ mes: m.period_start?.slice(0, 7), receita: Number(m.revenue) }))}>
-                <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
-                <Line type="monotone" dataKey="receita" stroke="hsl(var(--primary))" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-        <Card className="p-4 shadow-card">
-          <h3 className="font-semibold mb-3">Sentimento das avaliações</h3>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie data={sentimentData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80}>
-                  {sentimentData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex justify-around text-xs">
-            {sentimentData.map((d) => <div key={d.name} className="text-center"><div className="h-2 w-2 rounded-full inline-block mr-1" style={{ background: d.color }} />{d.name} ({d.value})</div>)}
-          </div>
-        </Card>
-      </div>
+      <Suspense fallback={<ChartsFallback />}>
+        <DashboardCharts revenueData={revenueData} sentimentData={sentimentData} />
+      </Suspense>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="p-4 shadow-card">
