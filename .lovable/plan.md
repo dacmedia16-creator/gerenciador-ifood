@@ -1,30 +1,44 @@
-## Corrigir "Erro de conexão" do Gestor IA no celular
+# Análise de Prospect por Imagem
 
-### Diagnóstico
+Hoje o usuário precisa digitar todos os campos do prospect (nome, nota, avaliações, tempo, fotos, combos, etc.) manualmente. Vamos adicionar a **opção de enviar imagens** (prints da loja no iFood/Rappi) para a IA analisar e preencher automaticamente o formulário, mantendo a entrada manual como alternativa.
 
-Verifiquei os logs do edge function `chat-gestor`:
-- Servidor responde **200 OK** (sem erros).
-- Mas vários requests terminam em 100–200ms, tempo curto demais para uma chamada de IA — sinal de que o **stream foi interrompido antes de terminar**.
-- No preview desktop o chat funciona normalmente (testei e a resposta apareceu inteira).
+## Como vai funcionar para o usuário
 
-**Causa**: a função usa **streaming SSE** (`stream: true` + `text/event-stream`). Quando o app é acessado pelo domínio personalizado (`gestordelivery.app`) num celular, o Safari/WebView mobile + proxy Cloudflare bufferam ou cortam o stream, e o cliente cai no `catch` do `fetch` exibindo "Erro de conexão".
+No card "Novo prospect":
+- Aparecem duas abas: **Por imagens (IA)** e **Manual**
+- Em "Por imagens": usuário sobe 1–4 prints (capa da loja, cardápio, avaliações), opcionalmente escreve uma observação, clica em **Analisar com IA**
+- A IA lê os prints e devolve: nome da loja, categoria, nota, nº avaliações, tempo de entrega, taxa, se tem fotos, combos, cupons, nomes genéricos, observações
+- O formulário manual é preenchido com os valores extraídos — usuário revisa, ajusta o que quiser e clica em **Salvar e calcular score** (mesmo fluxo de hoje)
+- Os prints ficam anexados ao prospect e podem ser revistos depois no card
 
-### Correção
+## O que será construído
 
-**1. Edge function `chat-gestor`** — trocar para resposta única (não-streaming):
-- `stream: true` → `stream: false` na chamada do Lovable AI Gateway.
-- Ler `data.choices[0].message.content` e devolver `{ content }` como JSON.
-- Mantém os tratamentos de 429/402.
+### 1. Backend — nova edge function `analyze-prospect`
+- Recebe: array de imagens (data URLs) + texto opcional
+- Chama Lovable AI Gateway (`google/gemini-2.5-flash`, que tem visão) com prompt instruindo a extrair os campos do prospect em JSON estruturado
+- Retorna JSON pronto para preencher o formulário: `{ name, category, city, neighborhood, rating, reviews_count, delivery_time, delivery_fee, price_range, has_photos, has_combos, has_coupons, generic_names, notes }`
+- Trata erros 429 (rate limit) e 402 (créditos) com mensagens claras
 
-**2. Frontend `src/pages/app/Chat.tsx`** — simplificar:
-- Remover todo o parser SSE manual (loop de reader, decode, `data: …`).
-- Fazer `const { content } = await resp.json()` e adicionar como mensagem do assistant.
-- Mantém o indicador "digitando" (3 bolinhas) enquanto `loading=true`.
+### 2. Storage — bucket `prospect-images`
+- Bucket privado (apenas o dono enxerga)
+- Políticas RLS por `user_id` (pasta `{user_id}/...`)
 
-### Trade-off
+### 3. Banco — campo `images` em `prospects`
+- Adiciona coluna `images text[]` (paths no bucket)
 
-Sem efeito de "digitando letra a letra" — a resposta aparece completa de uma vez. Em troca: funciona em qualquer rede/proxy/celular, sem risco de "Erro de conexão". As respostas do Gemini Flash levam ~2–4s no total, então a espera é aceitável (e o usuário já vê o spinner).
+### 4. Frontend — `src/pages/app/Prospects.tsx`
+- Tabs "Por imagens (IA)" / "Manual" dentro do card de novo prospect
+- Componente de upload com preview (até 4 imagens, 5MB cada)
+- Botão "Analisar com IA" → chama edge function → preenche o `form` state
+- Após análise, mostra o formulário manual já preenchido para revisão
+- No `save`: faz upload das imagens para o storage e salva os paths em `images`
+- Nos cards de prospect existentes: mostra miniatura das imagens quando houver
 
-### Risco
+## Detalhes técnicos
 
-Zero. Mudança contida em 2 arquivos. A interface continua igual.
+- Modelo: `google/gemini-2.5-flash` (multimodal, mesmo já usado no chat)
+- Limite: 4 imagens × 5MB no frontend
+- Formato enviado à IA: OpenAI-compatible content parts (`type: "image_url"` com data URL)
+- Output estruturado: prompt pede JSON puro; backend valida com try/catch e retorna 422 se inválido
+- Score continua sendo calculado client-side por `scoreProspect` após o usuário confirmar — IA só extrai os dados brutos, não inventa score
+- Migrations: bucket + coluna `images` em uma única migration
