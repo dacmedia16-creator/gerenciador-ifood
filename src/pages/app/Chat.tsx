@@ -10,15 +10,16 @@ import { supabase } from "@/integrations/supabase/client";
 type Msg = {
   role: "user" | "assistant";
   content: string;
-  images?: string[]; // data URLs (somente exibição local / envio)
-  typing?: boolean;  // true enquanto a resposta está sendo "digitada" no UI
+  images?: string[];          // imagens anexadas pelo usuário (data URLs)
+  generatedImages?: string[]; // imagens geradas pela IA (signed URLs)
+  typing?: boolean;
 };
 
 const SUGGESTIONS = [
   "Como aumentar meu ticket médio?",
   "Como reduzir cancelamentos?",
-  "Vale a pena entrar no Super Restaurante?",
-  "Avalie a foto do meu prato (anexe uma imagem)",
+  "Crie um banner de promoção de hambúrguer",
+  "Melhore esta foto do meu prato (anexe uma imagem)",
 ];
 
 const MAX_IMAGES = 3;
@@ -124,15 +125,19 @@ export default function Chat() {
         return;
       }
 
-      const content: string = (data as any)?.content ?? "";
-      if (!content) {
+      const rawContent: string = (data as any)?.content ?? "";
+      const generatedImages: string[] = Array.isArray((data as any)?.images) ? (data as any).images : [];
+      // Remove marker interno usado pelo backend para contagem de imagens
+      const cleanContent = rawContent.replace("[__img_generated__]", "").trim();
+
+      if (!cleanContent && generatedImages.length === 0) {
         toast({ title: "Resposta vazia", description: "Tente reformular sua pergunta.", variant: "destructive" });
         return;
       }
 
       // Adiciona a mensagem vazia em modo "typing" e revela aos poucos
-      setMessages((prev) => [...prev, { role: "assistant", content: "", typing: true }]);
-      await typeOutAssistant(content);
+      setMessages((prev) => [...prev, { role: "assistant", content: "", typing: true, generatedImages }]);
+      await typeOutAssistant(cleanContent);
     } catch (e) {
       console.error(e);
       toast({ title: "Erro de conexão", description: "Não foi possível falar com o Gestor IA.", variant: "destructive" });
@@ -234,6 +239,45 @@ export default function Chat() {
                     <ReactMarkdown>{m.content || "…"}</ReactMarkdown>
                     {m.typing && (
                       <span className="inline-block w-1.5 h-4 align-[-2px] ml-0.5 bg-primary/70 animate-pulse rounded-sm" />
+                    )}
+                    {!m.typing && m.generatedImages && m.generatedImages.length > 0 && (
+                      <div className="not-prose mt-3 grid gap-2 sm:grid-cols-2">
+                        {m.generatedImages.map((url, idx) => (
+                          <div key={idx} className="group relative overflow-hidden rounded-lg border border-border bg-background">
+                            <a href={url} target="_blank" rel="noreferrer">
+                              <img
+                                src={url}
+                                alt={`imagem gerada ${idx + 1}`}
+                                className="w-full h-auto object-cover transition-transform group-hover:scale-[1.02]"
+                                loading="lazy"
+                              />
+                            </a>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(url);
+                                  const blob = await res.blob();
+                                  const blobUrl = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = blobUrl;
+                                  a.download = `gestor-ia-${Date.now()}.png`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  a.remove();
+                                  URL.revokeObjectURL(blobUrl);
+                                } catch {
+                                  toast({ title: "Falha no download", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              Baixar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ) : (
