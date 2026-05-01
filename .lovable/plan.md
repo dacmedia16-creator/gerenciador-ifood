@@ -1,69 +1,122 @@
 ## Objetivo
 
-Alimentar a base de conhecimento (RAG) do Gestor IA com os 20 chunks da aula prática de otimização de loja no iFood, para que o Gestor IA passe a citar essas heurísticas como fonte ao gerar diagnósticos e recomendações.
+Permitir rastrear mudanças no conteúdo da base RAG por **aula** (ex: `aula_ifood_v1` → `v2`) e por **chunk** individual (ex: RAG-007 v1 → v2), garantindo que recomendações antigas/superadas não sejam mais usadas pelo Gestor IA, mas continuem auditáveis.
 
-## Onde os dados serão inseridos
+## Modelo de versionamento
 
-Tabela `knowledge_base` (já usada pela função `match_knowledge` e por `findKnowledgeSnippets` em `ai-consult`). Hoje ela tem 12 entradas seed (1 por área); vamos adicionar 20 novas entradas, mantendo o padrão existente.
+Dois níveis, complementares:
 
-Mapeamento de cada chunk para colunas:
-- `area` → área canônica em snake_case (ver mapeamento abaixo)
-- `topic` → subtema curto
-- `title` → título do chunk
-- `content` → "Resumo" + "Conteúdo" + "Aplicação prática" concatenados (texto corrido em PT-BR, é o que o RAG vai indexar)
-- `tags` → array com palavras-chave + tags do chunk + ID do chunk (ex: `RAG-001`) para rastreio
-- `source` → `aula_ifood_v1` (em vez do default `manual`), para conseguirmos filtrar/atualizar no futuro
-- `embedding` → preenchido por uma chamada à edge function `embed-knowledge` logo após o insert
+1. **Aula (source)**: `source` já existe (`aula_ifood_v1`). Continua sendo o "lote/edição" da aula. Quando rodarmos uma nova versão consolidada da mesma aula, criamos `aula_ifood_v2` (novo `source`).
+2. **Chunk**: cada linha ganha `chunk_id` estável (ex: `RAG-007`, `FAQ-003`) + `chunk_version` (smallint, começa em 1) + `status` (`ativo` | `arquivado` | `rascunho`). Edições incrementam `chunk_version` e arquivam a versão anterior em vez de sobrescrever.
 
-Mapeamento area por chunk:
+Resultado: o histórico fica na tabela (auditável em `/app/knowledge`), mas o RAG só enxerga `status='ativo'`.
 
-```text
-RAG-001 metricas         RAG-011 cardapio
-RAG-002 horarios         RAG-012 cardapio
-RAG-003 operacao         RAG-013 cardapio
-RAG-004 cancelamentos    RAG-014 promocoes
-RAG-005 reputacao        RAG-015 categoria
-RAG-006 atendimento      RAG-016 conversao
-RAG-007 conversao        RAG-017 entrega
-RAG-008 visibilidade     RAG-018 entrega
-RAG-009 cardapio         RAG-019 promocoes
-RAG-010 conversao        RAG-020 promocoes
+## Mudanças no schema (1 migração)
+
+```sql
+ALTER TABLE public.knowledge_base
+  ADD COLUMN chunk_id text,
+  ADD COLUMN chunk_version smallint NOT NULL DEFAULT 1,
+  ADD COLUMN status text NOT NULL DEFAULT 'ativo',
+  ADD COLUMN supersedes uuid REFERENCES public.knowledge_base(id),
+  ADD COLUMN source_version smallint NOT NULL DEFAULT 1,
+  ADD COLUMN published_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN archived_at timestamptz;
+
+-- backfill: extrair chunk_id de tags existentes (RAG-001..RAG-020 já estão lá)
+UPDATE public.knowledge_base
+SET chunk_id = (
+  SELECT t FROM unnest(tags) t
+  WHERE t ~ '^(RAG|FAQ|CHK|GLO|VAL)-\d+'
+  LIMIT 1
+)
+WHERE chunk_id IS NULL;
+
+-- chunk_id por linha que sobrou (sem prefixo conhecido) = slug do title
+UPDATE public.knowledge_base
+SET chunk_id = 'KB-' || substr(md5(title), 1, 8)
+WHERE chunk_id IS NULL;
+
+-- regra de unicidade: um único registro ativo por (source, chunk_id)
+CREATE UNIQUE INDEX kb_active_chunk_uniq
+  ON public.knowledge_base (source, chunk_id)
+  WHERE status = 'ativo';
+
+CREATE INDEX kb_status_idx ON public.knowledge_base (status);
+
+-- trigger: ao inserir um chunk com supersedes preenchido, marca o anterior como arquivado
+CREATE OR REPLACE FUNCTION public.kb_archive_superseded()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.supersedes IS NOT NULL THEN
+    UPDATE public.knowledge_base
+       SET status = 'arquivado', archived_at = now(), updated_at = now()
+     WHERE id = NEW.supersedes AND status = 'ativo';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER kb_archive_superseded_trg
+  BEFORE INSERT ON public.knowledge_base
+  FOR EACH ROW EXECUTE FUNCTION public.kb_archive_superseded();
 ```
 
-Áreas novas que serão criadas (não existem hoje na tabela): `metricas`, `horarios`, `operacao`, `reputacao`, `visibilidade`, `categoria`, `entrega`, `promocoes`. Isso é seguro: `area` é apenas `text` livre, não enum, e `match_knowledge` aceita filtro opcional por área (NULL = todas), então o RAG continuará funcionando sem mudanças de código.
+E atualizar `match_knowledge` para filtrar somente ativos:
 
-## Passos
+```sql
+CREATE OR REPLACE FUNCTION public.match_knowledge(
+  query_embedding vector, match_count int DEFAULT 5, filter_areas text[] DEFAULT NULL
+) RETURNS TABLE(id uuid, area text, title text, content text, similarity double precision, chunk_id text, chunk_version smallint, source text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = 'public' AS $$
+  SELECT k.id, k.area, k.title, k.content,
+         1 - (k.embedding <=> query_embedding) AS similarity,
+         k.chunk_id, k.chunk_version, k.source
+  FROM public.knowledge_base k
+  WHERE k.embedding IS NOT NULL
+    AND k.status = 'ativo'
+    AND (filter_areas IS NULL OR k.area = ANY(filter_areas))
+  ORDER BY k.embedding <=> query_embedding
+  LIMIT match_count;
+$$;
+```
 
-1. Criar uma migração SQL que faz `INSERT INTO public.knowledge_base (area, topic, title, content, tags, source) VALUES (...)` com os 20 registros, usando `source = 'aula_ifood_v1'` e `ON CONFLICT DO NOTHING` numa chave lógica (title + source) para tornar reexecutável.
-   - Como não há unique constraint hoje, a migração começa com `CREATE UNIQUE INDEX IF NOT EXISTS knowledge_base_title_source_uniq ON public.knowledge_base (title, source);` para suportar o `ON CONFLICT`.
+## Fluxo de atualização de um chunk
 
-2. Após a migração, gerar embeddings invocando a edge function existente `embed-knowledge` com `{ "table": "knowledge_base", "limit": 50 }`. Ela já varre linhas com `embedding IS NULL`, calcula o vetor lexical (RAG v1) e atualiza a coluna. Nenhum código novo de função é necessário.
+Quando reformularmos, por exemplo, RAG-007:
 
-3. Validar com:
-   - `SELECT area, COUNT(*) FROM knowledge_base WHERE source='aula_ifood_v1' GROUP BY area;` → confirma 20 inseridos
-   - `SELECT COUNT(*) FROM knowledge_base WHERE source='aula_ifood_v1' AND embedding IS NULL;` → deve ser 0
-   - Chamar `match_knowledge` com a query "como aumentar ticket médio com complementos" para confirmar que RAG-011 aparece no topo.
+1. `INSERT` nova linha com mesmo `chunk_id='RAG-007'`, `chunk_version = anterior + 1`, `supersedes = id_da_versão_atual`, `source = 'aula_ifood_v1'` (ou `v2`).
+2. O trigger arquiva automaticamente a versão antiga (`status='arquivado'`, `archived_at=now()`).
+3. Rodar `embed-knowledge` para gerar embedding da nova linha.
+4. RAG passa a usar só a nova; a antiga continua na tabela para auditoria.
+
+Para promover uma aula inteira a `v2`: inserir todos os chunks novos com `source='aula_ifood_v2'`, `source_version=2`, e arquivar os de `v1` em lote (`UPDATE ... SET status='arquivado' WHERE source='aula_ifood_v1'`).
+
+## Mudanças de código
+
+- **`supabase/functions/_shared/memory.ts`** — `findKnowledgeSnippets` e `findKnowledgeSnippetsMeta`: passar a expor `chunk_id` e `chunk_version` no retorno (já vêm do RPC) para que `ai-consult` use `chunk_id@vN` como `source_ref` em vez do UUID.
+- **`supabase/functions/ai-consult/index.ts`** — usar `chunk_id` como `source_ref` (legível) ao montar `KNOWLEDGE_SNIPPETS`. Mantém compatibilidade aceitando UUID também.
+- **`supabase/functions/_shared/validate-diagnosis.ts`** — `validKbIds` passa a ser o conjunto de `chunk_id`s ativos retornados (continua descartando refs inexistentes).
+- **`src/pages/app/Knowledge.tsx`** — por padrão lista só `status='ativo'`; adicionar:
+  - Toggle "Mostrar versões arquivadas".
+  - Badge com `chunk_id` e `vN` ao lado do título.
+  - Agrupamento secundário por `source` (ex: "Aula iFood v1") dentro de cada área.
+
+## Validação
+
+```sql
+-- todos têm chunk_id após migração
+SELECT COUNT(*) FROM knowledge_base WHERE chunk_id IS NULL; -- 0
+-- nenhum (source, chunk_id) ativo duplicado
+SELECT source, chunk_id, COUNT(*) FROM knowledge_base
+ WHERE status='ativo' GROUP BY 1,2 HAVING COUNT(*)>1; -- vazio
+-- RAG só vê ativos
+SELECT * FROM match_knowledge('{...}'::vector, 5, NULL); -- só status=ativo
+```
+
+Teste manual: inserir RAG-007 v2 com `supersedes` da v1 → confirmar que v1 fica `arquivado` e que `/app/knowledge` mostra só a v2 por padrão.
 
 ## O que NÃO muda
 
-- Nenhuma alteração em `src/integrations/supabase/types.ts`, `client.ts` ou `.env`.
-- Nenhuma alteração em `ai-consult` ou em `_shared/memory.ts` — eles já consomem `knowledge_base` automaticamente.
-- Nenhum componente de UI muda. A página `src/pages/app/Knowledge.tsx` (Base de conhecimento) já lista tudo da tabela, então os 20 novos itens aparecem automaticamente, agrupados por área, com tags e busca.
-
-## Detalhes técnicos
-
-- O embedding atual é lexical (RAG v1, ver `supabase/functions/_shared/embeddings.ts`). Ele indexa por sobreposição de palavras-chave; por isso o `content` será escrito em PT-BR sem jargão e os `tags` repetirão as palavras-chave principais para reforçar o casamento. Quando migrarmos para embeddings semânticos reais, basta rodar `embed-knowledge` de novo com `embedding_version` incrementado — sem reescrever os chunks.
-- O campo `tags` armazenará também o `RAG-XXX` ID para conseguirmos atualizar/remover por chunk via `WHERE 'RAG-007' = ANY(tags)`.
-- Tamanho estimado por chunk: ~1.5–2.5 KB de texto em `content`. Total ~40 KB — irrelevante para a tabela.
-
-## Riscos / mitigação
-
-- **Áreas novas**: `Knowledge.tsx` agrupa por `area` dinamicamente; novas áreas só viram novos cabeçalhos. Sem risco.
-- **Reexecução da migração**: o índice único `(title, source)` + `ON CONFLICT DO NOTHING` tornam idempotente.
-- **embed-knowledge falhar**: a função é tolerante (loga e continua); rodá-la novamente reprocessa os pendentes.
-
-## Entregável final
-
-- 1 migração SQL com índice único + 20 inserts.
-- 1 invocação de `embed-knowledge` para popular os vetores.
-- Validação por SQL e via UI em `/app/knowledge`.
+- `src/integrations/supabase/types.ts`, `client.ts`, `.env` (regenerados automaticamente).
+- Conteúdo dos 67 chunks já existentes — só ganham `chunk_id`, `chunk_version=1`, `status='ativo'`, `source_version=1`.
+- Embeddings existentes — continuam válidos.

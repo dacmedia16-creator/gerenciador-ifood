@@ -487,45 +487,74 @@ export type Database = {
       }
       knowledge_base: {
         Row: {
+          archived_at: string | null
           area: string
+          chunk_id: string
+          chunk_version: number
           content: string
           created_at: string
           embedding: string | null
           embedding_version: number
           id: string
+          published_at: string
           source: string
+          source_version: number
+          status: string
+          supersedes: string | null
           tags: string[] | null
           title: string
           topic: string | null
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           area: string
+          chunk_id: string
+          chunk_version?: number
           content: string
           created_at?: string
           embedding?: string | null
           embedding_version?: number
           id?: string
+          published_at?: string
           source?: string
+          source_version?: number
+          status?: string
+          supersedes?: string | null
           tags?: string[] | null
           title: string
           topic?: string | null
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           area?: string
+          chunk_id?: string
+          chunk_version?: number
           content?: string
           created_at?: string
           embedding?: string | null
           embedding_version?: number
           id?: string
+          published_at?: string
           source?: string
+          source_version?: number
+          status?: string
+          supersedes?: string | null
           tags?: string[] | null
           title?: string
           topic?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_base_supersedes_fkey"
+            columns: ["supersedes"]
+            isOneToOne: false
+            referencedRelation: "knowledge_base"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       metrics: {
         Row: {
@@ -1206,9 +1235,13 @@ export type Database = {
         }
         Returns: {
           area: string
+          chunk_id: string
+          chunk_version: number
           content: string
           id: string
           similarity: number
+          source: string
+          source_version: number
           title: string
         }[]
       }
