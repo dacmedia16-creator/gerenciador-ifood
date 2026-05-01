@@ -723,6 +723,7 @@ export type Database = {
           has_coupons: boolean | null
           has_photos: boolean | null
           id: string
+          images: string[]
           main_gap: string | null
           name: string
           neighborhood: string | null
@@ -749,6 +750,7 @@ export type Database = {
           has_coupons?: boolean | null
           has_photos?: boolean | null
           id?: string
+          images?: string[]
           main_gap?: string | null
           name: string
           neighborhood?: string | null
@@ -775,6 +777,7 @@ export type Database = {
           has_coupons?: boolean | null
           has_photos?: boolean | null
           id?: string
+          images?: string[]
           main_gap?: string | null
           name?: string
           neighborhood?: string | null
