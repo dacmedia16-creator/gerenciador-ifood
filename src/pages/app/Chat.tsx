@@ -125,15 +125,19 @@ export default function Chat() {
         return;
       }
 
-      const content: string = (data as any)?.content ?? "";
-      if (!content) {
+      const rawContent: string = (data as any)?.content ?? "";
+      const generatedImages: string[] = Array.isArray((data as any)?.images) ? (data as any).images : [];
+      // Remove marker interno usado pelo backend para contagem de imagens
+      const cleanContent = rawContent.replace("[__img_generated__]", "").trim();
+
+      if (!cleanContent && generatedImages.length === 0) {
         toast({ title: "Resposta vazia", description: "Tente reformular sua pergunta.", variant: "destructive" });
         return;
       }
 
       // Adiciona a mensagem vazia em modo "typing" e revela aos poucos
-      setMessages((prev) => [...prev, { role: "assistant", content: "", typing: true }]);
-      await typeOutAssistant(content);
+      setMessages((prev) => [...prev, { role: "assistant", content: "", typing: true, generatedImages }]);
+      await typeOutAssistant(cleanContent);
     } catch (e) {
       console.error(e);
       toast({ title: "Erro de conexão", description: "Não foi possível falar com o Gestor IA.", variant: "destructive" });
