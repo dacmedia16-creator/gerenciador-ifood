@@ -67,7 +67,7 @@ export function AIConsultReport({ data, storeId }: { data: any; storeId?: string
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-primary" />
-        <h2 className="text-2xl font-bold">Gestor IA — Análise consultiva</h2>
+        <h2 className="text-2xl font-bold">Gestor IA — Análise da sua loja</h2>
         {data.generated_at && (
           <span className="text-xs text-muted-foreground ml-auto">
             {new Date(data.generated_at).toLocaleString("pt-BR")}

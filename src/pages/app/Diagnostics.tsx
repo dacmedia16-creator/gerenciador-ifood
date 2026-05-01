@@ -34,7 +34,7 @@ export default function Diagnostics() {
           <FileText className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             Os diagnósticos abaixo vêm do <strong>motor de regras objetivo</strong>. Para
-            análise consultiva (com memória da loja, casos similares e priorização), use
+            uma análise completa (com memória da loja, casos similares e priorização), use
             o <strong>Gestor IA</strong> na tela de Relatório.
           </div>
         </div>

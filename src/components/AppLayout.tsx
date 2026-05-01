@@ -23,7 +23,7 @@ export default function AppLayout() {
         <div className="flex-1 flex flex-col">
           <header className="h-14 flex items-center border-b bg-background px-4 gap-3 no-print">
             <SidebarTrigger />
-            <h1 className="text-sm font-medium">Gestor IA de Delivery</h1>
+            <h1 className="text-sm font-medium">Painel do Dono — Gestor de Delivery</h1>
           </header>
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             <Outlet />

@@ -226,7 +226,7 @@ export default function ReportTemplate() {
               <Input
                 value={tpl.tagline ?? ""}
                 onChange={(e) => setTpl({ ...tpl, tagline: e.target.value })}
-                placeholder="Ex.: Relatório consultivo mensal"
+                placeholder="Ex.: Relatório mensal da minha loja"
               />
             </div>
           </div>
