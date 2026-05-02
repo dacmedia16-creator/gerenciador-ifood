@@ -85,11 +85,7 @@ export function AppSidebar() {
           {collapsed ? (
             <img src="/favicon.png" alt="Gestor de Delivery" className="h-8 w-8 shrink-0" />
           ) : (
-            <img
-              src={logoGD}
-              alt="Gestor de Delivery"
-              className="h-8 w-auto brightness-0 dark:brightness-100"
-            />
+            <img src={logoGD} alt="Gestor de Delivery" className="h-8 w-auto" />
           )}
         </NavLink>
       </SidebarHeader>
