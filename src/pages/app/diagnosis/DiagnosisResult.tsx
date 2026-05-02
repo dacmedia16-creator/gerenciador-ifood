@@ -3,15 +3,21 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
-import { ScoreBadge } from "@/components/StatusBadges";
-import { ArrowRight, FileText, Target, AlertTriangle, ListTodo, Info } from "lucide-react";
+import { ScoreBadge, SeverityBadge } from "@/components/StatusBadges";
+import { ArrowRight, FileText, Sparkles, ChevronRight, Info, Target, ListTodo } from "lucide-react";
+import { ProblemDetailSheet } from "@/components/diagnosis/ProblemDetailSheet";
+
+const severityRank = (s: string) => (s === "critico" ? 0 : s === "atencao" ? 1 : 2);
 
 export default function DiagnosisResult() {
   const { sessionId = "" } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -48,10 +54,17 @@ export default function DiagnosisResult() {
 
   const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions } = data;
   const { overall, areas } = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
-  const critical = diagnostics.filter((d: any) => d.severity === "critico");
-  const attention = diagnostics.filter((d: any) => d.severity === "atencao");
-  const visibleProblems = critical.length > 0 ? critical : attention;
-  const lowDataMode = critical.length === 0 && actions.every((a: any) => a.area === "Cadastro geral" || /sem |não cadastrad|incompleto/i.test(a.title || ""));
+
+  const sortedProblems = [...diagnostics].sort(
+    (a: any, b: any) => severityRank(a.severity) - severityRank(b.severity),
+  );
+
+  const lowDataMode = sortedProblems.length === 0 || (sortedProblems.length === 1 && sortedProblems[0].area === "Cadastro geral");
+
+  const openProblem = (d: any) => {
+    setSelected(d);
+    setOpen(true);
+  };
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -107,82 +120,111 @@ export default function DiagnosisResult() {
                     <Link to={`/app/stores/${data.store_id}/metrics`}>Informar métricas</Link>
                   </Button>
                 )}
-                {reviews.length === 0 && (
-                  <Button size="sm" variant="outline" asChild>
-                    <Link to={`/app/stores/${data.store_id}/reviews`}>Cadastrar avaliações</Link>
-                  </Button>
-                )}
               </div>
             </div>
           </div>
         </Card>
       )}
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <AlertTriangle className={`h-4 w-4 ${critical.length > 0 ? "text-destructive" : "text-warning"}`} />
-            {critical.length > 0
-              ? `Principais problemas (${critical.length})`
-              : `Pontos de atenção (${attention.length})`}
-          </h3>
-          {visibleProblems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum problema identificado.</p>
-          ) : (
-            <ul className="space-y-2">
-              {visibleProblems.slice(0, 5).map((d: any) => (
-                <li key={d.id} className={`text-sm border-l-2 pl-3 ${critical.length > 0 ? "border-destructive" : "border-warning"}`}>
-                  <p className="font-medium">{d.problem}</p>
-                  <p className="text-xs text-muted-foreground">{d.area}</p>
-                </li>
-              ))}
+      <Tabs defaultValue="problems">
+        <TabsList>
+          <TabsTrigger value="problems">Problemas ({sortedProblems.length})</TabsTrigger>
+          <TabsTrigger value="overview">Visão geral</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="problems" className="mt-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Lista de problemas identificados
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Clique em um problema para ver a análise aprofundada e a solução individual gerada pela IA.
+                </p>
+              </div>
+            </div>
+
+            {sortedProblems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum problema identificado.</p>
+            ) : (
+              <ol className="space-y-2">
+                {sortedProblems.map((d: any, i: number) => (
+                  <li key={d.id}>
+                    <button
+                      onClick={() => openProblem(d)}
+                      className="w-full text-left border rounded-md p-3 hover:border-primary hover:bg-primary/5 transition-colors flex items-start gap-3 group"
+                    >
+                      <div className="shrink-0 h-8 w-8 rounded-full bg-muted flex items-center justify-center text-sm font-semibold">
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">{d.area}</span>
+                          <SeverityBadge severity={d.severity} />
+                          {d.detailed_solution && (
+                            <Badge variant="secondary" className="text-[10px]">IA pronta</Badge>
+                          )}
+                        </div>
+                        <p className="font-medium text-sm">{d.problem}</p>
+                        {d.business_impact && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{d.business_impact}</p>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 mt-1" />
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          <Card className="p-5">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Target className="h-4 w-4 text-success" /> Principais oportunidades
+            </h3>
+            <ul className="space-y-2 text-sm">
+              {Object.entries(areas)
+                .filter(([, s]) => (s as number) < 70)
+                .slice(0, 5)
+                .map(([area, s]) => (
+                  <li key={area} className="border-l-2 border-warning pl-3">
+                    <p className="font-medium">{area}</p>
+                    <p className="text-xs text-muted-foreground">Score atual: {s as number}/100</p>
+                  </li>
+                ))}
             </ul>
-          )}
-        </Card>
+          </Card>
 
-        <Card className="p-5">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <Target className="h-4 w-4 text-success" />
-            Principais oportunidades
-          </h3>
-          <ul className="space-y-2 text-sm">
-            {Object.entries(areas)
-              .filter(([, s]) => (s as number) < 70)
-              .slice(0, 5)
-              .map(([area, s]) => (
-                <li key={area} className="border-l-2 border-warning pl-3">
-                  <p className="font-medium">{area}</p>
-                  <p className="text-xs text-muted-foreground">Score atual: {s as number}/100</p>
-                </li>
-              ))}
-          </ul>
-        </Card>
-      </div>
-
-      <Card className="p-5">
-        <h3 className="font-semibold mb-3 flex items-center gap-2">
-          <ListTodo className="h-4 w-4 text-primary" /> Plano de ação priorizado
-        </h3>
-        {actions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sem ações sugeridas.</p>
-        ) : (
-          <ul className="space-y-2">
-            {actions.slice(0, 6).map((a: any) => (
-              <li key={a.id} className="border rounded-md p-3">
-                <div className="flex justify-between items-start gap-2">
-                  <div>
-                    <p className="font-medium text-sm">{a.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{a.description}</p>
-                  </div>
-                  <Badge variant={a.priority === "alta" ? "destructive" : a.priority === "media" ? "default" : "secondary"}>
-                    {a.priority}
-                  </Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+          <Card className="p-5">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <ListTodo className="h-4 w-4 text-primary" /> Plano de ação priorizado
+            </h3>
+            {actions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sem ações sugeridas.</p>
+            ) : (
+              <ul className="space-y-2">
+                {actions.slice(0, 6).map((a: any) => (
+                  <li key={a.id} className="border rounded-md p-3">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <p className="font-medium text-sm">{a.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{a.description}</p>
+                      </div>
+                      <Badge variant={a.priority === "alta" ? "destructive" : a.priority === "media" ? "default" : "secondary"}>
+                        {a.priority}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <div className="flex flex-wrap gap-2">
         <Button asChild size="lg">
@@ -199,6 +241,8 @@ export default function DiagnosisResult() {
           <Link to="/app/dashboard">Voltar ao dashboard</Link>
         </Button>
       </div>
+
+      <ProblemDetailSheet diagnostic={selected} open={open} onOpenChange={setOpen} />
     </div>
   );
 }
