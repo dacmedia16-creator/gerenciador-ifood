@@ -32,6 +32,13 @@ export default function Stores() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    const { error } = await supabase.from("stores").delete().eq("id", id);
+    if (error) { toast.error(`Erro ao excluir: ${error.message}`); return; }
+    toast.success(`Loja "${name}" excluída`);
+    setStores((prev) => prev.filter((s) => s.id !== id));
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -44,8 +51,8 @@ export default function Stores() {
       {stores.length === 0 && <Card className="p-8 text-center"><Store className="h-10 w-10 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">Nenhuma loja cadastrada ainda.</p></Card>}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {stores.map((s) => (
-          <Card key={s.id} className="p-4 shadow-card hover:shadow-elegant transition-shadow">
-            <Link to={`/app/stores/${s.id}`} className="block">
+          <Card key={s.id} className="p-4 shadow-card hover:shadow-elegant transition-shadow relative">
+            <Link to={`/app/stores/${s.id}`} className="block pr-8">
               <h3 className="font-semibold">{s.name}</h3>
               <p className="text-xs text-muted-foreground mb-2">{s.platform} · {s.city}</p>
               <div className="text-xs text-muted-foreground space-y-1">
@@ -54,6 +61,27 @@ export default function Stores() {
                 <div>Categoria: <span className="font-medium text-foreground">{s.category || "-"}</span></div>
               </div>
             </Link>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8 text-muted-foreground hover:text-destructive" aria-label="Excluir loja">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir "{s.name}"?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação é irreversível. Todos os dados relacionados a esta loja (diagnósticos, produtos, avaliações, métricas, planos) serão removidos.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => handleDelete(s.id, s.name)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                    Excluir
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </Card>
         ))}
       </div>
