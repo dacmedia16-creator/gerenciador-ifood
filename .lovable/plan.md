@@ -1,40 +1,37 @@
-## Por que ainda aparece "Minhas lojas"
+## Aprendizado contínuo — duas camadas
 
-A página/menu "Minhas lojas" continua existindo porque ainda não a removemos — só ajustamos o diagnóstico. Como o dono é dono de **uma única loja**, faz sentido aplicar a mesma lógica de "singleton" que aplicamos ao diagnóstico: o usuário tem **uma loja só**, que ele atualiza, sem listagem nem botão de "Nova loja" / "Criar demo".
+### O que já existe (camada 2 — feedback/outcome)
+Boa notícia: a camada 2 está **toda implementada**:
+- `record-feedback` registra o que o usuário marcou (aplicada / ignorada / rejeitada).
+- `measure-outcomes` (cron 7d) compara `metrics_before` × `metrics_after` e classifica `outcome`.
+- `extract-case` é chamado automaticamente quando o outcome é positivo e grava na `case_library` com `embedding`, anonimizando via `store_profile`.
 
-## Plano
+Falta só a **camada 1** (gravação imediata, ao gerar diagnóstico).
 
-### 1. Sidebar (`src/components/AppSidebar.tsx`)
-- Remover o item **"Minhas lojas"** do grupo Geral para usuários comuns.
-- Adicionar **"Minha loja"** apontando direto para `/app/stores/:id` (resolvido em runtime buscando a única loja do usuário).
-- Para admin, manter um acesso a "Todas as lojas" (visão administrativa) somente no grupo Super Admin.
+### O que vou implementar (camada 1)
 
-### 2. Resolver loja única
-- Criar helper `getOrCreateUserStore(userId)` em `src/lib/store/userStore.ts`:
-  - Busca a loja mais recente do usuário em `stores`.
-  - Se não existir, redireciona para o onboarding (`/app/onboarding`) para criação inicial.
-- Criar página de "atalho" `src/pages/app/MyStore.tsx` na rota `/app/store` (singular), que chama o helper e faz `navigate(/app/stores/{id})`.
+1. **Nova edge function `seed-cases-from-diagnosis`**
+   - Recebe `sessionId` (ou `storeId`).
+   - Busca os diagnósticos recém-criados na rodada (`diagnostics` dos últimos 30 min).
+   - Para cada diagnóstico relevante, gera `embedding` e insere na `case_library` com:
+     - `store_profile` agregado e **anonimizado**: `category`, `platform`, `ticket_band` (baixo/médio/alto), `size_band` (pequena/média/grande), `city_initial` (só inicial). Sem `store_id`, nome, endereço ou `user_id`.
+     - `outcome: "neutro"` (semente — sem feedback ainda).
+     - `_seed_key` em `store_profile` = hash estável `(storeId, area, problem)` → idempotência.
+   - Filtra ruído: precisa ter `recommended_solution` minimamente útil (≥ 20 chars).
+   - Autenticação: aceita JWT do dono **ou** `X-Internal-Call` (service role).
 
-### 3. Remover fluxo de múltiplas lojas
-- `src/pages/app/Stores.tsx`: deixar de ser usado pelo dono. Manter o componente, mas usá-lo só em rota admin (`/app/admin/stores`) com `<AdminRoute>`.
-- `src/pages/app/NewStore.tsx`: proteger com `<AdminRoute>` (admin pode criar lojas em nome de clientes); o dono comum não vê mais.
-- Botões "Criar demo" e "Nova loja" só aparecem na visão admin.
+2. **Disparo automático no fim do diagnóstico**
+   - Em `src/lib/diagnosis/generate.ts`, após marcar a sessão como `generated`, invoca `seed-cases-from-diagnosis` em background (sem bloquear UI).
 
-### 4. Onboarding
-- Após o onboarding criar a loja, redirecionar para `/app/store` (que resolve para `/app/stores/{id}`) em vez de `/app/stores`.
+### Arquivos
+- **Novo:** `supabase/functions/seed-cases-from-diagnosis/index.ts`
+- **Editar:** `src/lib/diagnosis/generate.ts` (1 chamada `supabase.functions.invoke` no final)
 
-### 5. Auth/Redirect
-- No `Auth.tsx` e em `redirectByRole`, dono comum vai para `/app/dashboard` (já está). Sem mudança aqui.
-- No Dashboard e demais links internos, trocar referências `/app/stores` (lista) por `/app/store` (atalho singular).
+### Privacidade
+- Nada de `store_id`, nome, `user_id` ou endereço no payload da `case_library`.
+- RLS atual (`case_read_authenticated`) já garante que usuários só leiam — apenas a função (service role) escreve.
 
-### Arquivos afetados
-- `src/components/AppSidebar.tsx` (editar)
-- `src/lib/store/userStore.ts` (novo)
-- `src/pages/app/MyStore.tsx` (novo)
-- `src/App.tsx` (nova rota `/app/store`; proteger `stores` e `stores/new` com AdminRoute)
-- `src/pages/app/Onboarding.tsx` ou `OnboardingWizard` (ajustar redirect final)
-- Buscar e atualizar links internos para `/app/stores` (lista) onde aplicável
-
-### Resultado
-- Dono comum: vê só **"Minha loja"** no menu, sempre cai na sua loja única, atualiza dados em vez de criar novas.
-- Admin: continua com "Todas as lojas" e capacidade de criar/excluir, no grupo Super Admin.
+### Resultado prático
+- Cada diagnóstico finalizado vira 3-15 casos-semente anônimos.
+- A `match_cases()` que a IA usa nos próximos diagnósticos passa a devolver casos reais de lojas com perfil semelhante (mesma categoria, faixa de ticket, porte).
+- Quando esses casos depois recebem feedback (camada 2), a `extract-case` insere uma versão "com outcome", enriquecendo ainda mais o conhecimento — efeito de rede entre todos os usuários.
