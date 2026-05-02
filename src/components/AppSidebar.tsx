@@ -61,6 +61,8 @@ const adminStore = (id: string) => [
   { title: "Configurações do relatório", url: `/app/stores/${id}/report/template`, icon: Settings },
 ];
 
+const adminAll = adminGeneralExtras;
+
 export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
@@ -160,6 +162,13 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {adminGeneral.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              {adminAll.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
                     <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>

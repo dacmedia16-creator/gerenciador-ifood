@@ -58,7 +58,7 @@ export function useStoreData(storeId?: string) {
   useEffect(() => {
     if (query.data && !query.data.store) {
       toast.error("Loja não encontrada ou sem acesso.");
-      navigate("/app/stores", { replace: true });
+      navigate("/app/store", { replace: true });
     }
   }, [query.data, navigate]);
 
