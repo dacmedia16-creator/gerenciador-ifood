@@ -286,5 +286,10 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
     .update({ status: "generated", generated_at: new Date().toISOString(), completed_at: new Date().toISOString(), store_id: storeId })
     .eq("id", sessionId);
 
+  // Camada 1 do aprendizado contínuo: grava casos-semente anônimos na case_library
+  // para alimentar match_cases() de futuros diagnósticos. Roda em background — não bloqueia.
+  supabase.functions.invoke("seed-cases-from-diagnosis", { body: { sessionId } })
+    .catch((e) => console.warn("seed-cases-from-diagnosis failed", e));
+
   return { storeId, reportId: report?.id, diagnosticsCount: diagnostics.length };
 }
