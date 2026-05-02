@@ -20,29 +20,39 @@ export default function Auth() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  useEffect(() => { if (user) navigate("/app/dashboard"); }, [user, navigate]);
+  const redirectByRole = async (userId: string) => {
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    navigate(data ? "/app/admin" : "/app/dashboard");
+  };
+
+  useEffect(() => { if (user) redirectByRole(user.id); }, [user]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) return toast.error(error.message);
     toast.success("Bem-vindo de volta!");
-    navigate("/app/dashboard");
+    if (data.user) await redirectByRole(data.user.id);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email, password,
       options: { emailRedirectTo: `${window.location.origin}/app/dashboard`, data: { name } },
     });
     setLoading(false);
     if (error) return toast.error(error.message);
     toast.success("Conta criada! Você já pode entrar.");
-    navigate("/app/dashboard");
+    if (data.user) await redirectByRole(data.user.id);
   };
 
   const handleReset = async () => {
