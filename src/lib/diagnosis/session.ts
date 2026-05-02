@@ -35,6 +35,32 @@ export async function getDraftSession(userId: string): Promise<SessionRow | null
   return (data as SessionRow) || null;
 }
 
+/** Retorna a sessão única do usuário (qualquer status). Se estava completed, reabre como draft. Se não existir, cria. */
+export async function getOrCreateUserSession(userId: string, storeId?: string | null): Promise<SessionRow> {
+  const { data } = await supabase
+    .from("diagnosis_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (data) {
+    const session = data as SessionRow;
+    if (session.status !== "draft") {
+      const { data: updated } = await supabase
+        .from("diagnosis_sessions")
+        .update({ status: "draft" })
+        .eq("id", session.id)
+        .select()
+        .single();
+      return (updated as SessionRow) || session;
+    }
+    return session;
+  }
+  return await createSession(userId, storeId ?? null);
+}
+
 export async function loadSession(sessionId: string) {
   const [s, a, st] = await Promise.all([
     supabase.from("diagnosis_sessions").select("*").eq("id", sessionId).single(),
