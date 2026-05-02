@@ -9,6 +9,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { Shield } from "lucide-react";
 import logoGD from "@/assets/logo-gestor-delivery.png";
 
 const general = [
@@ -46,6 +48,7 @@ const storeData = (id: string) => [
 ];
 
 const adminGeneral = [
+  { title: "Painel Super Admin", url: "/app/admin", icon: Shield },
   { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
   { title: "Base de conhecimento", url: "/app/knowledge", icon: BookOpen },
 ];
@@ -61,6 +64,7 @@ export function AppSidebar() {
   const params = useParams();
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
+  const { isAdmin } = useIsAdmin();
 
   const match = pathname.match(/\/app\/stores\/([0-9a-f-]{36})/);
   const storeId = match?.[1] || params.id;
@@ -145,9 +149,10 @@ export function AppSidebar() {
           </>
         )}
 
-        {/* Admin / avançado — itens que não são para o uso diário do dono */}
+        {/* Super Admin — só visível para administradores */}
+        {isAdmin && (
         <SidebarGroup>
-          <SidebarGroupLabel>Admin</SidebarGroupLabel>
+          <SidebarGroupLabel>Super Admin</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {adminGeneral.map((item) => (
