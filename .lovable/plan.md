@@ -1,61 +1,40 @@
-## Painel de Super Admin
+## Separar menu do Dono e do Super Admin
 
-Criar uma área `/app/admin` exclusiva para super administradores, com gestão de usuários e atalhos centralizados para Radar de Prospects, Gestor IA (Chat) e Base de conhecimento.
+Hoje o menu lateral mostra praticamente tudo para qualquer usuário logado, e só "Radar de Prospects" e "Base de conhecimento" estão restritos ao admin. Vamos reorganizar para que o dono comum veja só o essencial e o super admin veja tudo.
 
-### 1. Sistema de roles (segurança)
+### Menu do Dono comum (não-admin)
 
-Criar a infraestrutura padrão de roles via migration:
+Bloco **Geral** (apenas 4 itens):
+- Painel do Dono (`/app/dashboard`)
+- Novo Diagnóstico (`/app/diagnosis/new`)
+- Minhas lojas (`/app/stores`)
+- Gestor IA (Chat) (`/app/chat`)
 
-- Enum `app_role` com valores `admin` e `user`.
-- Tabela `user_roles (id, user_id, role, created_at)` com RLS.
-- Função `has_role(_user_id uuid, _role app_role)` (SECURITY DEFINER) para evitar recursão em policies.
-- Policies: usuário lê seus próprios roles; apenas admin pode inserir/atualizar/deletar roles.
-- Seed: inserir role `admin` para o user_id de `dacmedia16@gmail.com` (48e83670-62ff-402e-b92b-f57657785d7d).
+Quando ele abrir uma loja dele, continua vendo os blocos **Análise da minha loja**, **Operação** e **Dados** normalmente (mantém submenus completos da loja, conforme confirmado).
 
-### 2. Restrição de acesso no menu lateral
+Não vê: Painel Super Admin, Radar de Prospects, Base de conhecimento, Configurações do relatório.
 
-Em `src/components/AppSidebar.tsx`:
+### Menu do Super Admin
 
-- Adicionar hook `useIsAdmin()` que consulta `user_roles` via Supabase (com cache via React Query).
-- Mover **Radar de Prospects** e **Base de conhecimento** do bloco "Admin" atual para o novo bloco **Super Admin**, visível só para admin.
-- Manter Gestor IA (Chat) acessível para todos (continua em "Geral").
-- Adicionar item **Painel Admin** (`/app/admin`) visível só para admins.
+Vê **tudo** que o dono vê + um bloco extra **Super Admin** com:
+- Painel Super Admin (`/app/admin`)
+- Radar de Prospects (`/app/prospects`)
+- Base de conhecimento (`/app/knowledge`)
+- Configurações do relatório (quando estiver dentro de uma loja)
 
-### 3. Página `/app/admin` — Painel de Super Admin
+### Mudanças técnicas
 
-Nova página `src/pages/app/Admin.tsx` com:
+**`src/components/AppSidebar.tsx`**
+- Manter array `general` como está (já tem os 4 itens corretos).
+- Manter blocos de loja (`storeAnalysis`, `storeOperations`, `storeData`) renderizando para qualquer usuário quando há `storeId` (sem mudança).
+- O bloco "Super Admin" já está condicionado a `isAdmin` — manter. Só garantir que não há mais nenhum item admin vazando para usuário comum.
 
-- Cards de KPIs: total de usuários, lojas, diagnósticos, prospects.
-- Atalhos rápidos para: Criar usuário, Radar de Prospects, Gestor IA (Chat), Base de conhecimento.
-- Tabela de usuários (lista de `profiles` + role) com:
-  - Coluna: nome, email, role, data de criação, nº de lojas.
-  - Ações por linha: promover/remover admin, excluir usuário.
-- Botão "Criar usuário" abre dialog com email + senha temporária + nome.
-- Guard: redireciona para `/app/dashboard` se o usuário logado não for admin.
-
-### 4. Edge Functions admin (para operações privilegiadas)
-
-Criar três edge functions que validam JWT + role admin antes de executar:
-
-- `admin-create-user`: usa Service Role Key para chamar `auth.admin.createUser({ email, password, email_confirm: true })` + insere profile + role default `user`.
-- `admin-set-role`: promove/remove role admin de um user_id.
-- `admin-delete-user`: remove o usuário via `auth.admin.deleteUser`.
-
-Todas verificam `has_role(auth.uid(), 'admin')` antes de qualquer ação.
-
-### 5. Roteamento
-
-Em `src/App.tsx` adicionar rota lazy `admin` dentro de `/app`:
-```
-<Route path="admin" element={<Admin />} />
-```
+**Proteção de rotas (defesa em profundidade)** em `src/App.tsx`:
+- Envolver as rotas `/app/admin`, `/app/prospects`, `/app/knowledge` e `/app/stores/:id/report/template` num pequeno componente `<AdminRoute>` que usa `useIsAdmin()` e redireciona para `/app/dashboard` se não for admin. Isso evita que um dono comum acesse essas páginas digitando a URL direto.
+- Criar `src/components/AdminRoute.tsx` simples (loading state + Navigate).
 
 ### O que NÃO muda
 
-- Fluxo de IA, diagnóstico, regras e edge functions existentes ficam intactos.
-- Donos comuns continuam vendo lojas, diagnósticos, plano, chat IA etc. normalmente.
-- Apenas Radar de Prospects e Base de conhecimento ficam restritos a admin.
-
-### Resultado
-
-Você (admin) terá um painel central em `/app/admin` para criar usuários com senha temporária, gerenciar roles, e acessar rapidamente Prospects, Chat IA e Base de conhecimento. Donos comuns não verão nada disso.
+- RLS, edge functions admin, tabela `user_roles`, página `/app/admin` continuam como estão.
+- Submenus da loja continuam completos para o dono.
+- Gestor IA continua acessível a todos.

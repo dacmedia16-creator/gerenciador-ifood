@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/LoadingState";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AppLayout from "./components/AppLayout";
+import AdminRoute from "./components/AdminRoute";
 
 // Lazy-loaded routes — reduz bundle inicial
 const Contato = lazy(() => import("./pages/Contato"));
@@ -94,16 +95,16 @@ const App = () => (
                 <Route path="stores/:id/uploads" element={<Uploads />} />
                 <Route path="stores/:id/action-plan" element={<ActionPlan />} />
                 <Route path="stores/:id/report" element={<Report />} />
-                <Route path="stores/:id/report/template" element={<ReportTemplate />} />
+                <Route path="stores/:id/report/template" element={<AdminRoute><ReportTemplate /></AdminRoute>} />
                 <Route path="stores/:id/product-names" element={<ProductNameAnalyzer />} />
                 <Route path="stores/:id/expectation" element={<ExpectationVsDelivery />} />
                 <Route path="stores/:id/pricing-simulator" element={<PricingSimulator />} />
                 <Route path="stores/:id/best-hours" element={<BestHours />} />
                 <Route path="stores/:id/evolution" element={<StoreEvolution />} />
-                <Route path="prospects" element={<Prospects />} />
-                <Route path="knowledge" element={<Knowledge />} />
+                <Route path="prospects" element={<AdminRoute><Prospects /></AdminRoute>} />
+                <Route path="knowledge" element={<AdminRoute><Knowledge /></AdminRoute>} />
                 <Route path="chat" element={<Chat />} />
-                <Route path="admin" element={<Admin />} />
+                <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>
