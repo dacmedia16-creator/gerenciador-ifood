@@ -18,6 +18,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Dashboard = lazy(() => import("./pages/app/Dashboard"));
 const Stores = lazy(() => import("./pages/app/Stores"));
 const NewStore = lazy(() => import("./pages/app/NewStore"));
+const MyStore = lazy(() => import("./pages/app/MyStore"));
 const StoreOverview = lazy(() => import("./pages/app/StoreOverview"));
 const Diagnostics = lazy(() => import("./pages/app/Diagnostics"));
 const Score = lazy(() => import("./pages/app/Score"));
@@ -80,8 +81,9 @@ const App = () => (
                 <Route index element={<Dashboard />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="onboarding" element={<Onboarding />} />
-                <Route path="stores" element={<Stores />} />
-                <Route path="stores/new" element={<NewStore />} />
+                <Route path="store" element={<MyStore />} />
+                <Route path="stores" element={<AdminRoute><Stores /></AdminRoute>} />
+                <Route path="stores/new" element={<AdminRoute><NewStore /></AdminRoute>} />
                 <Route path="stores/:id" element={<StoreOverview />} />
                 <Route path="stores/:id/diagnostics" element={<Diagnostics />} />
                 <Route path="stores/:id/score" element={<Score />} />

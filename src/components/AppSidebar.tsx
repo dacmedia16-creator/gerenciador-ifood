@@ -16,8 +16,12 @@ import logoGD from "@/assets/logo-gestor-delivery.png";
 const general = [
   { title: "Painel do Dono", url: "/app/dashboard", icon: LayoutDashboard },
   { title: "Meu Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
-  { title: "Minhas lojas", url: "/app/stores", icon: Store },
+  { title: "Minha loja", url: "/app/store", icon: Store },
   { title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare },
+];
+
+const adminGeneralExtras = [
+  { title: "Todas as lojas", url: "/app/stores", icon: Store },
 ];
 
 const storeAnalysis = (id: string) => [
@@ -56,6 +60,8 @@ const adminGeneral = [
 const adminStore = (id: string) => [
   { title: "Configurações do relatório", url: `/app/stores/${id}/report/template`, icon: Settings },
 ];
+
+const adminAll = adminGeneralExtras;
 
 export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
@@ -156,6 +162,13 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {adminGeneral.map((item) => (
+                <SidebarMenuItem key={item.url}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              {adminAll.map((item) => (
                 <SidebarMenuItem key={item.url}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)}>
                     <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>

@@ -1,34 +1,40 @@
-## Objetivo
+## Por que ainda aparece "Minhas lojas"
 
-O usuário (Dono) terá **apenas um diagnóstico** que ele atualiza ao longo do tempo, em vez de criar novos a cada vez. Toda vez que clicar em "Novo Diagnóstico", abrirá a sessão existente para edição/atualização.
+A página/menu "Minhas lojas" continua existindo porque ainda não a removemos — só ajustamos o diagnóstico. Como o dono é dono de **uma única loja**, faz sentido aplicar a mesma lógica de "singleton" que aplicamos ao diagnóstico: o usuário tem **uma loja só**, que ele atualiza, sem listagem nem botão de "Nova loja" / "Criar demo".
 
-## Mudanças
+## Plano
 
-### 1. `src/lib/diagnosis/session.ts`
-- Adicionar função `getOrCreateUserSession(userId)` que:
-  - Busca **qualquer** sessão do usuário (não apenas `status='draft'`), ordenada pela mais recente.
-  - Se existir, retorna ela (mesmo se já estiver `completed`, reabre setando `status='draft'` e atualizando `updated_at`).
-  - Se não existir, cria uma nova.
+### 1. Sidebar (`src/components/AppSidebar.tsx`)
+- Remover o item **"Minhas lojas"** do grupo Geral para usuários comuns.
+- Adicionar **"Minha loja"** apontando direto para `/app/stores/:id` (resolvido em runtime buscando a única loja do usuário).
+- Para admin, manter um acesso a "Todas as lojas" (visão administrativa) somente no grupo Super Admin.
 
-### 2. `src/pages/app/diagnosis/NewDiagnosis.tsx`
-- Remover lógica de `?new=1` (forçar nova sessão).
-- Sempre chamar `getOrCreateUserSession(user.id)` e redirecionar para `/app/diagnosis/{id}`.
-- Resultado: o item "Novo Diagnóstico" do menu sempre abre a mesma sessão do usuário para continuar/atualizar.
+### 2. Resolver loja única
+- Criar helper `getOrCreateUserStore(userId)` em `src/lib/store/userStore.ts`:
+  - Busca a loja mais recente do usuário em `stores`.
+  - Se não existir, redireciona para o onboarding (`/app/onboarding`) para criação inicial.
+- Criar página de "atalho" `src/pages/app/MyStore.tsx` na rota `/app/store` (singular), que chama o helper e faz `navigate(/app/stores/{id})`.
 
-### 3. Renomear rótulo no `AppSidebar.tsx` (Donos)
-- Trocar "Novo Diagnóstico" por **"Meu Diagnóstico"** para refletir que é único e atualizável.
-- Super Admin continua com acesso normal a tudo.
+### 3. Remover fluxo de múltiplas lojas
+- `src/pages/app/Stores.tsx`: deixar de ser usado pelo dono. Manter o componente, mas usá-lo só em rota admin (`/app/admin/stores`) com `<AdminRoute>`.
+- `src/pages/app/NewStore.tsx`: proteger com `<AdminRoute>` (admin pode criar lojas em nome de clientes); o dono comum não vê mais.
+- Botões "Criar demo" e "Nova loja" só aparecem na visão admin.
 
-### 4. `src/pages/app/diagnosis/DiagnosisReview.tsx` (revisão/geração)
-- Após gerar o relatório, **não** marcar a sessão como travada — manter editável para que o dono volte e atualize respostas e regere quando quiser.
-- Garantir que o botão final no fluxo seja "Atualizar diagnóstico" quando já houver `generated_at`.
+### 4. Onboarding
+- Após o onboarding criar a loja, redirecionar para `/app/store` (que resolve para `/app/stores/{id}`) em vez de `/app/stores`.
 
-### 5. Banco de dados
-- Nenhuma migração necessária. A tabela `diagnosis_sessions` já suporta reabertura (campos `status`, `current_step`, `completion_percentage`, `generated_at`).
-- Opcional: adicionar índice único parcial para reforçar 1 sessão ativa por usuário — **não** será aplicado agora para evitar quebrar dados existentes; a regra é garantida no código.
+### 5. Auth/Redirect
+- No `Auth.tsx` e em `redirectByRole`, dono comum vai para `/app/dashboard` (já está). Sem mudança aqui.
+- No Dashboard e demais links internos, trocar referências `/app/stores` (lista) por `/app/store` (atalho singular).
 
-## Comportamento final
+### Arquivos afetados
+- `src/components/AppSidebar.tsx` (editar)
+- `src/lib/store/userStore.ts` (novo)
+- `src/pages/app/MyStore.tsx` (novo)
+- `src/App.tsx` (nova rota `/app/store`; proteger `stores` e `stores/new` com AdminRoute)
+- `src/pages/app/Onboarding.tsx` ou `OnboardingWizard` (ajustar redirect final)
+- Buscar e atualizar links internos para `/app/stores` (lista) onde aplicável
 
-- Dono clica "Meu Diagnóstico" → abre sempre a mesma sessão, com respostas anteriores já preenchidas.
-- Pode editar qualquer etapa, salvar (autosave já existe) e regenerar o relatório.
-- Histórico de relatórios gerados continua salvo em `reports` (cada geração cria um novo registro de relatório, mas a sessão de perguntas é única).
+### Resultado
+- Dono comum: vê só **"Minha loja"** no menu, sempre cai na sua loja única, atualiza dados em vez de criar novas.
+- Admin: continua com "Todas as lojas" e capacidade de criar/excluir, no grupo Super Admin.
