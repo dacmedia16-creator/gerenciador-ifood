@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SeverityBadge, PriorityBadge } from "@/components/StatusBadges";
 import { Sparkles, RotateCw, AlertTriangle, Lightbulb, Target, ListChecks, BookOpen } from "lucide-react";
 import { toast } from "sonner";
+import { ProblemFeedback } from "./ProblemFeedback";
 
 interface DetailedSolution {
   executive_summary: string;
@@ -156,6 +157,13 @@ export function ProblemDetailSheet({ diagnostic, open, onOpenChange }: Props) {
                   Regerar análise
                 </Button>
               </div>
+
+              {diagnostic.id && (
+                <ProblemFeedback
+                  diagnosticId={diagnostic.id}
+                  initialFeedback={(detailed as any)?._last_feedback ?? null}
+                />
+              )}
             </>
           )}
         </div>
