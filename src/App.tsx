@@ -18,6 +18,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const Dashboard = lazy(() => import("./pages/app/Dashboard"));
 const Stores = lazy(() => import("./pages/app/Stores"));
 const NewStore = lazy(() => import("./pages/app/NewStore"));
+const MyStore = lazy(() => import("./pages/app/MyStore"));
 const StoreOverview = lazy(() => import("./pages/app/StoreOverview"));
 const Diagnostics = lazy(() => import("./pages/app/Diagnostics"));
 const Score = lazy(() => import("./pages/app/Score"));
