@@ -434,6 +434,7 @@ export type Database = {
           area: string
           business_impact: string | null
           created_at: string
+          detailed_solution: Json | null
           evidence: string | null
           id: string
           practical_action: string | null
@@ -449,6 +450,7 @@ export type Database = {
           area: string
           business_impact?: string | null
           created_at?: string
+          detailed_solution?: Json | null
           evidence?: string | null
           id?: string
           practical_action?: string | null
@@ -464,6 +466,7 @@ export type Database = {
           area?: string
           business_impact?: string | null
           created_at?: string
+          detailed_solution?: Json | null
           evidence?: string | null
           id?: string
           practical_action?: string | null
