@@ -101,15 +101,24 @@ Deno.serve(async (req) => {
       }),
     });
 
-    if (!aiResp.ok) {
-      console.error("AI error", aiResp.status);
-      return aiErrorResponse(aiResp.status, "Falha ao analisar avaliações");
-    }
+      if (!aiResp.ok) {
+        console.error("AI error", aiResp.status);
+        return aiErrorResponse(aiResp.status, "Falha ao analisar avaliações");
+      }
 
-    const aiData = await aiResp.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) return jsonResponse({ error: "Sem resposta estruturada da IA" }, 500);
-    const { results } = JSON.parse(toolCall.function.arguments);
+      const aiData = await aiResp.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) return jsonResponse({ error: "Sem resposta estruturada da IA" }, 500);
+      results = JSON.parse(toolCall.function.arguments).results ?? [];
+      putCached(admin, {
+        inputHash: cacheKey,
+        storeId: store_id,
+        cacheType: "review_analysis",
+        response: { results },
+        model: "google/gemini-3-flash-preview",
+        ttlSeconds: CACHE_TTL.review_analysis,
+      }).catch((e) => console.warn("cache put failed", e));
+    }
 
     let processed = 0;
     for (const r of results) {
