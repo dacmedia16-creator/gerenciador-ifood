@@ -62,8 +62,11 @@ export default function DiagnosisResult() {
 
   if (!data) return <div className="p-8 text-muted-foreground">Carregando resultado…</div>;
 
-  const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions } = data;
-  const { overall, areas } = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
+  const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions, aiConsult } = data;
+  const localScore = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
+  // P14: prefere score da IA quando disponível
+  const overall = typeof aiConsult?.overall_score === "number" ? aiConsult.overall_score : localScore.overall;
+  const areas = localScore.areas;
 
   const sortedProblems = [...diagnostics].sort(
     (a: any, b: any) => severityRank(a.severity) - severityRank(b.severity),
@@ -89,7 +92,7 @@ export default function DiagnosisResult() {
       <Card className="p-6 shadow-card">
         <div className="grid md:grid-cols-3 gap-6 items-center">
           <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-2">Score geral</p>
+            <p className="text-sm text-muted-foreground mb-2">Score geral{aiConsult ? " (IA)" : ""}</p>
             <div className="text-7xl font-bold text-gradient">{overall}</div>
             <ScoreBadge score={overall} />
           </div>
