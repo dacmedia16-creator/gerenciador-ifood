@@ -590,3 +590,161 @@ export function evidenceToDiagnostic(e: RuleEvidence) {
     severity: e.severity,
   };
 }
+
+// Mescla listas de evidências por rule_id, mantendo a maior severidade
+// e unindo evidence_data e missing_data. A ordem prioriza `b` sobre `a`
+// quando há campos preenchidos no mais recente.
+export function mergeEvidences(a: RuleEvidence[], b: RuleEvidence[]): RuleEvidence[] {
+  const sevRank: Record<Severity, number> = { critico: 3, atencao: 2, ok: 1 };
+  const map = new Map<string, RuleEvidence>();
+  for (const ev of [...(a || []), ...(b || [])]) {
+    if (!ev?.rule_id) continue;
+    const cur = map.get(ev.rule_id);
+    if (!cur) {
+      map.set(ev.rule_id, { ...ev, evidence_data: { ...(ev.evidence_data || {}) } });
+      continue;
+    }
+    const keepNew = sevRank[ev.severity] >= sevRank[cur.severity];
+    const base = keepNew ? ev : cur;
+    const other = keepNew ? cur : ev;
+    map.set(ev.rule_id, {
+      ...base,
+      evidence_data: { ...(other.evidence_data || {}), ...(base.evidence_data || {}) },
+      missing_data: Array.from(new Set([...(other.missing_data || []), ...(base.missing_data || [])])),
+    });
+  }
+  return Array.from(map.values());
+}
+
+// Gera evidências a partir dos dados estruturados já persistidos da loja.
+// Mantemos um conjunto enxuto de regras objetivas (sem invenção). Caso
+// algum dado esteja ausente, registramos em `missing_data` em vez de
+// emitir evidência de severidade alta.
+export function evidencesFromStoreData(input: {
+  store: any;
+  metrics: any[];
+  products: any[];
+  reviews: any[];
+  competitors: any[];
+}): RuleEvidence[] {
+  const out: RuleEvidence[] = [];
+  const { store, metrics = [], products = [], reviews = [], competitors = [] } = input || ({} as any);
+
+  // Última métrica conhecida (assume ordenação por data desc se vier do caller; fazemos fallback).
+  const latest = [...metrics].sort((a, b) => {
+    const da = new Date(a.period_end || a.created_at || 0).getTime();
+    const db = new Date(b.period_end || b.created_at || 0).getTime();
+    return db - da;
+  })[0];
+
+  // Cancelamento alto
+  const cancel = num(latest?.cancellation_rate);
+  if (cancel != null && cancel >= 5) {
+    out.push({
+      rule_id: "store_cancellation_high",
+      area: "cancelamentos",
+      metric: "cancellation_rate",
+      current_value: cancel,
+      reference_value: 2,
+      severity: cancel >= 8 ? "critico" : "atencao",
+      business_impact: "Cancelamentos altos reduzem visibilidade na vitrine e queimam ticket.",
+      probable_cause: "Falta de produto, demora no aceite ou erro operacional.",
+      recommended_action: "Auditar últimos cancelamentos e aplicar checklist de aceite/preparo.",
+      confidence: "alta",
+      evidence_data: { source: "store_metrics", value: cancel },
+    });
+  }
+
+  // Tempo de preparo alto
+  const prep = num(latest?.prep_time);
+  if (prep != null && prep >= 35) {
+    out.push({
+      rule_id: "store_prep_time_high",
+      area: "tempo_preparo",
+      metric: "prep_time",
+      current_value: prep,
+      reference_value: 25,
+      severity: prep >= 45 ? "critico" : "atencao",
+      business_impact: "Tempo alto reduz conversão e aumenta cancelamentos.",
+      probable_cause: "Fluxo de cozinha, mise en place ou aceite tardio.",
+      recommended_action: "Cronometrar etapas e ajustar tempo no app conforme realidade.",
+      confidence: "media",
+      evidence_data: { source: "store_metrics", value: prep },
+    });
+  }
+
+  // Avaliação média baixa
+  if (Array.isArray(reviews) && reviews.length >= 5) {
+    const avg = reviews.reduce((s, r) => s + (num(r.rating) ?? 0), 0) / reviews.length;
+    if (avg && avg < 4.4) {
+      out.push({
+        rule_id: "store_rating_low",
+        area: "avaliacoes",
+        metric: "avg_rating",
+        current_value: Number(avg.toFixed(2)),
+        reference_value: 4.6,
+        severity: avg < 4.0 ? "critico" : "atencao",
+        business_impact: "Nota baixa reduz cliques e conversão na vitrine.",
+        probable_cause: "Problemas recorrentes em qualidade, embalagem ou tempo.",
+        recommended_action: "Classificar últimas 30 avaliações por motivo e atacar top 2.",
+        confidence: "alta",
+        evidence_data: { source: "reviews", count: reviews.length, avg },
+      });
+    }
+  }
+
+  // Sem concorrentes mapeados
+  if (!competitors || competitors.length === 0) {
+    out.push({
+      rule_id: "store_no_competitors_mapped",
+      area: "concorrencia",
+      metric: "competitors_count",
+      current_value: 0,
+      reference_value: 3,
+      severity: "atencao",
+      business_impact: "Sem benchmark de preço/promoção é difícil posicionar a loja.",
+      probable_cause: "Concorrência ainda não foi cadastrada no sistema.",
+      recommended_action: "Mapear ao menos 3 concorrentes diretos da mesma categoria.",
+      confidence: "alta",
+      evidence_data: { source: "competitors" },
+      missing_data: ["competitors"],
+    });
+  }
+
+  // Cardápio muito curto
+  if (Array.isArray(products) && products.length > 0 && products.length < 8) {
+    out.push({
+      rule_id: "store_menu_too_short",
+      area: "cardapio",
+      metric: "products_count",
+      current_value: products.length,
+      reference_value: 12,
+      severity: "atencao",
+      business_impact: "Cardápio curto limita ticket médio e recompra.",
+      probable_cause: "Catálogo ainda incompleto ou itens desativados.",
+      recommended_action: "Revisar mix e ativar combos/adicionais relevantes.",
+      confidence: "media",
+      evidence_data: { source: "products", count: products.length },
+    });
+  }
+
+  // Loja sem dados básicos
+  if (!store || (!store.name && !store.category)) {
+    out.push({
+      rule_id: "store_missing_basics",
+      area: "cadastro",
+      metric: "store_basics",
+      current_value: null,
+      reference_value: null,
+      severity: "atencao",
+      business_impact: "Sem cadastro básico a análise perde precisão.",
+      probable_cause: "Onboarding incompleto.",
+      recommended_action: "Completar nome, categoria e cidade da loja.",
+      confidence: "alta",
+      evidence_data: {},
+      missing_data: ["store.name", "store.category"],
+    });
+  }
+
+  return out;
+}
