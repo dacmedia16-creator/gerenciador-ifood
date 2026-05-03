@@ -118,7 +118,7 @@ export function WizardShell({
                 </Link>
               </Button>
               <Button onClick={onNext}>
-                {currentStepIndex >= STEPS.length ? "Ir para revisão" : "Salvar e continuar"}
+                {currentStepIndex >= total ? "Ir para revisão" : "Salvar e continuar"}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>
