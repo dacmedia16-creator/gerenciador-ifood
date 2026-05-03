@@ -93,7 +93,7 @@ src/
 └─ App.tsx                 # Roteamento
 
 supabase/
-├─ functions/              # Edge Functions (ai-diagnose, analyze-reviews, generate-report-pdf)
+├─ functions/              # Edge Functions (ai-consult, analyze-reviews, generate-report-pdf)
 ├─ migrations/             # Migrações SQL versionadas
 └─ config.toml
 ```
