@@ -458,6 +458,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       validation: { dropped },
       rag_meta: ragMeta,
       session_id: sessionId ?? null,
+      mode,
       session_debug: sessionDebug,
     };
 
