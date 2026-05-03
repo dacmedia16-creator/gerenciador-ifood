@@ -1,59 +1,50 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from "react";
-import { Link, useNavigate, Navigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, Navigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ScoreBadge } from "@/components/StatusBadges";
 import { calculateScore } from "@/lib/diagnostics/engine";
-import { Plus, Sparkles, Store, BarChart3, Star, Clock, AlertTriangle, DollarSign, Users, RefreshCw } from "lucide-react";
+import { Plus, Sparkles, RefreshCw } from "lucide-react";
 import { refreshSystem } from "@/lib/system/refresh";
 import { DashboardSkeleton } from "@/components/DashboardSkeleton";
-import { DoFirstBlock } from "@/components/dashboard/DoFirstBlock";
-import { MoneyLeakBlock } from "@/components/dashboard/MoneyLeakBlock";
+import { WeeklyCheckinCard } from "@/components/dashboard/WeeklyCheckinCard";
+import { ScoreImpactBlocks } from "@/components/dashboard/ScoreImpactBlocks";
+import { WeekActionsBlock } from "@/components/dashboard/WeekActionsBlock";
+import { ToolsGrid } from "@/components/dashboard/ToolsGrid";
 
-const DashboardCharts = lazy(() => import("@/components/dashboard/DashboardCharts"));
-
-const ChartsFallback = () => (
-  <div className="grid lg:grid-cols-3 gap-4">
-    <Card className="p-4 shadow-card lg:col-span-2"><Skeleton className="h-5 w-40 mb-3" /><Skeleton className="h-64 w-full" /></Card>
-    <Card className="p-4 shadow-card"><Skeleton className="h-5 w-40 mb-3" /><Skeleton className="h-64 w-full" /></Card>
-  </div>
-);
+const TERMINAL = ["aplicada", "ignorada", "rejeitada", "completed"];
 
 async function fetchDashboardData(storeId: string) {
-  const [s, m, p, r, c, ca, d, a] = await Promise.all([
+  const [s, m, r, d, a, w] = await Promise.all([
     supabase.from("stores").select("*").eq("id", storeId).single(),
     supabase.from("metrics")
       .select("id, period_start, revenue")
       .eq("store_id", storeId)
       .order("period_start", { ascending: false })
       .limit(12),
-    supabase.from("products").select("id", { count: "exact", head: true }).eq("store_id", storeId),
-    supabase.from("reviews")
-      .select("id, sentiment")
-      .eq("store_id", storeId).limit(500),
-    supabase.from("competitors").select("id", { count: "exact", head: true }).eq("store_id", storeId),
-    supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+    supabase.from("reviews").select("id, sentiment").eq("store_id", storeId).limit(500),
     supabase.from("diagnostics")
-      .select("id, area, problem, severity")
+      .select("id, area, problem, severity, created_at")
       .eq("store_id", storeId).order("created_at", { ascending: false }).limit(10),
     supabase.from("action_plans")
-      .select("id, title, area, priority, status")
-      .eq("store_id", storeId).order("created_at", { ascending: false }).limit(10),
+      .select("id, status, impacto_financeiro")
+      .eq("store_id", storeId),
+    supabase.from("weekly_snapshots")
+      .select("week_start, score")
+      .eq("store_id", storeId)
+      .order("week_start", { ascending: false })
+      .limit(2),
   ]);
   return {
     store: s.data,
     metrics: (m.data || []).slice().reverse(),
-    productsCount: p.count || 0,
     reviews: r.data || [],
-    competitorsCount: c.count || 0,
-    campaignsCount: ca.count || 0,
     diagnostics: d.data || [],
     actions: a.data || [],
+    weekly: w.data || [],
   };
 }
 
@@ -89,7 +80,6 @@ export default function Dashboard() {
         .select("id, name, platform, city")
         .order("created_at");
       const list = data || [];
-      // Pré-busca os dados da primeira loja em paralelo
       if (list[0]) {
         queryClient.prefetchQuery({
           queryKey: ["dashboardData", list[0].id],
@@ -125,45 +115,24 @@ export default function Dashboard() {
     });
   }, [data]);
 
-  const sentimentData = useMemo(() => {
-    const reviews = data?.reviews || [];
-    return [
-      { name: "Positivo", value: reviews.filter((r: any) => r.sentiment === "positivo").length, color: "hsl(var(--success))" },
-      { name: "Neutro", value: reviews.filter((r: any) => r.sentiment === "neutro").length, color: "hsl(var(--warning))" },
-      { name: "Negativo", value: reviews.filter((r: any) => r.sentiment === "negativo").length, color: "hsl(var(--destructive))" },
-    ];
-  }, [data]);
-
-  const revenueData = useMemo(
-    () => (data?.metrics || []).map((m: any) => ({ mes: m.period_start?.slice(0, 7), receita: Number(m.revenue) })),
-    [data]
-  );
-
   if (loadingStores) return <DashboardSkeleton />;
-
-  if (!stores.length) {
-    return <Navigate to="/app/onboarding" replace />;
-  }
-
+  if (!stores.length) return <Navigate to="/app/onboarding" replace />;
   if (!data || !data.store || !score) return <DashboardSkeleton />;
 
-  const { store, diagnostics, actions, productsCount, competitorsCount } = data;
+  const { store, diagnostics, actions, weekly } = data;
   const { overall } = score;
-  const criticalAlerts = diagnostics.filter((d: any) => d.severity === "critico");
 
-  const KPI = ({ icon: Icon, label, value, color = "text-primary" }: any) => (
-    <Card className="p-3 sm:p-4 shadow-card">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-muted flex items-center justify-center shrink-0 ${color}`}>
-          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[11px] sm:text-xs text-muted-foreground truncate">{label}</p>
-          <p className="text-base sm:text-lg font-bold truncate">{value}</p>
-        </div>
-      </div>
-    </Card>
-  );
+  const lastDiagnosisAt = diagnostics[0]?.created_at || null;
+  const hasDiagnostic = diagnostics.length > 0;
+
+  const pendingImpactSum = (actions as any[])
+    .filter((a) => !TERMINAL.includes(a.status))
+    .reduce((sum, a) => sum + Number(a.impacto_financeiro || 0), 0);
+
+  const scoreDelta =
+    weekly.length >= 2 && weekly[1].score != null
+      ? overall - Number(weekly[1].score)
+      : null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -188,13 +157,13 @@ export default function Dashboard() {
             variant="outline"
             size="sm"
             onClick={() => refreshSystem()}
-            title="Limpa caches e recarrega para aplicar atualizações"
+            title="Limpa caches e recarrega"
           >
             <RefreshCw className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Atualizar sistema</span>
+            <span className="hidden sm:inline">Atualizar</span>
           </Button>
-          <Button size="sm" onClick={() => navigate("/app/diagnosis/new?new=1")} className="flex-1 sm:flex-none">
-            <Sparkles className="h-4 w-4 mr-1" /> Analisar minha loja
+          <Button size="sm" onClick={() => navigate("/app/diagnosis/welcome")}>
+            <Sparkles className="h-4 w-4 mr-1" /> Novo diagnóstico
           </Button>
         </div>
       </div>
@@ -209,97 +178,34 @@ export default function Dashboard() {
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-sm">Diagnóstico em andamento</p>
                 <p className="text-xs text-muted-foreground">
-                  {draftSession.completion_percentage}% concluído · etapa {draftSession.current_step}/16
+                  {draftSession.completion_percentage}% concluído
                 </p>
                 <Progress value={draftSession.completion_percentage} className="h-1.5 mt-1 w-full sm:w-48" />
               </div>
             </div>
             <Button size="sm" onClick={() => navigate(`/app/diagnosis/${draftSession.id}`)} className="w-full sm:w-auto">
-              Continuar diagnóstico
+              Continuar
             </Button>
           </div>
         </Card>
       )}
 
-      {/* Score */}
-      <Card className="p-4 sm:p-6 shadow-card">
-        <div className="grid md:grid-cols-4 gap-4 sm:gap-6 items-center">
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-2">Sua nota geral</p>
-            <div className="text-5xl sm:text-6xl font-bold text-gradient">{overall}</div>
-            <ScoreBadge score={overall} />
-          </div>
-          <div className="md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-            <KPI icon={DollarSign} label="Faturamento/mês" value={`R$ ${(store.monthly_revenue || 0).toLocaleString("pt-BR")}`} />
-            <KPI icon={BarChart3} label="Pedidos/mês" value={store.monthly_orders || 0} />
-            <KPI icon={DollarSign} label="Ticket médio" value={`R$ ${store.average_ticket || 0}`} />
-            <KPI icon={Star} label="Nota" value={store.rating || "-"} color="text-warning" />
-            <KPI icon={Clock} label="Entrega" value={`${store.promised_delivery_time || 0} min`} />
-            <KPI icon={AlertTriangle} label="Cancelamento" value={`${store.cancellation_rate || 0}%`} color="text-destructive" />
-            <KPI icon={Users} label="Concorrentes" value={competitorsCount} />
-            <KPI icon={Store} label="Produtos" value={productsCount} />
-          </div>
-        </div>
-      </Card>
+      {/* Bloco A — Reavaliação semanal */}
+      <WeeklyCheckinCard storeId={store.id} currentScore={overall} />
 
-      {/* Faça isso primeiro — top 3 ações priorizadas */}
-      <DoFirstBlock storeId={store.id} />
+      {/* Bloco B — Score + Impacto */}
+      <ScoreImpactBlocks
+        score={hasDiagnostic ? overall : null}
+        scoreDelta={scoreDelta}
+        lastDiagnosisAt={lastDiagnosisAt}
+        pendingImpactSum={pendingImpactSum}
+      />
 
-      {/* Onde você está perdendo dinheiro — análise por produto */}
-      <MoneyLeakBlock storeId={store.id} />
+      {/* Bloco C — Faça isso esta semana */}
+      <WeekActionsBlock storeId={store.id} hasDiagnostic={hasDiagnostic} />
 
-      {/* Perguntas que este painel responde — atalhos para o dono */}
-      <Card className="p-4 shadow-card">
-        <h3 className="font-semibold mb-3 text-sm">Perguntas que este painel responde</h3>
-        <div className="flex flex-wrap gap-2">
-          {[
-            { q: "Onde estou perdendo dinheiro?", to: `/app/stores/${store.id}/pricing` },
-            { q: "Quais produtos prejudicam minha margem?", to: `/app/stores/${store.id}/products` },
-            { q: "O que devo corrigir primeiro?", to: `/app/stores/${store.id}/action-plan` },
-            { q: "Quais reclamações mais aparecem?", to: `/app/stores/${store.id}/reviews` },
-            { q: "Meus anúncios estão dando retorno?", to: `/app/stores/${store.id}/campaigns` },
-          ].map((p) => (
-            <Button key={p.q} asChild variant="outline" size="sm" className="rounded-full text-xs h-8">
-              <Link to={p.to}>{p.q}</Link>
-            </Button>
-          ))}
-        </div>
-      </Card>
-
-      <Suspense fallback={<ChartsFallback />}>
-        <DashboardCharts revenueData={revenueData} sentimentData={sentimentData} />
-      </Suspense>
-
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-4 shadow-card">
-          <h3 className="font-semibold mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-destructive" /> O que está travando sua loja agora</h3>
-          {criticalAlerts.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum alerta crítico.</p> : (
-            <ul className="space-y-2">
-              {criticalAlerts.slice(0, 5).map((d: any) => (
-                <li key={d.id} className="text-sm border-l-2 border-destructive pl-3 py-1">
-                  <p className="font-medium">{d.problem}</p>
-                  <p className="text-xs text-muted-foreground">{d.area}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button variant="link" size="sm" asChild className="px-0"><Link to={`/app/stores/${store.id}/diagnostics`}>Ver todos →</Link></Button>
-        </Card>
-        <Card className="p-4 shadow-card">
-          <h3 className="font-semibold mb-3">O que fazer para crescer</h3>
-          {actions.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma ação pendente.</p> : (
-            <ul className="space-y-2">
-              {actions.slice(0, 5).map((a: any) => (
-                <li key={a.id} className="text-sm border-l-2 border-primary pl-3 py-1">
-                  <p className="font-medium">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">{a.area} · prioridade {a.priority}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button variant="link" size="sm" asChild className="px-0"><Link to={`/app/stores/${store.id}/action-plan`}>Ver plano completo →</Link></Button>
-        </Card>
-      </div>
+      {/* Bloco D — Ferramentas */}
+      <ToolsGrid storeId={store.id} />
     </div>
   );
 }
