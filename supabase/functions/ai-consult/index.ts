@@ -318,10 +318,24 @@ Deno.serve(async (req) => {
       })),
       avaliacoes_amostra: (reviewsR.data ?? []).slice(0, 10),
       concorrentes: (competitorsR.data ?? []).slice(0, 5),
+      print_snippets: printSnippets,
     };
+
+    const storeGoals = (goalsR?.data ?? []).map((g: any) => ({
+      goal_type: g.goal_type,
+      metric_key: g.metric_key,
+      target_value: g.target_value,
+      current_value: g.current_value,
+      deadline: g.deadline,
+      priority: g.priority,
+      notes: g.notes,
+    }));
 
     const userPrompt = `RULE_EVIDENCES (fonte da verdade objetiva):
 ${JSON.stringify(ruleEvidences, null, 2)}
+
+STORE_GOALS (metas ativas declaradas pelo dono — priorize ações que aproximam dessas metas):
+${JSON.stringify(storeGoals.length ? storeGoals : { aviso: "nenhuma meta ativa cadastrada" }, null, 2)}
 
 STORE_MEMORY (perfil + recorrência + métricas 7/14/30d):
 ${JSON.stringify(storeMemory ?? { aviso: "memória vazia — primeira análise" }, null, 2)}
@@ -335,7 +349,7 @@ ${JSON.stringify(similarCases, null, 2)}
 KNOWLEDGE_SNIPPETS (top ${kbSnippets.length} da base de conhecimento):
 ${JSON.stringify(kbSnippets, null, 2)}
 
-RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo daqui):
+RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo daqui; print_snippets contém OCR bruto dos prints enviados):
 ${JSON.stringify(rawContext, null, 2)}
 
 Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em cada main_problem.`;
