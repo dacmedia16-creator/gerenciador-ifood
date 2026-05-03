@@ -194,13 +194,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR] = await Promise.all([
+    const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR, goalsR] = await Promise.all([
       supabase.from("stores").select("*").eq("id", storeId).single(),
       supabase.from("products").select("*").eq("store_id", storeId).limit(50),
       supabase.from("competitors").select("*").eq("store_id", storeId).limit(20),
       supabase.from("reviews").select("comment, sentiment, rating").eq("store_id", storeId).limit(40),
       supabase.from("metrics").select("*").eq("store_id", storeId).order("period_end", { ascending: false }).limit(3),
       supabase.from("reports").select("id, report_data").eq("store_id", storeId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("store_goals").select("goal_type, metric_key, target_value, current_value, deadline, priority, notes").eq("store_id", storeId).eq("status", "ativa").order("priority", { ascending: false }).limit(5),
     ]);
 
     if (storeR.error || !storeR.data) {
