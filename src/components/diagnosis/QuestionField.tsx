@@ -89,6 +89,35 @@ export function QuestionField({ question, value, onChange }: FieldProps) {
     );
   }
 
+  if (q.type === "multiselect") {
+    const selected: string[] = Array.isArray(value) ? value : [];
+    const toggle = (v: string) => {
+      const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v];
+      onChange(next);
+    };
+    return (
+      <div>
+        {labelEl}
+        <div className="flex flex-wrap gap-2">
+          {q.options?.map((o) => {
+            const active = selected.includes(o.value);
+            return (
+              <Button
+                key={o.value}
+                type="button"
+                variant={active ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggle(o.value)}
+              >
+                {o.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   if (q.type === "yesno") {
     return (
       <div>

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { answersAsMap, computeStepCompletion, loadSession } from "@/lib/diagnosis/session";
-import { STEPS, stepByIndex } from "@/lib/diagnosis/steps";
+import { STEPS, stepByIndex, shouldShowQuestion } from "@/lib/diagnosis/steps";
 import { useAutosave } from "@/lib/diagnosis/autosave";
 import { WizardShell } from "@/components/diagnosis/WizardShell";
 import { QuestionField } from "@/components/diagnosis/QuestionField";
@@ -113,7 +113,7 @@ export default function DiagnosisWizard() {
         )}
 
         <div className="space-y-5">
-          {step.questions.map((q) => (
+          {step.questions.filter((q) => shouldShowQuestion(q, values)).map((q) => (
             <QuestionField key={q.key} question={q} value={values[q.key]} onChange={(v) => setValue(q.key, v)} />
           ))}
         </div>

@@ -1,5 +1,10 @@
 // Definição declarativa das etapas do Funil de Diagnóstico.
-// Cada etapa contém perguntas com chave única, tipo de campo e marcação opcional/obrigatória.
+// Reescrito para o DONO DA LOJA leigo: linguagem simples, faixas em vez de números exatos,
+// "Não sei" sempre disponível, perguntas condicionais e tooltips com "onde achar no iFood".
+//
+// IMPORTANTE: as chaves internas (step.key + question.key) são preservadas porque o motor de
+// regras (rules.ts, evidences.ts, journey.ts) lê respostas por elas. Faixas usam value numérico
+// (ponto médio) para que num()/Number() continuem funcionando sem alteração nas regras.
 
 export type FieldType =
   | "text"
@@ -7,12 +12,13 @@ export type FieldType =
   | "number"
   | "currency"
   | "select"
+  | "multiselect"
   | "yesno"
-  | "rating3" // bom / atenção / ruim
-  | "products" // tabela repetidora
-  | "competitors" // tabela repetidora
+  | "rating3"
+  | "products"
+  | "competitors"
   | "files"
-  | "info"; // bloco informativo, sem coleta
+  | "info";
 
 export interface Question {
   key: string;
@@ -21,10 +27,12 @@ export interface Question {
   options?: { value: string; label: string }[];
   placeholder?: string;
   tooltip?: string;
-  required?: boolean; // obrigatório para conclusão da etapa (não bloqueia avançar)
-  essential?: boolean; // essencial para qualidade do diagnóstico (gera alerta na revisão)
+  required?: boolean;
+  essential?: boolean;
   min?: number;
   max?: number;
+  /** Mostra a pergunta apenas se a condição for satisfeita (mesma etapa). */
+  condition?: { key: string; equals?: any; in?: any[]; truthy?: boolean };
 }
 
 export interface StepDef {
@@ -37,311 +45,515 @@ export interface StepDef {
   questions: Question[];
 }
 
+const TOOLTIP_PORTAL = "Você encontra essa informação no Portal do Parceiro iFood.";
+
 export const STEPS: StepDef[] = [
-  {
-    key: "welcome",
-    index: 1,
-    title: "Boas-vindas",
-    subtitle: "Vamos começar seu diagnóstico",
-    intro:
-      "Vamos te fazer perguntas sobre sua loja em ~15 minutos. Quanto mais dados, mais preciso o diagnóstico. Você pode salvar e continuar depois a qualquer momento.",
-    questions: [
-      {
-        key: "ack",
-        label: "Tudo entendido — pronto para começar",
-        type: "info",
-      },
-    ],
-  },
+  // ============================================================
+  // 1) SOBRE A LOJA
+  // ============================================================
   {
     key: "basic",
-    index: 2,
-    title: "Dados básicos da loja",
-    subtitle: "Identifique sua operação",
+    index: 1,
+    title: "Sobre a sua loja",
+    subtitle: "Vamos começar com o básico",
+    intro:
+      "Vou te fazer algumas perguntas simples sobre a sua loja. Leva uns 8 minutos. Pode pular o que não souber — salvamos tudo automaticamente e você pode continuar depois.",
     questions: [
-      { key: "name", label: "Nome da loja", type: "text", required: true, essential: true },
+      { key: "name", label: "Qual é o nome da sua loja no app?", type: "text", required: true, essential: true },
       {
         key: "category",
-        label: "Categoria",
+        label: "Que tipo de comida você vende?",
         type: "select",
         required: true,
         essential: true,
-        options: [
-          "Lanches", "Pizzaria", "Açaí", "Brasileira", "Japonesa", "Marmita", "Doces", "Saudável", "Outros",
-        ].map((c) => ({ value: c, label: c })),
+        options: ["Lanches", "Pizzaria", "Açaí", "Brasileira", "Japonesa", "Marmita", "Doces", "Saudável", "Outros"].map(
+          (c) => ({ value: c, label: c }),
+        ),
       },
       {
         key: "platform",
-        label: "Plataforma principal",
+        label: "Em qual app você mais vende hoje?",
         type: "select",
         required: true,
         options: ["iFood", "Rappi", "WhatsApp", "App próprio", "Outros"].map((c) => ({ value: c, label: c })),
       },
-      { key: "city", label: "Cidade", type: "text", required: true },
-      { key: "neighborhood", label: "Bairro", type: "text" },
+      { key: "city", label: "Em qual cidade você atende?", type: "text", required: true },
+      { key: "neighborhood", label: "E em qual bairro?", type: "text" },
       {
-        key: "operation_type",
-        label: "Tipo de operação",
-        type: "select",
-        options: ["Delivery only", "Loja física + delivery", "Dark kitchen", "Marca virtual"].map((c) => ({
-          value: c,
-          label: c,
-        })),
+        key: "opening_hours",
+        label: "Em quais dias e horários você abre?",
+        type: "text",
+        placeholder: "Ex.: Ter-Dom, das 18h às 23h",
+        tooltip: "Portal do Parceiro > Minha Loja > Horários.",
       },
-      { key: "opening_hours", label: "Horários de funcionamento", type: "text", placeholder: "Ex.: Ter-Dom 18h-23h" },
-      { key: "monthly_revenue", label: "Faturamento médio mensal (R$)", type: "currency", essential: true },
-      { key: "monthly_orders", label: "Quantidade média de pedidos/mês", type: "number", essential: true },
-      { key: "average_ticket", label: "Ticket médio (R$)", type: "currency", essential: true },
-      { key: "notes", label: "Observações gerais", type: "textarea" },
+      {
+        key: "monthly_orders",
+        label: "Quantos pedidos você faz por mês, em média?",
+        type: "select",
+        essential: true,
+        tooltip: `${TOOLTIP_PORTAL} Em Desempenho > Vendas você vê o total de pedidos.`,
+        options: [
+          { value: "50", label: "Até 100 pedidos" },
+          { value: "200", label: "101 a 300" },
+          { value: "450", label: "301 a 600" },
+          { value: "800", label: "601 a 1.000" },
+          { value: "1500", label: "Mais de 1.000" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "average_ticket",
+        label: "Qual é o valor médio de um pedido seu?",
+        type: "select",
+        essential: true,
+        tooltip: `${TOOLTIP_PORTAL} Em Desempenho > Vendas aparece como "Ticket médio".`,
+        options: [
+          { value: "20", label: "Até R$ 29" },
+          { value: "40", label: "R$ 30 a R$ 49" },
+          { value: "60", label: "R$ 50 a R$ 69" },
+          { value: "85", label: "R$ 70 a R$ 99" },
+          { value: "120", label: "R$ 100 ou mais" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "monthly_revenue",
+        label: "Quanto a loja fatura por mês, mais ou menos?",
+        type: "select",
+        options: [
+          { value: "1500", label: "Até R$ 3.000" },
+          { value: "5500", label: "R$ 3.000 a R$ 8.000" },
+          { value: "11500", label: "R$ 8.000 a R$ 15.000" },
+          { value: "22500", label: "R$ 15.000 a R$ 30.000" },
+          { value: "45000", label: "R$ 30.000 a R$ 60.000" },
+          { value: "80000", label: "Mais de R$ 60.000" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      { key: "notes", label: "Algo importante sobre sua loja que devemos saber?", type: "textarea", placeholder: "Opcional" },
     ],
   },
-  {
-    key: "conversion",
-    index: 3,
-    title: "Conversão da loja",
-    subtitle: "Visitas, cliques e pedidos",
-    description:
-      "Esses dados aparecem no painel do iFood (Gestor de Pedidos → Desempenho). Servem para classificar a saúde da sua conversão (ideal ≥ 12%).",
-    questions: [
-      { key: "visits", label: "Visitas da loja (últimos 30 dias)", type: "number", essential: true, tooltip: "Quantas pessoas viram sua loja na busca/feed." },
-      { key: "clicks", label: "Cliques em produtos (últimos 30 dias)", type: "number", tooltip: "Quantas vezes alguém abriu a tela de algum produto seu." },
-      { key: "orders", label: "Pedidos concluídos (últimos 30 dias)", type: "number", essential: true },
-      { key: "conversion_rate", label: "Taxa de conversão (%) — opcional, se já souber", type: "number", min: 0, max: 100, tooltip: "Se deixar em branco, calculamos pedidos ÷ visitas × 100." },
-      { key: "conversion_notes", label: "Observações sobre conversão", type: "textarea" },
-    ],
-  },
+
+  // ============================================================
+  // 2) VITRINE: COMO O CLIENTE TE VÊ
+  // ============================================================
   {
     key: "storefront",
-    index: 4,
-    title: "Vitrine da loja",
-    subtitle: "Como sua loja aparece para o cliente",
+    index: 2,
+    title: "Como o cliente vê sua loja",
+    subtitle: "A primeira impressão no app",
     questions: [
-      { key: "rating", label: "Nota atual da loja (0–5)", type: "number", min: 0, max: 5, essential: true },
-      { key: "reviews_count", label: "Quantidade de avaliações", type: "number" },
-      { key: "has_cover", label: "Tem foto de capa?", type: "yesno" },
-      { key: "has_logo", label: "Tem logo?", type: "yesno" },
-      { key: "clear_description", label: "Descrição da loja é clara?", type: "yesno" },
-      { key: "category_correct", label: "A categoria está correta?", type: "yesno" },
-      { key: "promised_delivery_time", label: "Prazo de entrega prometido (min)", type: "number", essential: true },
-      { key: "delivery_fee", label: "Taxa de entrega (R$)", type: "currency", essential: true },
-      { key: "looks_professional", label: "A loja parece profissional?", type: "rating3" },
-      { key: "storefront_notes", label: "Observações sobre a vitrine", type: "textarea" },
+      {
+        key: "rating",
+        label: "Qual é a sua nota geral hoje?",
+        type: "select",
+        essential: true,
+        tooltip: `${TOOLTIP_PORTAL} Aparece em Avaliações.`,
+        options: [
+          { value: "3.5", label: "Abaixo de 4.0" },
+          { value: "4.1", label: "4.0 a 4.29" },
+          { value: "4.4", label: "4.3 a 4.59" },
+          { value: "4.7", label: "4.6 a 4.79" },
+          { value: "4.85", label: "4.8 ou mais" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "reviews_count",
+        label: "Quantas avaliações sua loja tem?",
+        type: "select",
+        options: [
+          { value: "30", label: "Menos de 50" },
+          { value: "100", label: "50 a 150" },
+          { value: "300", label: "151 a 500" },
+          { value: "800", label: "501 a 1.500" },
+          { value: "2500", label: "Mais de 1.500" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      { key: "has_cover", label: "Sua página tem foto de capa atualizada?", type: "yesno" },
+      { key: "has_logo", label: "Tem uma logo bem visível?", type: "yesno" },
+      {
+        key: "promised_delivery_time",
+        label: "Quanto tempo você promete pra entregar (em minutos)?",
+        type: "select",
+        essential: true,
+        tooltip: `${TOOLTIP_PORTAL} Em Minha Loja > Tempo de preparo/entrega.`,
+        options: [
+          { value: "25", label: "Até 30 min" },
+          { value: "38", label: "31 a 45 min" },
+          { value: "52", label: "46 a 60 min" },
+          { value: "75", label: "Mais de 60 min" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "delivery_fee",
+        label: "Quanto custa, em média, a entrega para o cliente?",
+        type: "select",
+        essential: true,
+        options: [
+          { value: "0", label: "Grátis" },
+          { value: "3", label: "Até R$ 5" },
+          { value: "7", label: "R$ 5 a R$ 9" },
+          { value: "11", label: "R$ 10 a R$ 14" },
+          { value: "16", label: "R$ 15 ou mais" },
+          { value: "", label: "Não sei / Varia muito" },
+        ],
+      },
+      {
+        key: "looks_professional",
+        label: "Olhando de fora, sua loja transmite confiança?",
+        type: "rating3",
+      },
     ],
   },
+
+  // ============================================================
+  // 3) CARDÁPIO E FOTOS
+  // ============================================================
   {
     key: "menu",
-    index: 5,
-    title: "Cardápio",
-    subtitle: "Estrutura e variedade",
+    index: 3,
+    title: "Cardápio e fotos",
+    subtitle: "Como seus produtos aparecem",
     questions: [
-      { key: "products_total", label: "Quantidade de produtos no cardápio", type: "number" },
-      { key: "categories_list", label: "Categorias existentes", type: "text", placeholder: "Ex.: Lanches, Bebidas, Sobremesas" },
-      { key: "menu_organization", label: "Organização do cardápio", type: "rating3" },
-      { key: "main_products", label: "Produtos principais", type: "textarea" },
-      { key: "best_sellers", label: "Mais vendidos", type: "textarea" },
-      { key: "low_sellers", label: "Baixa saída", type: "textarea" },
-      { key: "with_description", label: "Quantos produtos têm descrição?", type: "number" },
-      { key: "without_description", label: "Quantos produtos NÃO têm descrição?", type: "number" },
-      { key: "with_photo", label: "Quantos produtos têm foto?", type: "number" },
-      { key: "without_photo", label: "Quantos produtos NÃO têm foto?", type: "number" },
-      { key: "has_addons", label: "Existem adicionais?", type: "yesno" },
-      { key: "has_combos", label: "Existem combos?", type: "yesno" },
-      { key: "has_desserts", label: "Existem sobremesas?", type: "yesno" },
-      { key: "has_drinks", label: "Existem bebidas?", type: "yesno" },
+      {
+        key: "products_total",
+        label: "Quantos produtos você tem cadastrados?",
+        type: "select",
+        options: [
+          { value: "10", label: "Até 15" },
+          { value: "22", label: "16 a 30" },
+          { value: "45", label: "31 a 60" },
+          { value: "80", label: "61 a 100" },
+          { value: "150", label: "Mais de 100" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "menu_organization",
+        label: "Seu cardápio está organizado em categorias claras (Combos, Bebidas, Sobremesas)?",
+        type: "rating3",
+      },
+      {
+        key: "without_photo",
+        label: "Quantos produtos estão SEM foto hoje?",
+        type: "select",
+        essential: true,
+        options: [
+          { value: "0", label: "Nenhum, todos têm foto" },
+          { value: "3", label: "Poucos (1 a 5)" },
+          { value: "10", label: "Vários (6 a 15)" },
+          { value: "25", label: "Muitos (mais de 15)" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "without_description",
+        label: "Quantos produtos estão SEM descrição?",
+        type: "select",
+        options: [
+          { value: "0", label: "Nenhum" },
+          { value: "5", label: "Poucos" },
+          { value: "15", label: "Vários" },
+          { value: "30", label: "A maioria" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      { key: "has_combos", label: "Você tem combos prontos no cardápio?", type: "yesno" },
+      { key: "has_addons", label: "Os clientes podem escolher adicionais (queijo extra, bacon, molho)?", type: "yesno" },
+      { key: "has_drinks", label: "Vende bebidas?", type: "yesno" },
+      { key: "has_desserts", label: "Vende sobremesa?", type: "yesno" },
     ],
   },
-  {
-    key: "photos",
-    index: 6,
-    title: "Fotos dos produtos",
-    subtitle: "Qualidade visual do cardápio",
-    questions: [
-      { key: "main_with_photo", label: "Os principais produtos têm foto?", type: "yesno" },
-      { key: "appetizing", label: "As fotos dão fome?", type: "rating3" },
-      { key: "lighting", label: "A iluminação é boa?", type: "rating3" },
-      { key: "visual_pattern", label: "Existe padrão visual?", type: "yesno" },
-      { key: "looks_fresh", label: "A comida parece fresca?", type: "rating3" },
-      { key: "shows_size", label: "A foto mostra bem o tamanho real?", type: "yesno" },
-      { key: "visual_difference", label: "Existe diferença visual entre produtos?", type: "yesno" },
-      { key: "photos_notes", label: "Observações sobre as fotos", type: "textarea" },
-    ],
-  },
+
+  // ============================================================
+  // 4) TOP 3 PRODUTOS (mini-tabela)
+  // ============================================================
   {
     key: "products",
-    index: 7,
-    title: "Produtos e vendas",
-    subtitle: "Cadastre seus produtos principais",
-    description: "Adicione pelo menos os 5 mais vendidos para um diagnóstico mais preciso.",
+    index: 4,
+    title: "Seus produtos mais vendidos",
+    subtitle: "Cadastre só os 3 principais",
+    description:
+      "Não precisa cadastrar tudo. Com os 3 mais vendidos, conseguimos analisar margem, foto, nome e descrição. Custo é opcional — preencha se souber.",
     questions: [
-      { key: "items", label: "Produtos", type: "products", essential: true },
+      { key: "items", label: "Top 3 produtos", type: "products", essential: true },
     ],
   },
+
+  // ============================================================
+  // 5) PREÇO E MARGEM
+  // ============================================================
   {
     key: "pricing",
-    index: 8,
-    title: "Preço e margem",
-    subtitle: "Como você gerencia lucro",
+    index: 5,
+    title: "Preço e lucro",
+    subtitle: "Você está ganhando dinheiro de verdade?",
     questions: [
-      { key: "knows_food_cost", label: "Sabe o custo real dos pratos?", type: "yesno" },
-      { key: "uses_coupons", label: "Usa cupons?", type: "yesno" },
-      { key: "knows_platform_fee", label: "Sabe quanto paga de taxa para a plataforma?", type: "yesno" },
-      { key: "knows_packaging_cost", label: "Sabe custo médio de embalagem?", type: "yesno" },
-      { key: "knows_margin", label: "Sabe margem por produto?", type: "yesno" },
-      { key: "compared_competitors", label: "Já comparou preço com concorrentes?", type: "yesno" },
-      { key: "low_margin_top_sellers", label: "Tem produtos que vendem muito mas dão pouco lucro?", type: "yesno" },
-      { key: "high_margin_low_sellers", label: "Tem produtos lucrativos que vendem pouco?", type: "yesno" },
-      { key: "pricing_notes", label: "Observações", type: "textarea" },
+      { key: "knows_food_cost", label: "Você sabe quanto custa o ingrediente dos seus pratos mais vendidos?", type: "yesno" },
+      { key: "knows_platform_fee", label: "Sabe quanto o iFood (ou outro app) cobra de taxa por pedido?", type: "yesno" },
+      { key: "knows_packaging_cost", label: "Sabe quanto gasta com embalagem por pedido?", type: "yesno" },
+      {
+        key: "compared_competitors",
+        label: "Comparando com seus concorrentes, seu preço está…",
+        type: "select",
+        options: [
+          { value: "barato", label: "Mais barato que eles" },
+          { value: "parecido", label: "Parecido" },
+          { value: "caro", label: "Mais caro que eles" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "low_margin_top_sellers",
+        label: "Tem produto que vende muito mas você sente que sobra pouco?",
+        type: "yesno",
+      },
+      { key: "pricing_notes", label: "Algo sobre preço que te incomoda?", type: "textarea", placeholder: "Opcional" },
     ],
   },
+
+  // ============================================================
+  // 6) COMBOS E TICKET MÉDIO
+  // ============================================================
   {
     key: "combos",
-    index: 9,
-    title: "Combos e ticket médio",
-    subtitle: "Estratégias para vender mais por pedido",
+    index: 6,
+    title: "Combos e valor por pedido",
+    subtitle: "Como fazer o cliente gastar um pouco mais",
     questions: [
-      { key: "combo_drink", label: "Existem combos com bebida?", type: "yesno" },
-      { key: "combo_couple", label: "Existem combos para casal?", type: "yesno" },
-      { key: "combo_family", label: "Existem combos família?", type: "yesno" },
-      { key: "addons", label: "Existem adicionais?", type: "yesno" },
-      { key: "desserts_offered", label: "Existem sobremesas?", type: "yesno" },
-      { key: "extra_sauces", label: "Existem molhos extras?", type: "yesno" },
-      { key: "upsell_strategy", label: "Existem estratégias de upsell?", type: "yesno" },
-      { key: "ticket_satisfaction", label: "O ticket médio está satisfatório?", type: "rating3" },
-      { key: "common_combo", label: "O que o cliente costuma comprar junto?", type: "textarea" },
+      { key: "combo_drink", label: "Você tem combo com bebida?", type: "yesno" },
+      { key: "combo_couple", label: "Tem combo para casal (2 pessoas)?", type: "yesno" },
+      { key: "combo_family", label: "Tem combo família (3 pessoas ou mais)?", type: "yesno" },
+      { key: "addons", label: "Quando o cliente escolhe um prato, ele vê opções de extras?", type: "yesno" },
+      {
+        key: "upsell_strategy",
+        label: "Você costuma sugerir bebida, sobremesa ou adicional dentro do app?",
+        type: "select",
+        options: [
+          { value: "sempre", label: "Sempre, em quase todos os produtos" },
+          { value: "as_vezes", label: "Em alguns" },
+          { value: "nunca", label: "Quase nunca" },
+        ],
+      },
+      {
+        key: "ticket_satisfaction",
+        label: "O valor médio do pedido te agrada?",
+        type: "rating3",
+      },
     ],
   },
-  {
-    key: "promotions",
-    index: 10,
-    title: "Promoções e cupons",
-    subtitle: "Estratégia promocional",
-    questions: [
-      { key: "uses_promotions", label: "A loja usa promoções?", type: "yesno" },
-      { key: "platform_coupon", label: "Usa cupom da plataforma?", type: "yesno" },
-      { key: "free_delivery", label: "Usa entrega grátis?", type: "yesno" },
-      { key: "product_discount", label: "Usa desconto em produto?", type: "yesno" },
-      { key: "new_customer_campaign", label: "Usa campanha para cliente novo?", type: "yesno" },
-      { key: "rebuy_campaign", label: "Usa campanha para recompra?", type: "yesno" },
-      { key: "promo_spend", label: "Quanto gasta com promoções/mês (R$)?", type: "currency" },
-      { key: "promo_profitable", label: "Sabe se a promoção dá lucro?", type: "yesno" },
-      { key: "promo_hours", label: "Promoções rodam em quais horários?", type: "text" },
-      { key: "promo_days", label: "Promoções rodam em quais dias?", type: "text" },
-    ],
-  },
-  {
-    key: "reviews",
-    index: 11,
-    title: "Avaliações e reputação",
-    subtitle: "O que os clientes dizem",
-    questions: [
-      { key: "avg_rating", label: "Nota média", type: "number", min: 0, max: 5 },
-      { key: "main_compliments", label: "Principais elogios", type: "textarea" },
-      { key: "main_complaints", label: "Principais reclamações", type: "textarea" },
-      { key: "complaint_cold", label: "Reclamações sobre comida fria?", type: "yesno" },
-      { key: "complaint_late", label: "Reclamações sobre atraso?", type: "yesno" },
-      { key: "complaint_wrong", label: "Reclamações sobre pedido errado?", type: "yesno" },
-      { key: "complaint_small", label: "Reclamações sobre porção pequena?", type: "yesno" },
-      { key: "complaint_packaging", label: "Reclamações sobre embalagem?", type: "yesno" },
-      { key: "complaint_service", label: "Reclamações sobre atendimento?", type: "yesno" },
-      { key: "real_reviews", label: "Cole avaliações reais (uma por linha)", type: "textarea" },
-    ],
-  },
+
+  // ============================================================
+  // 7) ENTREGA E QUALIDADE
+  // ============================================================
   {
     key: "delivery",
-    index: 12,
-    title: "Entrega e operação",
-    subtitle: "Logística e cumprimento",
+    index: 7,
+    title: "Entrega e qualidade",
+    subtitle: "O pedido chega bem?",
     questions: [
-      { key: "promised_time", label: "Tempo médio prometido (min)", type: "number" },
-      { key: "real_time", label: "Tempo médio real (min)", type: "number" },
-      { key: "prep_time", label: "Tempo médio de preparo (min)", type: "number" },
-      { key: "frequent_delays", label: "Atrasos frequentes?", type: "yesno" },
-      { key: "courier_issues", label: "Problemas com entregador?", type: "yesno" },
-      { key: "orders_waiting", label: "Pedido fica esperando?", type: "yesno" },
-      { key: "food_arrives_hot", label: "Comida chega quente?", type: "yesno" },
-      { key: "packaging_preserves", label: "Embalagem preserva bem o produto?", type: "yesno" },
-      { key: "cancellation_rate", label: "Taxa de cancelamento (%)", type: "number" },
-      { key: "cancel_reasons", label: "Principais motivos de cancelamento", type: "textarea" },
+      {
+        key: "real_time",
+        label: "Na prática, em quanto tempo o pedido chega na casa do cliente?",
+        type: "select",
+        options: [
+          { value: "25", label: "Até 30 min" },
+          { value: "38", label: "31 a 45 min" },
+          { value: "52", label: "46 a 60 min" },
+          { value: "75", label: "Mais de 60 min" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "prep_time",
+        label: "Quanto tempo a cozinha leva para preparar um pedido comum?",
+        type: "select",
+        options: [
+          { value: "8", label: "Até 10 min" },
+          { value: "15", label: "11 a 20 min" },
+          { value: "25", label: "21 a 30 min" },
+          { value: "40", label: "Mais de 30 min" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      { key: "frequent_delays", label: "Vocês atrasam com frequência?", type: "yesno" },
+      {
+        key: "food_arrives_hot",
+        label: "A comida chega quente e bem embalada?",
+        type: "select",
+        options: [
+          { value: "true", label: "Quase sempre" },
+          { value: "as_vezes", label: "Às vezes a gente recebe reclamação" },
+          { value: "false", label: "Já tivemos vários relatos de comida fria/derramada" },
+        ],
+      },
+      { key: "packaging_preserves", label: "Você usa seladora ou lacre na embalagem?", type: "yesno" },
+      {
+        key: "cancellation_rate",
+        label: "Quantos pedidos vocês cancelam, mais ou menos?",
+        type: "select",
+        options: [
+          { value: "1", label: "Quase nenhum (até 2%)" },
+          { value: "4", label: "Alguns por semana (2 a 5%)" },
+          { value: "8", label: "Vários (5 a 10%)" },
+          { value: "15", label: "Muitos (mais de 10%)" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "cancel_reasons",
+        label: "Quando cancela, costuma ser por quê?",
+        type: "multiselect",
+        condition: { key: "cancellation_rate", in: ["4", "8", "15"] },
+        options: [
+          { value: "falta_item", label: "Faltou item / acabou no estoque" },
+          { value: "atraso", label: "Atraso na cozinha" },
+          { value: "sem_entregador", label: "Sem entregador disponível" },
+          { value: "cliente_desistiu", label: "Cliente desistiu" },
+          { value: "endereco", label: "Endereço fora do raio / errado" },
+        ],
+      },
     ],
   },
+
+  // ============================================================
+  // 8) AVALIAÇÕES E PROBLEMAS
+  // ============================================================
   {
-    key: "competitors",
-    index: 13,
-    title: "Concorrência",
-    subtitle: "Cadastre seus principais concorrentes",
+    key: "reviews",
+    index: 8,
+    title: "Avaliações e reclamações",
+    subtitle: "O que os clientes mais falam",
     questions: [
-      { key: "items", label: "Concorrentes", type: "competitors" },
+      {
+        key: "main_compliments",
+        label: "O que os clientes mais elogiam?",
+        type: "multiselect",
+        options: [
+          { value: "sabor", label: "Sabor da comida" },
+          { value: "porcao", label: "Tamanho da porção" },
+          { value: "agilidade", label: "Rapidez na entrega" },
+          { value: "embalagem", label: "Embalagem" },
+          { value: "atendimento", label: "Atendimento" },
+        ],
+      },
+      {
+        key: "main_complaints",
+        label: "E o que mais aparece como reclamação?",
+        type: "multiselect",
+        options: [
+          { value: "frio", label: "Comida chegou fria" },
+          { value: "atraso", label: "Atraso" },
+          { value: "errado", label: "Pedido veio errado" },
+          { value: "pequeno", label: "Porção pequena demais" },
+          { value: "embalagem", label: "Embalagem ruim / vazou" },
+          { value: "atendimento", label: "Atendimento" },
+          { value: "nenhuma", label: "Quase não temos reclamação" },
+        ],
+      },
+      // Espelhos booleanos (preservam regras complaint_*)
+      { key: "complaint_cold", label: "Tem reclamação recorrente de comida fria?", type: "yesno" },
+      { key: "complaint_late", label: "Tem reclamação recorrente de atraso?", type: "yesno" },
+      { key: "complaint_wrong", label: "Tem reclamação recorrente de pedido errado?", type: "yesno" },
+      { key: "complaint_packaging", label: "Tem reclamação recorrente de embalagem?", type: "yesno" },
+      { key: "complaint_small", label: "Tem reclamação recorrente de porção pequena?", type: "yesno" },
+      {
+        key: "real_reviews",
+        label: "Cole 2 ou 3 avaliações negativas reais (uma por linha) — a IA usa para identificar padrões",
+        type: "textarea",
+        placeholder: "Opcional, mas ajuda muito",
+      },
     ],
   },
-  {
-    key: "demand",
-    index: 14,
-    title: "Horários e demanda",
-    subtitle: "Quando vende e quando perde",
-    questions: [
-      { key: "best_days", label: "Dias de maior venda", type: "text" },
-      { key: "weak_days", label: "Dias mais fracos", type: "text" },
-      { key: "peak_hours", label: "Horários de pico", type: "text" },
-      { key: "low_hours", label: "Horários com baixa demanda", type: "text" },
-      { key: "loss_hours", label: "Horários com prejuízo", type: "text" },
-      { key: "opportunity_hours", label: "Horários com oportunidade", type: "text" },
-      { key: "missed_hours", label: "A loja fecha em algum horário que poderia vender bem?", type: "yesno" },
-    ],
-  },
-  {
-    key: "loyalty",
-    index: 15,
-    title: "Recompra e fidelização",
-    subtitle: "Como você traz o cliente de volta",
-    questions: [
-      { key: "next_purchase_coupon", label: "Existe cupom para próxima compra?", type: "yesno" },
-      { key: "loyalty_card", label: "Existe cartão fidelidade?", type: "yesno" },
-      { key: "packaging_message", label: "Existe mensagem na embalagem?", type: "yesno" },
-      { key: "old_customer_action", label: "Existe ação para cliente antigo?", type: "yesno" },
-      { key: "weekly_combo", label: "Existe combo semanal?", type: "yesno" },
-      { key: "rebuy_strategy", label: "Existe estratégia para o cliente voltar?", type: "yesno" },
-      { key: "knows_rebuy_rate", label: "Sabe quantos clientes recompram?", type: "yesno" },
-    ],
-  },
+
+  // ============================================================
+  // 9) ANÚNCIOS E PROMOÇÕES
+  // ============================================================
   {
     key: "ads",
-    index: 16,
-    title: "Anúncios e campanhas",
-    subtitle: "Investimento em mídia",
+    index: 9,
+    title: "Anúncios e promoções",
+    subtitle: "Como você atrai cliente novo",
     questions: [
-      { key: "advertises", label: "A loja anuncia?", type: "yesno" },
-      { key: "ad_channels", label: "Onde anuncia?", type: "text" },
-      { key: "ad_spend", label: "Quanto gasta/mês (R$)?", type: "currency" },
-      { key: "ad_product", label: "Qual produto anuncia?", type: "text" },
-      { key: "ad_roi", label: "Qual ROI estimado? (ex.: 2.5x)", type: "number" },
-      { key: "ad_attracts_new", label: "Atrai cliente novo?", type: "yesno" },
-      { key: "ad_right_time", label: "Roda no horário certo?", type: "yesno" },
-      { key: "ops_supports_growth", label: "A operação aguenta aumento de pedidos?", type: "yesno" },
-      { key: "ad_profitable", label: "Campanha gera lucro ou só volume?", type: "rating3" },
+      { key: "advertises", label: "Você anuncia sua loja em algum lugar (iFood Ads, Instagram, etc)?", type: "yesno" },
+      {
+        key: "ad_channels",
+        label: "Onde você anuncia?",
+        type: "multiselect",
+        condition: { key: "advertises", equals: true },
+        options: [
+          { value: "ifood_ads", label: "iFood Ads" },
+          { value: "meta", label: "Instagram / Facebook" },
+          { value: "google", label: "Google" },
+          { value: "influencers", label: "Influenciadores" },
+        ],
+      },
+      {
+        key: "ad_spend",
+        label: "Quanto investe em anúncio por mês?",
+        type: "select",
+        condition: { key: "advertises", equals: true },
+        options: [
+          { value: "100", label: "Até R$ 200" },
+          { value: "350", label: "R$ 200 a R$ 500" },
+          { value: "750", label: "R$ 500 a R$ 1.000" },
+          { value: "1500", label: "Mais de R$ 1.000" },
+          { value: "", label: "Não sei direito" },
+        ],
+      },
+      {
+        key: "ad_roi",
+        label: "Você sente que o anúncio dá lucro?",
+        type: "select",
+        condition: { key: "advertises", equals: true },
+        options: [
+          { value: "2", label: "Sim, dá retorno claro" },
+          { value: "1", label: "Empata mais ou menos" },
+          { value: "0.5", label: "Acho que estou perdendo dinheiro" },
+          { value: "", label: "Não sei medir" },
+        ],
+      },
+      // Promoções (também salvas em step ads para não criar etapa nova)
+      {
+        key: "uses_promotions",
+        label: "Você costuma rodar promoções no app (cupom, desconto, frete grátis)?",
+        type: "yesno",
+      },
+      { key: "platform_coupon", label: "Usa cupom da plataforma?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
+      { key: "free_delivery", label: "Já testou frete grátis?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
+      { key: "promo_profitable", label: "Você sente que essas promoções dão lucro?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
     ],
   },
+
+  // ============================================================
+  // 10) FIDELIZAÇÃO
+  // ============================================================
   {
-    key: "final_questions",
-    index: 17,
-    title: "6 perguntas finais",
-    subtitle: "O diagnóstico estratégico em 6 perguntas",
-    description: "Responda com a sua percepção atual. A IA cruza com os dados que você preencheu.",
+    key: "loyalty",
+    index: 10,
+    title: "Fazer o cliente voltar",
+    subtitle: "Recompra é mais barato que cliente novo",
     questions: [
-      { key: "q_nao_entram", label: "Por que as pessoas não entram na sua loja?", type: "textarea", placeholder: "Ex.: nota baixa, tempo alto, poucas avaliações…" },
-      { key: "q_nao_clicam", label: "Por que entram e não clicam nos produtos?", type: "textarea", placeholder: "Ex.: faltam fotos, vitrine pouco atrativa…" },
-      { key: "q_nao_compram", label: "Por que clicam e não compram?", type: "textarea", placeholder: "Ex.: preço, taxa de entrega, falta de combo…" },
-      { key: "q_compram_pouco", label: "Por que compram pouco (ticket baixo)?", type: "textarea", placeholder: "Ex.: sem combo, sem cross-sell…" },
-      { key: "q_nao_voltam", label: "Por que não voltam?", type: "textarea", placeholder: "Ex.: experiência ruim, sem cupom de retorno…" },
-      { key: "q_nao_lucram", label: "Por que vende, mas não lucra?", type: "textarea", placeholder: "Ex.: margem apertada, cupons agressivos…" },
+      { key: "next_purchase_coupon", label: "Você dá cupom de desconto para o cliente voltar?", type: "yesno" },
+      { key: "loyalty_card", label: "Tem algum tipo de cartão fidelidade ou programa de pontos?", type: "yesno" },
+      { key: "packaging_message", label: "Coloca alguma mensagem ou cartão dentro da embalagem?", type: "yesno" },
+      { key: "rebuy_strategy", label: "Tem alguma ação pensada pro cliente antigo voltar?", type: "yesno" },
+      {
+        key: "knows_rebuy_rate",
+        label: "Você sabe quantos clientes voltam a comprar no mês?",
+        type: "select",
+        options: [
+          { value: "10", label: "Menos de 15%" },
+          { value: "22", label: "Entre 15% e 30%" },
+          { value: "40", label: "Entre 30% e 50%" },
+          { value: "60", label: "Mais de 50%" },
+          { value: "", label: "Não sei" },
+        ],
+      },
     ],
-  },
-  {
-    key: "uploads",
-    index: 18,
-    title: "Uploads opcionais",
-    subtitle: "Envie planilhas, PDFs ou prints",
-    description: "Os arquivos serão armazenados com segurança. O processamento automático estará disponível em breve.",
-    questions: [{ key: "files", label: "Arquivos", type: "files" }],
   },
 ];
 
@@ -349,3 +561,13 @@ export const TOTAL_STEPS = STEPS.length;
 
 export const findStep = (key: string) => STEPS.find((s) => s.key === key);
 export const stepByIndex = (index: number) => STEPS.find((s) => s.index === index);
+
+/** Avalia se uma pergunta condicional deve aparecer dado o estado atual da etapa. */
+export function shouldShowQuestion(q: Question, values: Record<string, any>): boolean {
+  if (!q.condition) return true;
+  const v = values[q.condition.key];
+  if (q.condition.equals !== undefined) return v === q.condition.equals;
+  if (q.condition.in) return q.condition.in.includes(v);
+  if (q.condition.truthy) return !!v;
+  return true;
+}
