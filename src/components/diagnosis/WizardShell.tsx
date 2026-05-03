@@ -51,7 +51,7 @@ export function WizardShell({
           <div className="flex-1">
             <div className="flex justify-between items-center mb-1">
               <span className="text-xs font-medium">
-                Etapa {currentStepIndex} de {STEPS.length} · {current?.title}
+                Etapa {currentStepIndex} de {total} · {current?.title}
               </span>
               <span className="text-xs text-muted-foreground">{saveLabel}</span>
             </div>
