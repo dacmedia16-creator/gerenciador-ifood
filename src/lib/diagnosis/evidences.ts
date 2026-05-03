@@ -467,6 +467,111 @@ export function evidencesFromAnswers(answers: AnswersByStep): RuleEvidence[] {
     });
   }
 
+  // === Tendência de vendas ===
+  if (front.sales_trend === "caindo") {
+    out.push({
+      rule_id: "vendas_em_queda",
+      area: "vendas",
+      metric: "sales_trend",
+      current_value: "caindo",
+      reference_value: "estavel ou subindo",
+      severity: "critico",
+      business_impact: "Receita perdendo tração nos últimos 60 dias",
+      probable_cause: "Concorrência, perda de relevância no app ou mudança no mix",
+      recommended_action: "Rodar diagnóstico de visitas vs conversão e revisar fotos/preços dos top vendidos",
+      confidence: "media",
+      evidence_data: { tendencia: "caindo" },
+    });
+  }
+
+  // === Visitas altas com baixa conversão ===
+  const views = num(front.monthly_views);
+  if (views != null && views >= 5000 && front.conversion_feeling === "ruim") {
+    out.push({
+      rule_id: "conversao_baixa_com_visitas",
+      area: "conversao",
+      metric: "views_vs_orders",
+      current_value: `${views} visitas/mês com conversão percebida ruim`,
+      reference_value: "≥5% de conversão",
+      severity: "critico",
+      business_impact: "Tráfego sendo desperdiçado — cliente entra e não pede",
+      probable_cause: "Fotos fracas, preço fora da curva ou nota baixa",
+      recommended_action: "Auditar fotos do topo do cardápio, preços percebidos e nota da loja",
+      confidence: "media",
+      evidence_data: { visitas: views },
+    });
+  }
+
+  // === Operação: estoque ===
+  if (operations.stockout_frequency === "muito" || operations.stockout_frequency === "as_vezes") {
+    out.push({
+      rule_id: "estoque_recorrente",
+      area: "operacao",
+      metric: "stockout_frequency",
+      current_value: operations.stockout_frequency,
+      reference_value: "raro",
+      severity: operations.stockout_frequency === "muito" ? "critico" : "atencao",
+      business_impact: "Cliente cancela ou desconfia quando item some do cardápio",
+      probable_cause: "Falta de controle de estoque ou previsão de pico",
+      recommended_action: "Checklist diário de disponibilidade + estoque mínimo dos top vendidos",
+      confidence: "alta",
+      evidence_data: {},
+    });
+  }
+
+  // === Operação: pico não dá conta ===
+  if (operations.peak_capacity_ok === "ruim") {
+    out.push({
+      rule_id: "pico_sem_capacidade",
+      area: "operacao",
+      metric: "peak_capacity",
+      current_value: "não dá conta",
+      reference_value: "atende sem atrasar",
+      severity: "atencao",
+      business_impact: "Atrasos em horário de pico = nota baixa e cliente perdido",
+      probable_cause: "Equipe insuficiente, mise en place fraco ou cardápio complexo",
+      recommended_action: "Pré-preparo + reforço de equipe nos picos identificados",
+      confidence: "media",
+      evidence_data: {},
+    });
+  }
+
+  // === Marketing: sem diferencial claro ===
+  if (!ads.unique_value || wordsCount(ads.unique_value) < 4) {
+    out.push({
+      rule_id: "sem_diferencial_claro",
+      area: "concorrencia",
+      metric: "unique_value",
+      current_value: "ausente ou vago",
+      reference_value: "definido",
+      severity: "atencao",
+      business_impact: "Sem diferencial, cliente decide só por preço",
+      probable_cause: "Posicionamento não articulado",
+      recommended_action: "Definir frase única de venda e usá-la em capa, descrição e Instagram",
+      confidence: "media",
+      evidence_data: {},
+    });
+  }
+
+  // === Marketing: concorrente na frente em algo central ===
+  const compAdv: string[] = Array.isArray(ads.competitor_advantage) ? ads.competitor_advantage : [];
+  const heavy = compAdv.filter((c) => ["preco", "fotos", "nota", "entrega"].includes(c));
+  if (heavy.length) {
+    out.push({
+      rule_id: "concorrente_na_frente",
+      area: "concorrencia",
+      metric: "competitor_advantage",
+      current_value: heavy.join(", "),
+      reference_value: "paridade ou liderança",
+      severity: "atencao",
+      business_impact: "Cliente pode migrar quando o concorrente é melhor em fatores decisivos",
+      probable_cause: "Gap em pelo menos um pilar (preço, foto, nota, entrega)",
+      recommended_action: "Atacar o item mais citado primeiro — começar por foto/preço se possível",
+      confidence: "media",
+      evidence_data: { areas: heavy },
+    });
+  }
+
   return out;
 }
 
