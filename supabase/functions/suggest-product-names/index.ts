@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { buildCacheKey, getCached, putCached, CACHE_TTL } from "../_shared/cache.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -32,12 +33,24 @@ Deno.serve(async (req) => {
     const segment: string = body.segment ?? "delivery";
     if (!products.length) return new Response(JSON.stringify({ error: "products required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Cache (TTL 30 dias)
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
+    const cacheKey = await buildCacheKey({ segment, products });
+    const cached = await getCached(admin, cacheKey);
+    if (cached) {
+      return new Response(JSON.stringify(cached.response), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
     const systemPrompt = `Você é um especialista em SEO de cardápio para iFood/Rappi. Reescreva nomes de produtos no formato:
 Categoria + Ingrediente principal + Diferencial + palavra-chave do segmento (${segment}).
 Exemplo: "X-Burger" -> "X-Burger Artesanal com Queijo Derretido e Molho Especial".
 Mantenha entre 5 e 9 palavras. Português do Brasil. Apetitoso, claro, vendedor.`;
 
     const userMsg = JSON.stringify({ produtos: products });
+
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -93,7 +106,15 @@ Mantenha entre 5 e 9 palavras. Português do Brasil. Apetitoso, claro, vendedor.
     if (!toolCall) return new Response(JSON.stringify({ error: "Sem retorno estruturado" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const result = JSON.parse(toolCall.function.arguments);
 
-    return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    putCached(admin, {
+      inputHash: cacheKey,
+      cacheType: "suggestion",
+      response: result,
+      model: "google/gemini-3-flash-preview",
+      ttlSeconds: CACHE_TTL.suggestion,
+    }).catch((e) => console.warn("cache put failed", e));
+
+    return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error("suggest-product-names error", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

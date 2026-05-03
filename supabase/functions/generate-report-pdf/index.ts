@@ -53,6 +53,11 @@ Deno.serve(async (req) => {
     const { data: userData } = await userClient.auth.getUser();
     if (!userData?.user) return jsonResponse({ error: "Unauthorized" }, 401);
 
+    const { checkRateLimit, rateLimitResponse } = await import("../_shared/rate-limit.ts");
+    const adminRl = createClient(SUPABASE_URL, SERVICE_ROLE);
+    const rl = await checkRateLimit(adminRl, userData.user.id, "report");
+    if (!rl.allowed) return rateLimitResponse(rl, corsHeaders);
+
     const { store_id } = await req.json();
     if (!store_id) return jsonResponse({ error: "store_id required" }, 400);
 

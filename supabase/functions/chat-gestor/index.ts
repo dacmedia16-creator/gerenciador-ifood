@@ -216,6 +216,14 @@ Deno.serve(async (req) => {
     const { data: userData } = await supabaseAuth.auth.getUser();
     const userId = userData?.user?.id ?? null;
 
+    // Rate limit
+    if (userId) {
+      const { checkRateLimit, rateLimitResponse } = await import("../_shared/rate-limit.ts");
+      const adminRl = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const rl = await checkRateLimit(adminRl, userId, "chat");
+      if (!rl.allowed) return rateLimitResponse(rl, corsHeaders);
+    }
+
     // Cliente service-role para storage e RPC RAG
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

@@ -11,6 +11,8 @@ import {
 } from "../_shared/memory.ts";
 import { applyDiagnosisValidation } from "../_shared/validate-diagnosis.ts";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { buildCacheKey, getCached, putCached, invalidateDiagnosisCache, CACHE_TTL } from "../_shared/cache.ts";
+import { checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const SYSTEM_PROMPT = `Você é um GESTOR DE DELIVERY EXPERIENTE atuando como consultor.
 
@@ -219,6 +221,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Rate limit por usuário/hora
+    const adminForLimits = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const rl = await checkRateLimit(adminForLimits, userData.user.id, "diagnosis");
+    if (!rl.allowed) return rateLimitResponse(rl, corsHeaders);
+
     const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR, goalsR, recentUpdatesR] = await Promise.all([
       supabase.from("stores").select("*").eq("id", storeId).single(),
       supabase.from("products").select("*").eq("store_id", storeId).limit(50),
@@ -235,6 +245,43 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // ===== Cache de diagnóstico (hash de inputs primários) =====
+    let hasPrint = false;
+    if (sessionId) {
+      const { count } = await supabase
+        .from("diagnosis_uploads")
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", sessionId);
+      hasPrint = (count ?? 0) > 0;
+    }
+    const revenueRange = (() => {
+      const r = Number(storeR.data.monthly_revenue ?? 0);
+      if (!r) return "unknown";
+      if (r < 5000) return "0-5k";
+      if (r < 15000) return "5-15k";
+      if (r < 30000) return "15-30k";
+      if (r < 60000) return "30-60k";
+      return "60k+";
+    })();
+    const cacheInputs = {
+      store_category: String(storeR.data.category ?? ""),
+      revenue_range: revenueRange,
+      current_rating: Number(storeR.data.rating ?? 0),
+      cancellation_rate: Number(storeR.data.cancellation_rate ?? 0),
+      avg_ticket: Number(storeR.data.average_ticket ?? 0),
+      main_problem: String(objective ?? ""),
+      has_print: hasPrint,
+    };
+    const cacheHash = await buildCacheKey(cacheInputs);
+    const cached = await getCached(adminForLimits, cacheHash);
+    if (cached) {
+      console.log(JSON.stringify({ evt: "ai_consult.cache_hit", store_id: storeId, hash: cacheHash }));
+      return new Response(JSON.stringify(cached.response), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+    console.log(JSON.stringify({ evt: "ai_consult.cache_miss", store_id: storeId, hash: cacheHash }));
 
     // ===== Camada 0: dados da sessão do funil (respostas + prints) =====
     let sessionEvidences: RuleEvidence[] = [];
@@ -679,8 +726,20 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       }));
     }
 
-    return new Response(JSON.stringify({ diagnosis: enriched, report_id: newReportId }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const finalPayload = { diagnosis: enriched, report_id: newReportId };
+    // Limpa cache antigo desta loja e grava novo (TTL 7d)
+    invalidateDiagnosisCache(adminForLimits, storeId).catch(() => {});
+    putCached(adminForLimits, {
+      inputHash: cacheHash,
+      storeId,
+      cacheType: "diagnosis",
+      response: finalPayload,
+      model,
+      ttlSeconds: CACHE_TTL.diagnosis,
+    }).catch((e) => console.warn("cache put failed", e));
+
+    return new Response(JSON.stringify(finalPayload), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
     console.error("ai-consult error", e);

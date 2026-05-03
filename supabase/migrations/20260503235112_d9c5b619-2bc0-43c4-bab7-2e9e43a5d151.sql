@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.increment_rate_limit(uuid, text, timestamptz) FROM PUBLIC, anon, authenticated;

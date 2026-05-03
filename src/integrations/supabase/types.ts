@@ -165,6 +165,53 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_cache: {
+        Row: {
+          cache_type: string
+          created_at: string
+          expires_at: string
+          hit_count: number
+          id: string
+          input_hash: string
+          model: string
+          response: Json
+          store_id: string | null
+          tokens_used: number | null
+        }
+        Insert: {
+          cache_type: string
+          created_at?: string
+          expires_at: string
+          hit_count?: number
+          id?: string
+          input_hash: string
+          model: string
+          response: Json
+          store_id?: string | null
+          tokens_used?: number | null
+        }
+        Update: {
+          cache_type?: string
+          created_at?: string
+          expires_at?: string
+          hit_count?: number
+          id?: string
+          input_hash?: string
+          model?: string
+          response?: Json
+          store_id?: string | null
+          tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_cache_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           campaign_type: string | null
@@ -777,6 +824,66 @@ export type Database = {
           },
         ]
       }
+      print_jobs: {
+        Row: {
+          attempts: number
+          created_at: string
+          diagnosis_session_id: string | null
+          error_message: string | null
+          id: string
+          processed_at: string | null
+          result: Json | null
+          status: string
+          storage_path: string
+          store_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          diagnosis_session_id?: string | null
+          error_message?: string | null
+          id?: string
+          processed_at?: string | null
+          result?: Json | null
+          status?: string
+          storage_path: string
+          store_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          diagnosis_session_id?: string | null
+          error_message?: string | null
+          id?: string
+          processed_at?: string | null
+          result?: Json | null
+          status?: string
+          storage_path?: string
+          store_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "print_jobs_diagnosis_session_id_fkey"
+            columns: ["diagnosis_session_id"]
+            isOneToOne: false
+            referencedRelation: "diagnosis_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "print_jobs_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string | null
@@ -953,6 +1060,30 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          action: string
+          count: number
+          id: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          action: string
+          count?: number
+          id?: string
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          action?: string
+          count?: number
+          id?: string
+          user_id?: string
+          window_start?: string
         }
         Relationships: []
       }
@@ -1487,6 +1618,10 @@ export type Database = {
         Returns: boolean
       }
       has_store_access: { Args: { _store_id: string }; Returns: boolean }
+      increment_rate_limit: {
+        Args: { _action: string; _user: string; _window: string }
+        Returns: number
+      }
       match_cases: {
         Args: {
           filter_rule_id?: string

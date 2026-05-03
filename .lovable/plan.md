@@ -1,116 +1,200 @@
-# Plano: Dashboard reorganizado + Plano de Ação reestruturado
+## Objetivo
 
-## 1. Migration (Supabase)
+Adicionar 3 camadas de eficiência ao backend, sem mudar o comportamento visível do diagnóstico, chat ou plano de ação:
 
-Adicionar campos opcionais (nullable) sem quebrar dados existentes:
+1. **Cache de respostas de IA** (diagnóstico, sugestão de nomes, análise de avaliações).
+2. **Fila assíncrona de processamento de prints** (upload → job → polling/realtime).
+3. **Rate limiting básico** por usuário/ação/hora, com mensagem amigável.
 
+Tudo em paralelo às tabelas e fluxos existentes — nada é removido.
+
+---
+
+## 1. Migrations (Supabase)
+
+### 1.1 `ai_cache`
 ```sql
--- action_plans: novos campos para o plano reestruturado
-ALTER TABLE public.action_plans
-  ADD COLUMN IF NOT EXISTS impacto_financeiro numeric,
-  ADD COLUMN IF NOT EXISTS dificuldade text,        -- 'facil' | 'medio' | 'dificil'
-  ADD COLUMN IF NOT EXISTS tempo_estimado text,     -- ex: '15 min', 'Esta semana'
-  ADD COLUMN IF NOT EXISTS categoria text,          -- ex: 'Cardápio'
-  ADD COLUMN IF NOT EXISTS feedback_text text,
-  ADD COLUMN IF NOT EXISTS has_feedback boolean NOT NULL DEFAULT false;
-
--- weekly_snapshots: tabela nova para o check-in semanal
-CREATE TABLE IF NOT EXISTS public.weekly_snapshots (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  store_id uuid NOT NULL,
-  week_start date NOT NULL,
-  rating numeric,
-  cancellation_rate numeric,
-  weekly_revenue numeric,
-  score integer,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (store_id, week_start)
+create table public.ai_cache (
+  id uuid primary key default gen_random_uuid(),
+  input_hash text not null unique,
+  store_id uuid references public.stores(id) on delete cascade,
+  cache_type text not null,         -- 'diagnosis' | 'review_analysis' | 'suggestion'
+  response jsonb not null,
+  model text not null,
+  tokens_used int,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  hit_count int not null default 0
 );
-ALTER TABLE public.weekly_snapshots ENABLE ROW LEVEL SECURITY;
-CREATE POLICY weekly_snapshots_all_own ON public.weekly_snapshots
-  FOR ALL TO authenticated
-  USING (auth.uid() = user_id AND public.has_store_access(store_id))
-  WITH CHECK (auth.uid() = user_id AND public.has_store_access(store_id));
+create index ai_cache_hash_idx on public.ai_cache(input_hash);
+create index ai_cache_expires_idx on public.ai_cache(expires_at);
+alter table public.ai_cache enable row level security;
+-- nenhuma policy: somente service_role acessa.
 ```
 
-Não alterar tabelas existentes além das colunas adicionais. Sem mudança em RLS de `action_plans`.
+### 1.2 `print_jobs`
+```sql
+create table public.print_jobs (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid references public.stores(id) on delete cascade,
+  user_id uuid not null,
+  diagnosis_session_id uuid references public.diagnosis_sessions(id) on delete set null,
+  storage_path text not null,
+  status text not null default 'pending',  -- pending|processing|done|error
+  result jsonb,
+  error_message text,
+  attempts int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  processed_at timestamptz
+);
+alter table public.print_jobs enable row level security;
+create policy print_jobs_select_own on public.print_jobs for select to authenticated using (user_id = auth.uid());
+create policy print_jobs_insert_own on public.print_jobs for insert to authenticated with check (user_id = auth.uid());
+create policy print_jobs_update_own on public.print_jobs for update to authenticated using (user_id = auth.uid());
+create index print_jobs_status_idx on public.print_jobs(status, created_at);
+create index print_jobs_store_idx on public.print_jobs(store_id);
+alter publication supabase_realtime add table public.print_jobs;
+```
 
-## 2. Dashboard (`src/pages/app/Dashboard.tsx`)
+Trigger via `pg_net`/`http` para invocar `process-print-job` no insert (lendo `SUPABASE_URL` + `service_role_key` de `vault`/settings). Se `pg_net` não estiver habilitado no projeto, **fallback**: o frontend dispara `supabase.functions.invoke("process-print-job", { body: { job_id }})` logo após o insert (fire-and-forget) — mantém UX não-bloqueante e evita dependência do Vault.
 
-Substituir o conteúdo após o header (loja/seletor) pelos 4 blocos abaixo. **Manter** o header existente (seletor de loja, botão Nova loja, botão Atualizar sistema, botão Analisar minha loja) e o card de "Diagnóstico em andamento" (`draftSession`). **Remover** os blocos `KPI grid antigo`, `DoFirstBlock`, `MoneyLeakBlock`, "Perguntas que este painel responde", `DashboardCharts`, e os 2 cards finais de "alertas críticos" / "ações para crescer".
+### 1.3 `rate_limits`
+```sql
+create table public.rate_limits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  action text not null,
+  window_start timestamptz not null,
+  count int not null default 1,
+  unique (user_id, action, window_start)
+);
+alter table public.rate_limits enable row level security;
+-- sem policy: só service_role.
+create or replace function public.increment_rate_limit(_user uuid, _action text, _window timestamptz)
+returns int language sql security definer set search_path=public as $$
+  insert into public.rate_limits(user_id, action, window_start, count)
+  values (_user, _action, _window, 1)
+  on conflict (user_id, action, window_start)
+  do update set count = public.rate_limits.count + 1
+  returning count;
+$$;
+```
 
-### Bloco A — `WeeklyCheckinCard` (novo componente)
-- Visível só se `new Date().getDay() === 1` (segunda) E não existir `weekly_snapshots` para `week_start = início da semana atual` (segunda).
-- Card amber (`bg-amber-50 border-amber-200`), ícone calendário, 3 inputs (`rating`, `cancellation_rate`, `weekly_revenue`).
-- Ao salvar: insere `weekly_snapshots` com `score` calculado via `calculateScore`. Compara com snapshot da semana anterior; abre `Dialog` mostrando deltas (score, nota). Botão "Pular por hoje" → `localStorage.setItem('weeklyCheckinSkipped:' + weekStart, '1')`.
+### 1.4 Storage bucket `prints`
+Bucket privado para uploads de prints assíncronos (separado do `diagnosis-uploads` legado, que continua funcionando):
+```sql
+insert into storage.buckets(id,name,public) values ('prints','prints',false) on conflict do nothing;
+-- policies: usuário só pode mexer em arquivos cujo primeiro segmento de path = auth.uid()::text
+```
 
-### Bloco B — Score + Impacto Financeiro (grid 2 colunas md+, empilhado mobile)
-- Card 1: número grande do score atual (`overall`) + variação semanal (diff vs `weekly_snapshots` anterior) com ▲/▼ colorido + data do último diagnóstico (`diagnostics[0].created_at`). Vazio → "—" + botão "Fazer primeiro diagnóstico" → `/app/diagnosis/welcome`.
-- Card 2: soma de `impacto_financeiro` das ações pendentes; número grande em `text-orange-600`. Vazio/zero → mensagem positiva.
+---
 
-### Bloco C — `WeekActionsBlock` (novo componente)
-- Carrega top 3 ações com `status NOT IN ('aplicada','ignorada','rejeitada','completed')` ordenadas por `impacto_financeiro DESC NULLS LAST`.
-- Card por ação com badges: impacto verde, dificuldade (mapa cor), tempo, botão "Marcar como feito" (dispara `CompletionModal` compartilhado com ActionPlan), botão "Ver detalhes" → `/app/stores/:id/action-plan/:actionId`.
-- Estados vazios conforme spec.
+## 2. Helpers compartilhados em `supabase/functions/_shared/`
 
-### Bloco D — `ToolsGrid` (novo componente)
-- Lê `useIsAdmin` apenas como fallback; para `plano`, usar profile/feature flag. Como ainda não existe campo `plan`, **assumir `pro` para usuários autenticados** com `TODO`/comentário, e renderizar grid 2 colunas dos 4 atalhos: PricingSimulator, BestHours, Reviews, StoreEvolution. Para `plan === 'free'` renderizar versão com `blur-sm pointer-events-none` + cadeado + texto "Disponível no Pro" → CTA `/app/planos`.
-- Como não há campo de plano hoje, **deixar comportamento atual = visível**, com `getUserPlan()` helper isolado em `src/lib/plan.ts` retornando `'pro'`. Quando o campo existir, basta trocar a função.
+- `cache.ts`: `buildCacheKey(inputs)` (SHA-256 hex via `crypto.subtle`), `getCached(admin, hash)`, `putCached(admin, { hash, store_id, type, response, model, tokens, ttlSeconds })`, `invalidateDiagnosisCache(admin, storeId)`.
+- `rate-limit.ts`: `checkRateLimit(admin, userId, action, limitPerHour)` chama RPC `increment_rate_limit` com `window_start = início da hora atual`. Retorna `{ allowed, remaining, retryAfterMinutes }`. Mapa de limites por plano (free/pro/pro_plus) via `getUserPlan` server-side (por enquanto: assume `pro` se autenticado, igual ao client helper).
 
-### Remover do Dashboard
-Conforme spec: nenhum atalho de admin/configuração/lista de lojas para gestão além do que já está no header (seletor + nova loja, que é necessário para multi-loja).
+---
 
-## 3. Plano de Ação (`src/pages/app/ActionPlan.tsx`)
+## 3. Edge Functions
 
-Reescrever a estrutura visual mantendo a lógica de `change`/`submitOutcome` e o `Dialog` de outcome (renomeado para "Ação concluída").
+### 3.1 Aplicar **cache + rate limit** em:
+- `ai-consult` (apenas quando o `mode`/payload representa diagnóstico — manter outros modos sem cache).
+  - Hash sobre `{ store_category, revenue_range, current_rating, cancellation_rate, avg_ticket, main_problem, has_print }` derivados do payload de entrada (sem `store_id`/`user_id`).
+  - TTL 7 dias. Rate limit `action='diagnosis'`.
+- `analyze-reviews`: hash sobre lista de comentários ordenada + topics. TTL 24h. Rate limit `action='diagnosis'` (compartilha balde) — opcional.
+- `suggest-product-names`: hash sobre `{products, segment}` ordenados. TTL 30 dias.
 
-### Header
-- Título "Seu Plano de Ação".
-- Subtítulo: `${pendentes} ações pendentes · Impacto total estimado: ~R$ ${soma}/mês` (soma `impacto_financeiro` das pendentes).
-- Filtros (chips): Todas / Fácil / Médio / Difícil / Concluídas. Estado local `filter`.
+### 3.2 Aplicar **somente rate limit** em:
+- `chat-gestor` → `action='chat'`.
+- `generate-report-pdf` → `action='report'`.
+- nova `process-print-job` → `action='print_upload'` (validado no momento do **insert do job**, ver 3.4).
 
-### Card de ação
-- Layout em 3 linhas conforme spec, com `Checkbox` grande (h-6 w-6, área de toque ≥ 48px via padding).
-- Linha 2: badges de dificuldade (cor por valor), tempo (`tempo_estimado`), categoria.
-- Linha 3 (collapsible via `useState` por card, ou `<details>`): descrição completa, causa (`why_it_matters`), passo a passo (`how_to_apply`), botão `Abrir [ferramenta]` se `toolForAction` retornar.
-- Concluídas: `opacity-60`, checkbox marcado, data de conclusão (`completed_at`), badge "✓ Você reportou melhora" se `has_feedback`.
+Em caso de bloqueio, retornar HTTP 429:
+```json
+{ "error": "rate_limit_exceeded", "message": "Aguarde alguns minutos antes de gerar outro diagnóstico.", "retry_after_minutes": N }
+```
 
-### Fluxo de conclusão
-Quando checkbox/Marcar como feito é acionado:
-1. `update action_plans set status='aplicada', completed_at=now() where id=`.
-2. Abrir modal de celebração com texto fixo "Ação concluída! 🎉" + valor de impacto.
-3. Textarea opcional. Botão Salvar:
-   - Se houver texto: `update action_plans set feedback_text=, has_feedback=true`.
-   - Chamar `supabase.functions.invoke('record-feedback', { body: { recommendation_id, status:'aplicada', applied:true, generated_result:'sim', outcome_explanation: feedback, comment: feedback } })` (reutiliza fluxo já existente).
-4. Fechar modal e `reload()`.
+### 3.3 Invalidação de cache de diagnóstico
+- Chamar `invalidateDiagnosisCache(admin, storeId)` dentro de:
+  - `ai-consult` ao final de uma geração nova (já implícito porque novo hash = nova chave; só limpa entradas antigas da loja para evitar acúmulo).
+  - Edge function/handler que recebe a reavaliação semanal — **não há edge function dedicada hoje**; o `WeeklyCheckinCard` insere direto na tabela. Para invalidar do client, criar pequena edge function `invalidate-diagnosis-cache` (autenticada, valida `has_store_access` via RLS-like check) e chamá-la ao salvar o snapshot e ao salvar dados do "aprofundamento".
 
-### Estado vazio
-Card centralizado + botão "Fazer diagnóstico agora" → `/app/diagnosis/welcome`.
+### 3.4 Nova edge function `process-print-job`
+- Input: `{ job_id }`. Sem `verify_jwt` (será chamada por trigger ou client fire-and-forget); valida que o job existe e marca `processing`.
+- Reaproveita 100% da lógica atual de `process-print` (download do storage, chamada multimodal, parse) **mas lendo do bucket `prints`** e gravando o resultado em `print_jobs.result` no formato pedido pela spec:
+  ```json
+  { "rating", "cancellation_rate", "total_orders_period", "avg_ticket",
+    "revenue_period", "period_description", "top_complaints", "data_confidence" }
+  ```
+- Atualiza `status='done'|'error'`, `processed_at`, `error_message`, `attempts++`. Sem retry automático.
+- A função `process-print` legada continua existente para o `PrintUploader` atual (não quebrar).
 
-### Botão flutuante
-`fixed bottom-6 right-6 z-40` com `Plus` + "Novo diagnóstico". Renderizado dentro da página.
+---
 
-## 4. Componentes novos
+## 4. Frontend
 
-- `src/components/dashboard/WeeklyCheckinCard.tsx`
-- `src/components/dashboard/ScoreImpactBlocks.tsx`
-- `src/components/dashboard/WeekActionsBlock.tsx`
-- `src/components/dashboard/ToolsGrid.tsx`
-- `src/components/actions/ActionCompletionModal.tsx` (reuso entre Dashboard e ActionPlan)
-- `src/lib/plan.ts` — `getUserPlan()` retornando `'pro'` por enquanto.
+### 4.1 Helper `src/lib/prints/uploadPrintJob.ts`
+- Faz upload no bucket `prints` (`{user.id}/{store_id||'no-store'}/{uuid}-{filename}`).
+- Insere `print_jobs` (`status='pending'`, `diagnosis_session_id` opcional).
+- Dispara `supabase.functions.invoke("process-print-job", { body: { job_id }})` sem `await` (fallback se trigger não estiver ativa).
+- Retorna `{ jobId }`.
 
-## 5. Regras técnicas
+### 4.2 Componente `src/components/prints/PrintJobStatus.tsx`
+- Props: `{ jobId, onDone?(result), onError?() }`.
+- Usa **Supabase Realtime** (`postgres_changes` filtrando `id=eq.{jobId}`) com fallback de polling 4s caso o canal não conecte em 6s.
+- Estados: pending/processing → spinner + "Analisando print…"; done → check verde + lista dos campos não-null do `result`; error → ícone erro + botão "Tentar novamente" (chama `process-print-job` de novo).
+- Timeout 60s: troca a mensagem para "A análise está demorando…" e mantém o canal aberto.
 
-- TypeScript estrito; sem `any` desnecessário (apenas onde já existia).
-- Mobile-first: botões `min-h-[48px]`, cards toque-amigáveis.
-- Componentes shadcn existentes (`Card`, `Button`, `Badge`, `Dialog`, `Textarea`, `Checkbox`, `Input`).
-- Sem alterar `src/integrations/supabase/{client,types}.ts`.
-- Não remover rotas, não tocar em `useStoreData` (ele já traz `actions`).
-- Manter `DoFirstBlock` e `MoneyLeakBlock` no codebase (apenas removidos do Dashboard) caso sejam reusados.
+### 4.3 Integração no fluxo de diagnóstico (`DiagnosisExpress.tsx`)
+- Na etapa opcional de "Print Upload" (já existente entre as 5 etapas), substituir o uso síncrono atual de `PrintUploader` pelo novo `uploadPrintJob` + `PrintJobStatus`.
+- O `PrintUploader` legado (rota `/app/stores/:id/uploads`) **permanece intacto** — apenas a etapa do funnel rápido passa a usar a fila.
+- Quando `onDone`, mesclar `result` no payload do diagnóstico (preencher `current_rating`, `cancellation_rate`, `avg_ticket`, `main_problem`/complaints quando vazios).
 
-## Arquivos afetados
+### 4.4 Tratamento de 429
+- Em `src/lib/ai/invokeAI.ts` o branch `status === 429` já existe; trocar a mensagem para a versão amigável por ação (ler `parsed?.error === 'rate_limit_exceeded'` e usar `parsed.message`).
+- No `WeeklyCheckinCard` e em `DiagnosisExpress` (após salvar snapshot/aprofundamento), invocar `invalidate-diagnosis-cache`.
 
-- **Migration:** novos campos em `action_plans`, nova tabela `weekly_snapshots` + RLS.
-- **Editados:** `src/pages/app/Dashboard.tsx`, `src/pages/app/ActionPlan.tsx`.
-- **Criados:** 5 componentes + `src/lib/plan.ts` listados acima.
+---
+
+## 5. Variáveis de ambiente
+
+Adicionar nota em `README.md` (não há `.env.example` no projeto). Nada novo em runtime — `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` já estão configurados.
+
+---
+
+## 6. Arquivos
+
+**Migrations**: 1 nova SQL com `ai_cache`, `print_jobs` (+ realtime), `rate_limits` (+ RPC), bucket `prints` + policies.
+
+**Novas edge functions**:
+- `supabase/functions/process-print-job/index.ts`
+- `supabase/functions/invalidate-diagnosis-cache/index.ts`
+- `supabase/functions/_shared/cache.ts`
+- `supabase/functions/_shared/rate-limit.ts`
+
+**Editadas**:
+- `supabase/functions/ai-consult/index.ts` (cache + rate limit no início; invalidação após sucesso).
+- `supabase/functions/analyze-reviews/index.ts` (cache).
+- `supabase/functions/suggest-product-names/index.ts` (cache).
+- `supabase/functions/chat-gestor/index.ts` (rate limit).
+- `supabase/functions/generate-report-pdf/index.ts` (rate limit).
+
+**Frontend novos**:
+- `src/lib/prints/uploadPrintJob.ts`
+- `src/components/prints/PrintJobStatus.tsx`
+
+**Frontend editados**:
+- `src/pages/app/diagnosis/DiagnosisExpress.tsx` (etapa de print usa nova fila).
+- `src/components/dashboard/WeeklyCheckinCard.tsx` (invalida cache após salvar).
+- `src/lib/ai/invokeAI.ts` (mensagem 429 amigável).
+
+---
+
+## 7. Não fazer
+
+- Não tocar em `src/integrations/supabase/{client,types}.ts`.
+- Não remover `process-print` ou `PrintUploader` legados.
+- Sem cache em `chat-gestor`, `process-print*`, `reanalyze-action`.
+- Sem retry automático no job de print.

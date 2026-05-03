@@ -12,7 +12,10 @@ export async function invokeAI<T = any>(functionName: string, body: Record<strin
         try { parsed = typeof ctx.body === "string" ? JSON.parse(ctx.body) : ctx.body; } catch { /* ignore */ }
       }
       const status = ctx?.status ?? 500;
-      if (status === 429) toast.error("A IA está sobrecarregada agora. Tente de novo em alguns minutos.");
+      if (status === 429) {
+        if (parsed?.error === "rate_limit_exceeded" && parsed?.message) toast.error(parsed.message);
+        else toast.error("A IA está sobrecarregada agora. Tente de novo em alguns minutos.");
+      }
       else if (status === 402) toast.error("Seus créditos de IA acabaram. Adicione créditos em Configurações.");
       else if (status === 401) toast.error("Sua sessão expirou. Entre novamente para continuar.");
       else if (status === 404) toast.error("Não encontramos os dados desta loja. Atualize a página.");

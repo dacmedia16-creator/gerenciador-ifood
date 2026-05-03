@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { buildCacheKey, getCached, putCached, CACHE_TTL } from "../_shared/cache.ts";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -47,7 +48,20 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, processed: 0, message: "Nenhuma avaliação pendente." });
     }
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Cache: hash sobre os comentários ordenados
+    const cacheKey = await buildCacheKey({
+      reviews: [...reviews]
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+        .map((r) => ({ id: r.id, comment: r.comment, rating: r.rating })),
+      topics: TOPICS,
+    });
+    const cachedReviews = await getCached(admin, cacheKey);
+    let results: Array<{ id: string; sentiment: string; topics: string[] }>;
+    if (cachedReviews) {
+      console.log(JSON.stringify({ evt: "analyze-reviews.cache_hit", store_id, hash: cacheKey }));
+      results = (cachedReviews.response as any).results ?? [];
+    } else {
+      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -87,15 +101,24 @@ Deno.serve(async (req) => {
       }),
     });
 
-    if (!aiResp.ok) {
-      console.error("AI error", aiResp.status);
-      return aiErrorResponse(aiResp.status, "Falha ao analisar avaliações");
-    }
+      if (!aiResp.ok) {
+        console.error("AI error", aiResp.status);
+        return aiErrorResponse(aiResp.status, "Falha ao analisar avaliações");
+      }
 
-    const aiData = await aiResp.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) return jsonResponse({ error: "Sem resposta estruturada da IA" }, 500);
-    const { results } = JSON.parse(toolCall.function.arguments);
+      const aiData = await aiResp.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) return jsonResponse({ error: "Sem resposta estruturada da IA" }, 500);
+      results = JSON.parse(toolCall.function.arguments).results ?? [];
+      putCached(admin, {
+        inputHash: cacheKey,
+        storeId: store_id,
+        cacheType: "review_analysis",
+        response: { results },
+        model: "google/gemini-3-flash-preview",
+        ttlSeconds: CACHE_TTL.review_analysis,
+      }).catch((e) => console.warn("cache put failed", e));
+    }
 
     let processed = 0;
     for (const r of results) {
