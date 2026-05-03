@@ -511,11 +511,67 @@ export const STEPS: StepDef[] = [
   },
 
   // ============================================================
-  // 8) AVALIAÇÕES E PROBLEMAS
+  // 8) OPERAÇÃO E EQUIPE
+  // ============================================================
+  {
+    key: "operations",
+    index: 8,
+    title: "Operação e equipe",
+    subtitle: "Onde aperta no dia a dia",
+    questions: [
+      {
+        key: "team_roles",
+        label: "Quem cuida de cada parte hoje?",
+        type: "multiselect",
+        options: [
+          { value: "cozinha", label: "Cozinha tem alguém dedicado" },
+          { value: "atendimento", label: "Atendimento tem alguém dedicado" },
+          { value: "entrega", label: "Entrega tem alguém dedicado" },
+          { value: "dono_faz_tudo", label: "O dono faz quase tudo" },
+        ],
+      },
+      {
+        key: "peak_capacity_ok",
+        label: "No horário de pico, a cozinha dá conta sem atrasar?",
+        type: "rating3",
+      },
+      {
+        key: "order_check_process",
+        label: "Existe alguma conferência do pedido antes de sair?",
+        type: "yesno",
+      },
+      {
+        key: "frequent_errors",
+        label: "Quais erros de operação mais aparecem?",
+        type: "multiselect",
+        options: [
+          { value: "item_faltando", label: "Item faltando no pedido" },
+          { value: "troca", label: "Troca de pedido" },
+          { value: "estoque", label: "Falta de ingrediente / estoque" },
+          { value: "demora", label: "Demora na cozinha" },
+          { value: "nenhum", label: "Quase não temos erro" },
+        ],
+      },
+      {
+        key: "stockout_frequency",
+        label: "Com que frequência falta algum item para vender?",
+        type: "select",
+        options: [
+          { value: "nunca", label: "Quase nunca" },
+          { value: "raro", label: "Raramente (1x por mês)" },
+          { value: "as_vezes", label: "Algumas vezes na semana" },
+          { value: "muito", label: "Quase todo dia" },
+        ],
+      },
+    ],
+  },
+
+  // ============================================================
+  // 9) AVALIAÇÕES E PROBLEMAS
   // ============================================================
   {
     key: "reviews",
-    index: 8,
+    index: 9,
     title: "Avaliações e reclamações",
     subtitle: "O que os clientes mais falam",
     questions: [
