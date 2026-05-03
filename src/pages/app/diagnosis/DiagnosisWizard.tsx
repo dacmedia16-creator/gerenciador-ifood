@@ -7,6 +7,8 @@ import { STEPS, stepByIndex, shouldShowQuestion } from "@/lib/diagnosis/steps";
 import { useAutosave } from "@/lib/diagnosis/autosave";
 import { WizardShell } from "@/components/diagnosis/WizardShell";
 import { QuestionField } from "@/components/diagnosis/QuestionField";
+import { PrintProposalsCard } from "@/components/diagnosis/PrintProposalsCard";
+import { buildProposalsFromUploads, filterEmpty, type ProposedAnswer } from "@/lib/diagnosis/printMapper";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
