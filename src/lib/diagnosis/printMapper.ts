@@ -77,6 +77,37 @@ export function buildProposalsFromUploads(uploads: any[]): ProposedAnswer[] {
     const sd = up.structured_data || {};
     const cls = up.classification || "outro";
 
+    // Fallback: independente da classificação, se houver campos conhecidos
+    // no structured_data, tenta mapear. Isso ajuda quando a IA classifica
+    // como "outro" mas mesmo assim devolve campos úteis.
+    const srcGeneric = `Print (${cls})`;
+    const tryMap = (stepKey: string, qKey: string, raw: any) => {
+      const n = num(raw);
+      if (n === null) return;
+      const p = bucketProposal(stepKey, qKey, n, srcGeneric);
+      if (p) out.push(p);
+    };
+    const tryYesNo = (stepKey: string, qKey: string, raw: any) => {
+      if (typeof raw !== "boolean") return;
+      const p = yesnoProposal(stepKey, qKey, raw, srcGeneric);
+      if (p) out.push(p);
+    };
+    tryMap("basic", "monthly_revenue", sd.revenue);
+    tryMap("basic", "monthly_orders", sd.orders);
+    tryMap("basic", "average_ticket", sd.average_ticket);
+    tryMap("storefront", "rating", sd.rating ?? sd.average_rating);
+    tryMap("storefront", "reviews_count", sd.reviews_count ?? sd.total_reviews);
+    tryMap("delivery", "prep_time", sd.prep_time_min);
+    tryMap("delivery", "real_time", sd.delivery_time_min);
+    tryMap("menu", "products_total", sd.products_visible);
+    tryYesNo("menu", "has_combos", sd.has_combos);
+    tryYesNo("storefront", "has_cover", sd.has_cover);
+    tryYesNo("storefront", "has_logo", sd.has_logo);
+    if (num(sd.products_visible) !== null && num(sd.products_with_photo) !== null) {
+      const without = Math.max(0, (num(sd.products_visible) as number) - (num(sd.products_with_photo) as number));
+      tryMap("menu", "without_photo", without);
+    }
+
     if (cls === "faturamento") {
       const src = "Print de faturamento";
       const rev = num(sd.revenue);
