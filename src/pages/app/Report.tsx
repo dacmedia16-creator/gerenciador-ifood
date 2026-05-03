@@ -408,7 +408,8 @@ export default function Report() {
             ))}
           </div>
         </section>
-      </Card>
+        </Card>
+      </details>
     </div>
   );
 }
