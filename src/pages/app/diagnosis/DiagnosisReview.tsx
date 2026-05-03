@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { answersAsMap, loadSession } from "@/lib/diagnosis/session";
 import { STEPS } from "@/lib/diagnosis/steps";
