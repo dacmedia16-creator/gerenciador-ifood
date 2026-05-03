@@ -29,6 +29,7 @@ const storeAnalysis = (id: string) => [
   { title: "Diagnóstico", url: `/app/stores/${id}/diagnostics`, icon: Stethoscope },
   { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
   { title: "Plano de melhoria", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
+  { title: "Meta da loja", url: `/app/stores/${id}/goal`, icon: Target },
   { title: "Evolução da loja", url: `/app/stores/${id}/evolution`, icon: TrendingUp },
   { title: "Relatório da minha loja", url: `/app/stores/${id}/report`, icon: FileText },
 ];
