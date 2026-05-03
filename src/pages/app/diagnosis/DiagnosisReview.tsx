@@ -66,12 +66,26 @@ export default function DiagnosisReview() {
     const st = statuses.find((x) => x.step_key === s.key);
     return !st?.is_completed;
   });
-  const missingRequired: string[] = Array.from(
+
+  // Labels de perguntas atualmente válidas no funil (por etapa)
+  const activeRequiredLabels = new Set(
+    STEPS.flatMap((s) => s.questions.filter((q) => q.required).map((q) => q.label)),
+  );
+
+  // Dados faltantes: união (sem duplicar) e filtra resíduo de schema antigo
+  const missingFromStatuses: string[] = Array.from(
     new Set(
       statuses.flatMap((s) =>
         Array.isArray(s.missing_required_fields) ? s.missing_required_fields : [],
       ),
     ),
+  ).filter((m) => activeRequiredLabels.has(m));
+
+  const allMissing = Array.from(
+    new Set([
+      ...missingFromStatuses,
+      ...missingFromEvidences.map((m) => m.replace(/_/g, " ")),
+    ]),
   );
 
   const handleGenerate = async () => {
@@ -113,7 +127,7 @@ export default function DiagnosisReview() {
           <Stat label="Etapas completas" value={`${completedSteps}/${STEPS.length}`} sub={`${overallPct}%`} />
           <Stat label="Pontos críticos" value={String(criticos.length)} tone={criticos.length ? "danger" : "ok"} />
           <Stat label="Pontos de atenção" value={String(atencoes.length)} tone={atencoes.length ? "warn" : "ok"} />
-          <Stat label="Dados faltantes" value={String(missingRequired.length + missingFromEvidences.length)} tone="muted" />
+          <Stat label="Dados faltantes" value={String(allMissing.length)} tone="muted" />
         </div>
       </Card>
 
@@ -153,7 +167,7 @@ export default function DiagnosisReview() {
       )}
 
       {/* Dados faltantes */}
-      {(missingRequired.length > 0 || missingFromEvidences.length > 0) && (
+      {allMissing.length > 0 && (
         <Card className="p-5 border-warning/40 bg-warning/5">
           <div className="flex items-start gap-3">
             <HelpCircle className="h-5 w-5 mt-0.5 text-warning shrink-0" />
@@ -163,10 +177,7 @@ export default function DiagnosisReview() {
                 Você pode gerar o plano mesmo assim, mas preencher esses pontos torna o diagnóstico bem mais certeiro.
               </p>
               <ul className="list-disc pl-5 text-sm space-y-1">
-                {missingRequired.slice(0, 8).map((m, i) => <li key={`r-${i}`}>{m}</li>)}
-                {missingFromEvidences.slice(0, 6).map((m, i) => (
-                  <li key={`e-${i}`} className="text-muted-foreground">{m.replace(/_/g, " ")}</li>
-                ))}
+                {allMissing.slice(0, 12).map((m, i) => <li key={`m-${i}`}>{m}</li>)}
               </ul>
             </div>
           </div>
