@@ -77,6 +77,27 @@ export default function DiagnosisWizard() {
     })();
   }, [sessionId, user, navigate, activeSteps]);
 
+  // Carrega uploads processados e atualiza a cada 5s enquanto houver pendentes
+  useEffect(() => {
+    if (!sessionId) return;
+    let stop = false;
+    const fetchUploads = async () => {
+      const { data } = await supabase
+        .from("diagnosis_uploads")
+        .select("*")
+        .eq("session_id", sessionId);
+      if (!stop) setUploads(data || []);
+    };
+    fetchUploads();
+    const t = window.setInterval(fetchUploads, 5000);
+    return () => { stop = true; window.clearInterval(t); };
+  }, [sessionId]);
+
+  const proposals = useMemo<ProposedAnswer[]>(() => {
+    if (ignored) return [];
+    return filterEmpty(buildProposalsFromUploads(uploads), allAnswers);
+  }, [uploads, allAnswers, ignored]);
+
   const { status: saveStatus } = useAutosave({
     sessionId,
     userId: user?.id || "",
