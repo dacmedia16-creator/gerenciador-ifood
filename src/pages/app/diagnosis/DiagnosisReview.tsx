@@ -121,6 +121,25 @@ export default function DiagnosisReview() {
 
   if (loading) return <div className="p-8 text-muted-foreground">Carregando…</div>;
 
+  if (generating) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <Card className="p-10 max-w-md text-center space-y-4 shadow-card">
+          <div className="mx-auto h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+            <Sparkles className="h-7 w-7 text-primary animate-pulse" />
+          </div>
+          <h2 className="text-xl font-semibold">Gerando seu diagnóstico…</h2>
+          <p className="text-sm text-muted-foreground">
+            A IA está analisando suas respostas, prints e dados da loja. Isso pode levar até 30 segundos.
+          </p>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Não feche esta tela
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       {/* Header */}
