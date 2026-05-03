@@ -1,25 +1,28 @@
-## Objetivo
-Permitir resetar o diagnóstico também a partir das telas do fluxo (`DiagnosisWizard`, `DiagnosisReview`, `DiagnosisResult`), além da listagem `Diagnostics`.
+## Reordenar etapas no modo Prints
 
-## Implementação
+No fluxo `?mode=prints`, hoje a ordem é: `basic → prints → goal`. O usuário quer enviar os prints primeiro.
 
-1. **Criar componente reutilizável** `src/components/diagnosis/ResetDiagnosisButton.tsx`:
-   - Props: `storeId`, `variant?`, `size?`, `redirectTo?` (default: `/app/dashboard`).
-   - Botão com ícone `RotateCcw` + `AlertDialog` de confirmação.
-   - Função `handleReset` que:
-     - Busca `diagnosis_sessions` por `user_id` + `store_id`.
-     - Deleta em cascata: `diagnosis_step_status`, `diagnosis_answers`, `diagnosis_sessions`.
-     - Deleta resultados: `action_plans`, `diagnostics`, `reports` por `store_id`.
-     - Toast de sucesso + redirect.
+### Mudança
 
-2. **Refatorar `src/pages/app/Diagnostics.tsx`**: substituir o botão/dialog atual pelo novo componente.
+**Arquivo:** `src/pages/app/diagnosis/DiagnosisWizard.tsx`
 
-3. **Adicionar o botão em**:
-   - `src/pages/app/diagnosis/DiagnosisWizard.tsx` (header)
-   - `src/pages/app/diagnosis/DiagnosisReview.tsx` (header)
-   - `src/pages/app/diagnosis/DiagnosisResult.tsx` (header)
+Substituir a função `filterStepsByMode` para preservar a ordem desejada (em vez de seguir a ordem natural de `STEPS`):
 
-   Cada tela passa o `storeId` da sessão atual.
+```ts
+function filterStepsByMode(mode: string | null) {
+  if (mode === "prints") {
+    const order = ["prints", "basic", "goal"];
+    return order
+      .map((k) => STEPS.find((s) => s.key === k))
+      .filter(Boolean) as typeof STEPS;
+  }
+  if (mode === "form") return STEPS.filter((s) => s.key !== "prints");
+  return STEPS;
+}
+```
 
-## Resultado
-Mesmo botão de reset disponível em todas as telas do diagnóstico, sem duplicação de lógica.
+### Considerações
+
+- O mapeamento `current_step` salvo (índice global) → posição em `activeSteps` já usa `findIndex` por `key`, então continua funcionando após a inversão.
+- A IA de `process-print` que pré-preenche campos do `basic` continua útil: ao chegar na etapa "Sobre a sua loja" os campos já vêm preenchidos pelos prints enviados na etapa anterior.
+- Nenhuma mudança em `steps.ts`, `WizardShell` ou edge functions é necessária.
