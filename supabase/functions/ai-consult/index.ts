@@ -370,6 +370,9 @@ ${JSON.stringify(storeMemory ?? { aviso: "memória vazia — primeira análise" 
 PAST_RECOMMENDATIONS (últimos 90 dias com status e outcome):
 ${JSON.stringify(pastRecs, null, 2)}
 
+RECENT_ACTION_UPDATES (o que o lojista executou e relatou nas últimas ações — use para julgar evolução, não para inventar problema novo):
+${JSON.stringify(recentUpdatesR.data ?? [], null, 2)}
+
 SIMILAR_CASES (top ${similarCases.length} de lojas parecidas):
 ${JSON.stringify(similarCases, null, 2)}
 
