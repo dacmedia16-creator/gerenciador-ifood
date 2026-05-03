@@ -99,7 +99,7 @@ export function OnboardingWizard() {
     finally { setLoading(false); }
   };
 
-  const goToStore = () => createdStoreId && navigate(`/app/stores/${createdStoreId}`);
+  const goToStore = () => createdStoreId && navigate(`/app/diagnosis/welcome?storeId=${createdStoreId}`);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
