@@ -24,10 +24,52 @@ const STATUS_LABEL: Record<string, string> = {
 };
 const TERMINAL = new Set(["aplicada", "ignorada", "rejeitada"]);
 
+type GroupBy = "horizonte" | "objetivo" | "status";
+
+const HORIZONTES = ["hoje", "semana", "mes", "nao_fazer"] as const;
+const HORIZONTE_LABEL: Record<string, string> = {
+  hoje: "Fazer hoje",
+  semana: "Esta semana",
+  mes: "Este mês",
+  nao_fazer: "Não fazer agora",
+};
+
+const OBJETIVOS = ["vender_mais", "lucrar_mais", "melhorar_nota", "reduzir_cancelamento", "aumentar_recompra"] as const;
+const OBJETIVO_LABEL: Record<string, string> = {
+  vender_mais: "Vender mais",
+  lucrar_mais: "Lucrar mais",
+  melhorar_nota: "Melhorar nota",
+  reduzir_cancelamento: "Reduzir cancelamento",
+  aumentar_recompra: "Aumentar recompra",
+};
+
+function classifyHorizonte(a: any): typeof HORIZONTES[number] {
+  if (a.priority === "baixa" && !a.due_date) return "nao_fazer";
+  if (a.due_date) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const d = new Date(a.due_date);
+    const diff = (d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+    if (diff <= 1) return "hoje";
+    if (diff <= 7) return "semana";
+    return "mes";
+  }
+  if (a.priority === "alta") return "semana";
+  return "mes";
+}
+
+function classifyObjetivo(a: any): typeof OBJETIVOS[number] {
+  const area = (a.area || "").toLowerCase();
+  if (area.includes("preco") || area.includes("preço") || area.includes("margem") || area.includes("lucro")) return "lucrar_mais";
+  if (area.includes("reput") || area.includes("avalia") || area.includes("nota")) return "melhorar_nota";
+  if (area.includes("opera") || area.includes("entrega") || area.includes("cancel")) return "reduzir_cancelamento";
+  if (area.includes("recompra") || area.includes("fideliz")) return "aumentar_recompra";
+  return "vender_mais";
+}
+
 export default function ActionPlan() {
   const { id } = useParams();
   const { actions, loading, reload } = useStoreData(id);
-  const [filter, setFilter] = useState<string>("todos");
+  const [groupBy, setGroupBy] = useState<GroupBy>("horizonte");
   const [outcomeFor, setOutcomeFor] = useState<any>(null);
   const [outcome, setOutcome] = useState<string>("positivo");
   const [comment, setComment] = useState("");
@@ -105,20 +147,59 @@ export default function ActionPlan() {
 
   if (loading) return <LoadingState />;
 
-  const list = (actions || []).filter((a: any) => filter === "todos" || a.status === filter);
-  const sorted = [...list].sort((a: any, b: any) => {
+  const open = (actions || []).filter((a: any) => !["aplicada", "ignorada", "rejeitada"].includes(a.status));
+  const sortByPriority = (arr: any[]) => [...arr].sort((a, b) => {
     const order = { alta: 0, media: 1, baixa: 2 } as any;
     return (order[a.priority] || 3) - (order[b.priority] || 3);
   });
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Plano de ação</h1>
-        <select className="border rounded-md px-3 py-2 bg-background text-sm" value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="todos">Todos</option>
+  const groups: { key: string; label: string; items: any[] }[] =
+    groupBy === "horizonte"
+      ? HORIZONTES.map((h) => ({ key: h, label: HORIZONTE_LABEL[h], items: sortByPriority(open.filter((a) => classifyHorizonte(a) === h)) }))
+      : groupBy === "objetivo"
+      ? OBJETIVOS.map((o) => ({ key: o, label: OBJETIVO_LABEL[o], items: sortByPriority(open.filter((a) => classifyObjetivo(a) === o)) }))
+      : STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s], items: sortByPriority((actions || []).filter((a: any) => a.status === s)) }));
+
+  const renderAction = (a: any) => (
+    <Card key={a.id} className="p-4 shadow-card">
+      <div className="flex flex-wrap justify-between gap-3 items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <PriorityBadge priority={a.priority} />
+            <span className="text-xs text-muted-foreground">{a.area}</span>
+          </div>
+          <Link to={`/app/stores/${id}/action-plan/${a.id}`} className="font-semibold hover:text-primary hover:underline">
+            {a.title}
+          </Link>
+          {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
+          <div className="text-xs text-muted-foreground mt-2 flex gap-3 flex-wrap">
+            {a.impact && <span>Impacto: {a.impact}</span>}
+            {a.effort && <span>Esforço: {a.effort}</span>}
+            {a.due_date && <span>Prazo: {new Date(a.due_date).toLocaleDateString("pt-BR")}</span>}
+          </div>
+        </div>
+        <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
           {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
+      </div>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-2xl font-bold">Plano de ação</h1>
+        <div className="flex gap-1 p-1 bg-muted rounded-lg">
+          {(["horizonte", "objetivo", "status"] as GroupBy[]).map((g) => (
+            <button
+              key={g}
+              onClick={() => setGroupBy(g)}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${groupBy === g ? "bg-background shadow-sm font-semibold" : "text-muted-foreground"}`}
+            >
+              Por {g}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-5 gap-3 text-sm">
@@ -128,34 +209,20 @@ export default function ActionPlan() {
         })}
       </div>
 
-      {sorted.length === 0 && <Card className="p-6 text-center text-muted-foreground">Nenhuma ação no filtro.</Card>}
+      {groups.every((g) => g.items.length === 0) && (
+        <Card className="p-6 text-center text-muted-foreground">Nenhuma ação no momento.</Card>
+      )}
 
-      <div className="space-y-3">
-        {sorted.map((a: any) => (
-          <Card key={a.id} className="p-4 shadow-card">
-            <div className="flex flex-wrap justify-between gap-3 items-start">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <PriorityBadge priority={a.priority} />
-                  <span className="text-xs text-muted-foreground">{a.area}</span>
-                </div>
-                <Link
-                  to={`/app/stores/${id}/action-plan/${a.id}`}
-                  className="font-semibold hover:text-primary hover:underline"
-                >
-                  {a.title}
-                </Link>
-                {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
-                <div className="text-xs text-muted-foreground mt-2 flex gap-3">
-                  <span>Impacto: {a.impact}</span><span>Esforço: {a.effort}</span>
-                  {a.due_date && <span>Prazo: {a.due_date}</span>}
-                </div>
-              </div>
-              <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
-                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-              </select>
+      <div className="space-y-6">
+        {groups.filter((g) => g.items.length > 0).map((g) => (
+          <div key={g.key} className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              {g.label} <span className="text-xs">({g.items.length})</span>
+            </h2>
+            <div className="space-y-2">
+              {g.items.map(renderAction)}
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 

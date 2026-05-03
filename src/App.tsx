@@ -42,6 +42,7 @@ const BestHours = lazy(() => import("./pages/app/BestHours"));
 const Onboarding = lazy(() => import("./pages/app/Onboarding"));
 const NewDiagnosis = lazy(() => import("./pages/app/diagnosis/NewDiagnosis"));
 const DiagnosisWelcome = lazy(() => import("./pages/app/diagnosis/DiagnosisWelcome"));
+const DiagnosisExpress = lazy(() => import("./pages/app/diagnosis/DiagnosisExpress"));
 const DiagnosisWizard = lazy(() => import("./pages/app/diagnosis/DiagnosisWizard"));
 const ActionDetail = lazy(() => import("./pages/app/ActionDetail"));
 const StoreGoal = lazy(() => import("./pages/app/StoreGoal"));
@@ -78,6 +79,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* Diagnosis funnel — fora do AppLayout para tela cheia, mas com auth */}
               <Route path="/app/diagnosis/welcome" element={<RequireAuth><DiagnosisWelcome /></RequireAuth>} />
+              <Route path="/app/diagnosis/express" element={<RequireAuth><DiagnosisExpress /></RequireAuth>} />
               <Route path="/app/diagnosis/new" element={<RequireAuth><NewDiagnosis /></RequireAuth>} />
               <Route path="/app/diagnosis/:sessionId" element={<RequireAuth><DiagnosisWizard /></RequireAuth>} />
               <Route path="/app/diagnosis/:sessionId/review" element={<RequireAuth><DiagnosisReview /></RequireAuth>} />

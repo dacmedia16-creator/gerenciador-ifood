@@ -92,6 +92,32 @@ export function AIConsultReport({ data, storeId }: { data: any; storeId?: string
         </Card>
       )}
 
+      {/* Onde a loja está perdendo dinheiro */}
+      {Array.isArray(data.money_leaks) && data.money_leaks.length > 0 && (
+        <Card className="p-5 border-l-4 border-warning bg-warning/5">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            Onde sua loja está perdendo dinheiro
+          </h3>
+          <ul className="space-y-3">
+            {data.money_leaks.map((m: any, i: number) => (
+              <li key={i} className="text-sm border-l-2 border-warning/40 pl-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <strong>{m.where}</strong>
+                  {Number(m.monthly_estimate_brl) > 0 && (
+                    <Badge variant="destructive" className="text-[10px]">
+                      ≈ R$ {Math.round(Number(m.monthly_estimate_brl)).toLocaleString("pt-BR")}/mês
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{m.why}</p>
+                <p className="text-xs mt-1">→ {m.fix}</p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {/* === NOVO FORMATO === */}
       {isNewFormat && (
         <>
