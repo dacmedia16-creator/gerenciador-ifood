@@ -50,6 +50,7 @@ export function WizardShell({
             </div>
             <Progress value={overallPct} className="h-1.5" />
           </div>
+          {headerActions}
         </div>
       </header>
 
