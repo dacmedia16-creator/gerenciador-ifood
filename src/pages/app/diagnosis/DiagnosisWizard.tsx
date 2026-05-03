@@ -10,6 +10,7 @@ import { QuestionField } from "@/components/diagnosis/QuestionField";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 
 export default function DiagnosisWizard() {
   const { sessionId = "" } = useParams();
