@@ -213,13 +213,14 @@ Deno.serve(async (req) => {
     // ===== Camada 0: dados da sessão do funil (respostas + prints) =====
     let sessionEvidences: RuleEvidence[] = [];
     let sessionDebug: Record<string, any> = {};
+    let printSnippets: Array<{ classification: string; text: string }> = [];
     if (sessionId) {
       const [answersR, uploadsR] = await Promise.all([
         supabase.from("diagnosis_answers")
           .select("step_key, question_key, answer_value")
           .eq("session_id", sessionId),
         supabase.from("diagnosis_uploads")
-          .select("status, classification, structured_data")
+          .select("status, classification, structured_data, extracted_text")
           .eq("session_id", sessionId),
       ]);
       const { evidences } = evidencesFromSession(
@@ -227,10 +228,18 @@ Deno.serve(async (req) => {
         (uploadsR.data ?? []) as any,
       );
       sessionEvidences = evidences;
+      printSnippets = (uploadsR.data ?? [])
+        .filter((u: any) => (u.status === "processed" || u.status === "done") && u.extracted_text)
+        .slice(0, 6)
+        .map((u: any) => ({
+          classification: u.classification ?? "outro",
+          text: String(u.extracted_text).slice(0, 800),
+        }));
       sessionDebug = {
         answers_count: answersR.data?.length ?? 0,
         uploads_count: uploadsR.data?.length ?? 0,
         session_evidences: evidences.length,
+        print_snippets: printSnippets.length,
       };
       console.log(JSON.stringify({ evt: "ai_consult.session", session_id: sessionId, ...sessionDebug }));
     }
