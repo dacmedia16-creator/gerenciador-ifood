@@ -40,7 +40,10 @@ const Prospects = lazy(() => import("./pages/app/Prospects"));
 const BestHours = lazy(() => import("./pages/app/BestHours"));
 const Onboarding = lazy(() => import("./pages/app/Onboarding"));
 const NewDiagnosis = lazy(() => import("./pages/app/diagnosis/NewDiagnosis"));
+const DiagnosisWelcome = lazy(() => import("./pages/app/diagnosis/DiagnosisWelcome"));
 const DiagnosisWizard = lazy(() => import("./pages/app/diagnosis/DiagnosisWizard"));
+const ActionDetail = lazy(() => import("./pages/app/ActionDetail"));
+const StoreGoal = lazy(() => import("./pages/app/StoreGoal"));
 const DiagnosisReview = lazy(() => import("./pages/app/diagnosis/DiagnosisReview"));
 const DiagnosisResult = lazy(() => import("./pages/app/diagnosis/DiagnosisResult"));
 const Knowledge = lazy(() => import("./pages/app/Knowledge"));
@@ -73,6 +76,7 @@ const App = () => (
               <Route path="/contato" element={<Contato />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               {/* Diagnosis funnel — fora do AppLayout para tela cheia */}
+              <Route path="/app/diagnosis/welcome" element={<DiagnosisWelcome />} />
               <Route path="/app/diagnosis/new" element={<NewDiagnosis />} />
               <Route path="/app/diagnosis/:sessionId" element={<DiagnosisWizard />} />
               <Route path="/app/diagnosis/:sessionId/review" element={<DiagnosisReview />} />
@@ -103,6 +107,8 @@ const App = () => (
                 <Route path="stores/:id/pricing-simulator" element={<PricingSimulator />} />
                 <Route path="stores/:id/best-hours" element={<BestHours />} />
                 <Route path="stores/:id/evolution" element={<StoreEvolution />} />
+                <Route path="stores/:id/goal" element={<StoreGoal />} />
+                <Route path="stores/:id/action-plan/:actionId" element={<ActionDetail />} />
                 <Route path="prospects" element={<AdminRoute><Prospects /></AdminRoute>} />
                 <Route path="knowledge" element={<AdminRoute><Knowledge /></AdminRoute>} />
                 <Route path="chat" element={<Chat />} />
