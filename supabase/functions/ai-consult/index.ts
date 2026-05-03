@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { evidencesFromStoreData, mergeEvidences, type RuleEvidence } from "../_shared/evidences.ts";
+import { evidencesFromSession } from "../_shared/funnel-evidences.ts";
 import {
   loadStoreMemory,
   loadPastRecommendations,
