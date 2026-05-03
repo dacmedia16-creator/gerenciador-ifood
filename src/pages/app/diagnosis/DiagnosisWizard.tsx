@@ -49,7 +49,13 @@ export default function DiagnosisWizard() {
         setSession(session);
         setStatuses(statuses);
         setAllAnswers(answersAsMap(answers));
-        setCurrentIndex(session.current_step || 1);
+        // Mapeia current_step (índice global de STEPS) para o índice no activeSteps filtrado.
+        const savedStepIndex = session.current_step || 1;
+        const savedStep = stepByIndex(savedStepIndex);
+        const idxInActive = savedStep
+          ? Math.max(0, activeSteps.findIndex((s) => s.key === savedStep.key))
+          : 0;
+        setCurrentIndex(idxInActive);
       } catch (e: any) {
         toast.error("Sessão não encontrada");
         navigate("/app/dashboard");
@@ -57,16 +63,16 @@ export default function DiagnosisWizard() {
         setLoading(false);
       }
     })();
-  }, [sessionId, user, navigate]);
+  }, [sessionId, user, navigate, activeSteps]);
 
   const { status: saveStatus } = useAutosave({
     sessionId,
     userId: user?.id || "",
     storeId: session?.store_id,
-    stepKey: step.key,
+    stepKey: step?.key || "",
     values,
     onSaved: (info) => {
-      // atualiza status localmente, sem refetch (evita re-render que tira foco)
+      if (!step) return;
       setStatuses((prev) => {
         const others = prev.filter((s) => s.step_key !== step.key);
         return [...others, { step_key: step.key, ...info }];
@@ -75,13 +81,14 @@ export default function DiagnosisWizard() {
   });
 
   const goTo = async (idx: number) => {
-    const target = Math.max(1, Math.min(STEPS.length, idx));
+    const target = Math.max(0, Math.min(activeSteps.length - 1, idx));
     setCurrentIndex(target);
-    await supabase.from("diagnosis_sessions").update({ current_step: target }).eq("id", sessionId);
+    const globalIndex = activeSteps[target]?.index ?? 1;
+    await supabase.from("diagnosis_sessions").update({ current_step: globalIndex }).eq("id", sessionId);
   };
 
   const onNext = async () => {
-    if (currentIndex >= STEPS.length) {
+    if (currentIndex >= activeSteps.length - 1) {
       navigate(`/app/diagnosis/${sessionId}/review`);
       return;
     }
@@ -95,23 +102,25 @@ export default function DiagnosisWizard() {
     return "";
   }, [saveStatus]);
 
-  if (loading) return <div className="p-8 text-muted-foreground">Carregando…</div>;
+  if (loading || !step) return <div className="p-8 text-muted-foreground">Carregando…</div>;
 
   return (
     <WizardShell
       sessionId={sessionId}
-      currentStepIndex={currentIndex}
+      currentStepIndex={currentIndex + 1}
+      totalSteps={activeSteps.length}
+      steps={activeSteps}
       statuses={statuses}
       saveLabel={saveLabel}
       onPrev={() => goTo(currentIndex - 1)}
       onNext={onNext}
-      onJump={(i) => goTo(i)}
+      onJump={(i) => goTo(i - 1)}
       headerActions={<ResetDiagnosisButton storeId={session?.store_id} size="sm" />}
     >
       <Card className="p-6 shadow-card">
         <div className="mb-6">
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            {step.index === 1 && <Sparkles className="h-6 w-6 text-primary" />}
+            {currentIndex === 0 && <Sparkles className="h-6 w-6 text-primary" />}
             {step.title}
           </h1>
           {step.subtitle && <p className="text-sm text-muted-foreground mt-1">{step.subtitle}</p>}
@@ -121,7 +130,7 @@ export default function DiagnosisWizard() {
         {step.intro && (
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 mb-6 text-sm">
             {step.intro}
-            <p className="text-xs text-muted-foreground mt-2">Tempo estimado: ~15 minutos. Você pode salvar e voltar quando quiser.</p>
+            <p className="text-xs text-muted-foreground mt-2">Você pode salvar e voltar quando quiser.</p>
           </div>
         )}
 
