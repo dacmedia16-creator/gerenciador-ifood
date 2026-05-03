@@ -323,8 +323,13 @@ export default function DiagnosisResult() {
 
       <div className="flex flex-wrap gap-2">
         <Button asChild size="lg">
+          <Link to={`/app/stores/${data.store_id}/action-plan`}>
+            <ListTodo className="h-4 w-4 mr-1" /> Ver plano de ação
+          </Link>
+        </Button>
+        <Button variant="outline" asChild size="lg">
           <Link to={`/app/stores/${data.store_id}/report`}>
-            <FileText className="h-4 w-4 mr-1" /> Ver relatório completo
+            <FileText className="h-4 w-4 mr-1" /> Relatório completo
           </Link>
         </Button>
         <Button variant="outline" asChild>
