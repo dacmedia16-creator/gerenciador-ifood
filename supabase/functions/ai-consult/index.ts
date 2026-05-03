@@ -221,6 +221,14 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Rate limit por usuário/hora
+    const adminForLimits = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const rl = await checkRateLimit(adminForLimits, userData.user.id, "diagnosis");
+    if (!rl.allowed) return rateLimitResponse(rl, corsHeaders);
+
     const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR, goalsR, recentUpdatesR] = await Promise.all([
       supabase.from("stores").select("*").eq("id", storeId).single(),
       supabase.from("products").select("*").eq("store_id", storeId).limit(50),
