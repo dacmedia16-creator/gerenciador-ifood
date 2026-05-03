@@ -106,7 +106,15 @@ Mantenha entre 5 e 9 palavras. Português do Brasil. Apetitoso, claro, vendedor.
     if (!toolCall) return new Response(JSON.stringify({ error: "Sem retorno estruturado" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const result = JSON.parse(toolCall.function.arguments);
 
-    return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    putCached(admin, {
+      inputHash: cacheKey,
+      cacheType: "suggestion",
+      response: result,
+      model: "google/gemini-3-flash-preview",
+      ttlSeconds: CACHE_TTL.suggestion,
+    }).catch((e) => console.warn("cache put failed", e));
+
+    return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } });
   } catch (e) {
     console.error("suggest-product-names error", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
