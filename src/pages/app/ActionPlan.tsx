@@ -139,7 +139,12 @@ export default function ActionPlan() {
                   <PriorityBadge priority={a.priority} />
                   <span className="text-xs text-muted-foreground">{a.area}</span>
                 </div>
-                <h3 className="font-semibold">{a.title}</h3>
+                <Link
+                  to={`/app/stores/${id}/action-plan/${a.id}`}
+                  className="font-semibold hover:text-primary hover:underline"
+                >
+                  {a.title}
+                </Link>
                 {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
                 <div className="text-xs text-muted-foreground mt-2 flex gap-3">
                   <span>Impacto: {a.impact}</span><span>Esforço: {a.effort}</span>
