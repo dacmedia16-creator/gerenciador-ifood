@@ -187,6 +187,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
     const sessionId: string | undefined = body?.sessionId;
+    const rawMode = String(body?.mode ?? "both").toLowerCase();
+    const mode: "prints" | "form" | "both" =
+      rawMode === "prints" ? "prints" : rawMode === "form" ? "form" : "both";
     const model: string = body?.model ?? "google/gemini-3-flash-preview";
     if (!storeId) {
       return new Response(JSON.stringify({ error: "storeId é obrigatório" }), {
@@ -215,13 +218,19 @@ Deno.serve(async (req) => {
     let sessionDebug: Record<string, any> = {};
     let printSnippets: Array<{ classification: string; text: string }> = [];
     if (sessionId) {
+      const useAnswers = mode !== "prints";
+      const useUploads = mode !== "form";
       const [answersR, uploadsR] = await Promise.all([
-        supabase.from("diagnosis_answers")
-          .select("step_key, question_key, answer_value")
-          .eq("session_id", sessionId),
-        supabase.from("diagnosis_uploads")
-          .select("status, classification, structured_data, extracted_text")
-          .eq("session_id", sessionId),
+        useAnswers
+          ? supabase.from("diagnosis_answers")
+              .select("step_key, question_key, answer_value")
+              .eq("session_id", sessionId)
+          : Promise.resolve({ data: [] as any[] }),
+        useUploads
+          ? supabase.from("diagnosis_uploads")
+              .select("status, classification, structured_data, extracted_text")
+              .eq("session_id", sessionId)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
       const { evidences } = evidencesFromSession(
         (answersR.data ?? []) as any,
@@ -236,6 +245,9 @@ Deno.serve(async (req) => {
           text: String(u.extracted_text).slice(0, 800),
         }));
       sessionDebug = {
+        mode,
+        used_answers: useAnswers,
+        used_uploads: useUploads,
         answers_count: answersR.data?.length ?? 0,
         uploads_count: uploadsR.data?.length ?? 0,
         session_evidences: evidences.length,
@@ -331,7 +343,16 @@ Deno.serve(async (req) => {
       notes: g.notes,
     }));
 
-    const userPrompt = `RULE_EVIDENCES (fonte da verdade objetiva):
+    const modeNote =
+      mode === "prints"
+        ? "MODO DE COLETA: APENAS PRINTS. O usuário NÃO respondeu ao formulário. Use só RULE_EVIDENCES + print_snippets. Quando faltar dado típico do formulário, registre em missing_data_for_better_diagnosis."
+        : mode === "form"
+          ? "MODO DE COLETA: APENAS FORMULÁRIO. O usuário NÃO enviou prints. Ignore qualquer suposição baseada em OCR — não há print_snippets."
+          : "MODO DE COLETA: PRINTS + FORMULÁRIO. Ambas as fontes estão disponíveis.";
+
+    const userPrompt = `${modeNote}
+
+RULE_EVIDENCES (fonte da verdade objetiva):
 ${JSON.stringify(ruleEvidences, null, 2)}
 
 STORE_GOALS (metas ativas declaradas pelo dono — priorize ações que aproximam dessas metas):
@@ -437,6 +458,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       validation: { dropped },
       rag_meta: ragMeta,
       session_id: sessionId ?? null,
+      mode,
       session_debug: sessionDebug,
     };
 

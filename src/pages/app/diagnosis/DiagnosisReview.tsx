@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { answersAsMap, loadSession } from "@/lib/diagnosis/session";
 import { STEPS } from "@/lib/diagnosis/steps";
@@ -29,6 +29,10 @@ import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButto
 
 export default function DiagnosisReview() {
   const { sessionId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const modeParam = (searchParams.get("mode") as "prints" | "form" | "both" | null);
+  const storedMode = (typeof window !== "undefined" ? sessionStorage.getItem(`diagnosis:${sessionId}:mode`) : null) as "prints" | "form" | "both" | null;
+  const mode: "prints" | "form" | "both" = modeParam ?? storedMode ?? "both";
   const { user } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<{ answers: any[]; statuses: any[]; storeId: string | null } | null>(null);
@@ -104,6 +108,7 @@ export default function DiagnosisReview() {
       const aiRes = await invokeAI<{ diagnosis: any }>("ai-consult", {
         storeId: result.storeId,
         sessionId,
+        mode,
       });
 
       if (aiRes?.diagnosis) {
