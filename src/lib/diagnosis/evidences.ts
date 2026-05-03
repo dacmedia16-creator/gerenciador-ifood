@@ -412,44 +412,20 @@ export function evidencesFromAnswers(answers: AnswersByStep): RuleEvidence[] {
     });
   }
 
-  // === Concorrência ===
-  const myFee = num(front.delivery_fee);
-  const myTime = num(front.promised_delivery_time);
-  const fasterCount = competitors.filter(
-    (c) => num(c.delivery_time) != null && myTime != null && Number(c.delivery_time) < myTime
-  ).length;
-  const cheaperCount = competitors.filter(
-    (c) => num(c.delivery_fee) != null && myFee != null && Number(c.delivery_fee) < myFee
-  ).length;
-  if (fasterCount >= 2 || cheaperCount >= 2) {
+  // === Posicionamento de preço (substitui antigo bloco de concorrência) ===
+  if (pricing.compared_competitors === "caro") {
     out.push({
-      rule_id: "concorrencia_melhor",
+      rule_id: "preco_acima_concorrencia",
       area: "concorrencia",
-      metric: "competitors_better_count",
-      current_value: `${fasterCount} mais rápidos / ${cheaperCount} mais baratos`,
-      reference_value: "<2",
+      metric: "price_position",
+      current_value: "mais caro que concorrentes",
+      reference_value: "parecido ou mais barato",
       severity: "atencao",
-      business_impact: "Cliente escolhe quem entrega mais rápido e barato",
-      probable_cause: "Operação ou política de taxa menos competitiva",
-      recommended_action: "Reduzir promessa de tempo e ajustar taxa em horários de pico",
-      confidence: "alta",
-      evidence_data: { mais_rapidos: fasterCount, mais_baratos: cheaperCount, total_concorrentes: competitors.length },
-    });
-  }
-  if (competitors.length === 0) {
-    out.push({
-      rule_id: "concorrencia_sem_dado",
-      area: "concorrencia",
-      metric: "competitors_count",
-      current_value: 0,
-      reference_value: 3,
-      severity: "atencao",
-      business_impact: "Sem benchmark, não dá para avaliar tempo, taxa e posicionamento relativos",
-      probable_cause: "Etapa de competidores não preenchida",
-      recommended_action: "Cadastrar 3 concorrentes diretos com nota, tempo, taxa e diferenciais",
-      confidence: "baixa",
-      evidence_data: {},
-      missing_data: ["concorrentes"],
+      business_impact: "Cliente compara e escolhe quem oferece mais por menos",
+      probable_cause: "Custos altos repassados ou ausência de combos competitivos",
+      recommended_action: "Criar combos com percepção de valor maior ou revisar custos para reduzir preço dos top vendidos",
+      confidence: "media",
+      evidence_data: { posicionamento: "caro" },
     });
   }
 
