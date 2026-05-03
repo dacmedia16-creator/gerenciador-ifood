@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { syncDiagnosisProductsToStore } from "@/lib/diagnosis/syncProducts";
+import { syncStoreFromDiagnosis, syncMetricsSnapshot, syncStoreGoal } from "@/lib/diagnosis/syncToStore";
 
 function filterStepsByMode(mode: string | null) {
   if (mode === "prints") {
@@ -122,13 +123,21 @@ export default function DiagnosisWizard() {
   };
 
   const onNext = async () => {
-    // Sincroniza produtos do diagnóstico para a tabela `products` da loja
-    if (step?.key === "products" && session?.store_id && Array.isArray(values.items)) {
-      try {
-        await syncDiagnosisProductsToStore(session.store_id, values.items);
-      } catch (e) {
-        console.error("syncDiagnosisProductsToStore", e);
+    const storeId = session?.store_id;
+    try {
+      if (step?.key === "products" && storeId && Array.isArray(values.items)) {
+        await syncDiagnosisProductsToStore(storeId, values.items);
       }
+      if (storeId && (step?.key === "basic" || step?.key === "storefront" || step?.key === "delivery")) {
+        const merged = { ...allAnswers, [step.key]: values };
+        await syncStoreFromDiagnosis(storeId, merged);
+        await syncMetricsSnapshot(storeId, merged);
+      }
+      if (step?.key === "goal" && storeId && user?.id) {
+        await syncStoreGoal(storeId, user.id, values);
+      }
+    } catch (e) {
+      console.error("diagnosis sync error", e);
     }
     if (currentIndex >= activeSteps.length - 1) {
       navigate(`/app/diagnosis/${sessionId}/review`);
