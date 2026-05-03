@@ -162,55 +162,22 @@ export function evidencesFromAnswers(answers: AnswersByStep): RuleEvidence[] {
     });
   }
 
-  // === Conversão ===
-  const visits = num(conversion.visits);
-  const orders = num(conversion.orders);
-  let convRate = num(conversion.conversion_rate);
-  if (convRate == null && visits && orders) convRate = (orders / visits) * 100;
-  if (convRate != null) {
-    if (convRate < 7) {
-      out.push({
-        rule_id: "conversao_critica",
-        area: "conversao",
-        metric: "conversion_rate_pct",
-        current_value: Number(convRate.toFixed(2)),
-        reference_value: 12,
-        severity: "critico",
-        business_impact: "Loja recebe tráfego, mas perde quase todos antes do pedido",
-        probable_cause: "Vitrine, fotos, preço ou taxa de entrega afastando o cliente",
-        recommended_action: "Revisar capa, top fotos, combo no topo, cupom de 1ª compra e taxa de entrega",
-        confidence: visits && orders ? "alta" : "media",
-        evidence_data: { visits, orders, conversion_rate_pct: Number(convRate.toFixed(2)) },
-      });
-    } else if (convRate < 12) {
-      out.push({
-        rule_id: "conversao_atencao",
-        area: "conversao",
-        metric: "conversion_rate_pct",
-        current_value: Number(convRate.toFixed(2)),
-        reference_value: 12,
-        severity: "atencao",
-        business_impact: "Margem de melhoria grande — pequenos ajustes geram +30% pedidos",
-        probable_cause: "Cardápio sem combos atrativos ou nomes/descrições fracas",
-        recommended_action: "Reescrever nomes dos top 5 e criar 2 combos com cross-sell",
-        confidence: visits && orders ? "alta" : "media",
-        evidence_data: { visits, orders, conversion_rate_pct: Number(convRate.toFixed(2)) },
-      });
-    }
-  } else {
+  // === Promessa de tempo vs tempo real ===
+  const realTime = num(delivery.real_time);
+  const promisedT = num(front.promised_delivery_time);
+  if (realTime != null && promisedT != null && realTime > promisedT + 10) {
     out.push({
-      rule_id: "conversao_sem_dado",
-      area: "conversao",
-      metric: "conversion_rate_pct",
-      current_value: null,
-      reference_value: 12,
-      severity: "atencao",
-      business_impact: "Sem funil é impossível identificar onde a loja perde cliente",
-      probable_cause: "Métricas da plataforma não informadas",
-      recommended_action: "Informar visitas e pedidos do último mês",
-      confidence: "baixa",
-      evidence_data: {},
-      missing_data: ["visitas_mes", "pedidos_mes"],
+      rule_id: "promessa_nao_cumprida",
+      area: "tempo_entrega",
+      metric: "real_vs_promised_min",
+      current_value: realTime,
+      reference_value: promisedT,
+      severity: "critico",
+      business_impact: "Entrega chega depois do prometido — gera nota baixa e cancelamento",
+      probable_cause: "Promessa otimista demais ou operação atrasando",
+      recommended_action: "Ajustar tempo prometido ou acelerar cozinha/entregador",
+      confidence: "alta",
+      evidence_data: { real: realTime, prometido: promisedT },
     });
   }
 
