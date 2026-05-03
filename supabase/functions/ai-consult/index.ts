@@ -343,7 +343,16 @@ Deno.serve(async (req) => {
       notes: g.notes,
     }));
 
-    const userPrompt = `RULE_EVIDENCES (fonte da verdade objetiva):
+    const modeNote =
+      mode === "prints"
+        ? "MODO DE COLETA: APENAS PRINTS. O usuário NÃO respondeu ao formulário. Use só RULE_EVIDENCES + print_snippets. Quando faltar dado típico do formulário, registre em missing_data_for_better_diagnosis."
+        : mode === "form"
+          ? "MODO DE COLETA: APENAS FORMULÁRIO. O usuário NÃO enviou prints. Ignore qualquer suposição baseada em OCR — não há print_snippets."
+          : "MODO DE COLETA: PRINTS + FORMULÁRIO. Ambas as fontes estão disponíveis.";
+
+    const userPrompt = `${modeNote}
+
+RULE_EVIDENCES (fonte da verdade objetiva):
 ${JSON.stringify(ruleEvidences, null, 2)}
 
 STORE_GOALS (metas ativas declaradas pelo dono — priorize ações que aproximam dessas metas):
