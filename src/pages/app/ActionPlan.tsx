@@ -75,6 +75,7 @@ function toolForAction(a: any, storeId: string): { label: string; url: string } 
   if (/(meta|objetivo)/.test(text)) return { label: "Meta da loja", url: `/app/stores/${storeId}/goal` };
   if (/(evolu[çc][ãa]o|hist[óo]rico|progresso)/.test(text)) return { label: "Evolução da loja", url: `/app/stores/${storeId}/evolution` };
   return null;
+}
 
 export default function ActionPlan() {
   const { id } = useParams();
