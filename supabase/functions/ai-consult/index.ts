@@ -208,6 +208,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
     const sessionId: string | undefined = body?.sessionId;
+    const objective: string | undefined = body?.objective;
     const rawMode = String(body?.mode ?? "both").toLowerCase();
     const mode: "prints" | "form" | "both" =
       rawMode === "prints" ? "prints" : rawMode === "form" ? "form" : "both";
