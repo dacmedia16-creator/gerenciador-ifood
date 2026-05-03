@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { answersAsMap, computeStepCompletion, loadSession } from "@/lib/diagnosis/session";
@@ -11,6 +11,12 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
+
+function filterStepsByMode(mode: string | null) {
+  if (mode === "prints") return STEPS.filter((s) => ["basic", "prints", "goal"].includes(s.key));
+  if (mode === "form") return STEPS.filter((s) => s.key !== "prints");
+  return STEPS;
+}
 
 export default function DiagnosisWizard() {
   const { sessionId = "" } = useParams();
