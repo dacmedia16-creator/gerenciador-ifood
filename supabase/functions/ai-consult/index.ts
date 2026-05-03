@@ -246,6 +246,43 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== Cache de diagnóstico (hash de inputs primários) =====
+    let hasPrint = false;
+    if (sessionId) {
+      const { count } = await supabase
+        .from("diagnosis_uploads")
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", sessionId);
+      hasPrint = (count ?? 0) > 0;
+    }
+    const revenueRange = (() => {
+      const r = Number(storeR.data.monthly_revenue ?? 0);
+      if (!r) return "unknown";
+      if (r < 5000) return "0-5k";
+      if (r < 15000) return "5-15k";
+      if (r < 30000) return "15-30k";
+      if (r < 60000) return "30-60k";
+      return "60k+";
+    })();
+    const cacheInputs = {
+      store_category: String(storeR.data.category ?? ""),
+      revenue_range: revenueRange,
+      current_rating: Number(storeR.data.rating ?? 0),
+      cancellation_rate: Number(storeR.data.cancellation_rate ?? 0),
+      avg_ticket: Number(storeR.data.average_ticket ?? 0),
+      main_problem: String(objective ?? ""),
+      has_print: hasPrint,
+    };
+    const cacheHash = await buildCacheKey(cacheInputs);
+    const cached = await getCached(adminForLimits, cacheHash);
+    if (cached) {
+      console.log(JSON.stringify({ evt: "ai_consult.cache_hit", store_id: storeId, hash: cacheHash }));
+      return new Response(JSON.stringify(cached.response), {
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+    console.log(JSON.stringify({ evt: "ai_consult.cache_miss", store_id: storeId, hash: cacheHash }));
+
     // ===== Camada 0: dados da sessão do funil (respostas + prints) =====
     let sessionEvidences: RuleEvidence[] = [];
     let sessionDebug: Record<string, any> = {};
