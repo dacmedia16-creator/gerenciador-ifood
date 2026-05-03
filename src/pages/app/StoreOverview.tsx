@@ -43,8 +43,18 @@ export default function StoreOverview() {
     if (!id) return;
     setAiRunning(true);
     // Fluxo unificado: ai-consult é a ÚNICA porta de entrada do Gestor IA.
-    // Já grava report, recommendation_history (com metrics_before) e action_plans (FK).
-    const res = await invokeAI<{ diagnosis: any }>("ai-consult", { storeId: id });
+    // Busca a última sessão para enviar respostas do funil + prints à IA.
+    const { data: sess } = await supabase
+      .from("diagnosis_sessions")
+      .select("id")
+      .eq("store_id", id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const res = await invokeAI<{ diagnosis: any }>("ai-consult", {
+      storeId: id,
+      sessionId: sess?.id ?? undefined,
+    });
     setAiRunning(false);
     if (res?.diagnosis) {
       const probs = res.diagnosis.main_problems?.length ?? 0;
