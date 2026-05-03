@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AppLayout from "./components/AppLayout";
 import AdminRoute from "./components/AdminRoute";
+import { RequireAuth } from "./components/RequireAuth";
 
 // Lazy-loaded routes — reduz bundle inicial
 const Contato = lazy(() => import("./pages/Contato"));
@@ -75,12 +76,12 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/contato" element={<Contato />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              {/* Diagnosis funnel — fora do AppLayout para tela cheia */}
-              <Route path="/app/diagnosis/welcome" element={<DiagnosisWelcome />} />
-              <Route path="/app/diagnosis/new" element={<NewDiagnosis />} />
-              <Route path="/app/diagnosis/:sessionId" element={<DiagnosisWizard />} />
-              <Route path="/app/diagnosis/:sessionId/review" element={<DiagnosisReview />} />
-              <Route path="/app/diagnosis/:sessionId/result" element={<DiagnosisResult />} />
+              {/* Diagnosis funnel — fora do AppLayout para tela cheia, mas com auth */}
+              <Route path="/app/diagnosis/welcome" element={<RequireAuth><DiagnosisWelcome /></RequireAuth>} />
+              <Route path="/app/diagnosis/new" element={<RequireAuth><NewDiagnosis /></RequireAuth>} />
+              <Route path="/app/diagnosis/:sessionId" element={<RequireAuth><DiagnosisWizard /></RequireAuth>} />
+              <Route path="/app/diagnosis/:sessionId/review" element={<RequireAuth><DiagnosisReview /></RequireAuth>} />
+              <Route path="/app/diagnosis/:sessionId/result" element={<RequireAuth><DiagnosisResult /></RequireAuth>} />
               <Route path="/app" element={<AppLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="dashboard" element={<Dashboard />} />

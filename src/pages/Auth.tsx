@@ -20,14 +20,25 @@ export default function Auth() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const redirectParam = searchParams.get("redirect");
+
   const redirectByRole = async (userId: string) => {
+    if (redirectParam) {
+      try {
+        const target = decodeURIComponent(redirectParam);
+        if (target.startsWith("/")) {
+          navigate(target, { replace: true });
+          return;
+        }
+      } catch { /* ignore */ }
+    }
     const { data } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
       .eq("role", "admin")
       .maybeSingle();
-    navigate(data ? "/app/admin" : "/app/dashboard");
+    navigate(data ? "/app/admin" : "/app/dashboard", { replace: true });
   };
 
   useEffect(() => { if (user) redirectByRole(user.id); }, [user]);
