@@ -617,11 +617,12 @@ export const STEPS: StepDef[] = [
   },
 
   // ============================================================
-  // 9) ANÚNCIOS E PROMOÇÕES
+  // ============================================================
+  // 10) ANÚNCIOS E PROMOÇÕES
   // ============================================================
   {
     key: "ads",
-    index: 9,
+    index: 10,
     title: "Anúncios e promoções",
     subtitle: "Como você atrai cliente novo",
     questions: [
