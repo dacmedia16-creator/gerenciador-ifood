@@ -24,10 +24,52 @@ const STATUS_LABEL: Record<string, string> = {
 };
 const TERMINAL = new Set(["aplicada", "ignorada", "rejeitada"]);
 
+type GroupBy = "horizonte" | "objetivo" | "status";
+
+const HORIZONTES = ["hoje", "semana", "mes", "nao_fazer"] as const;
+const HORIZONTE_LABEL: Record<string, string> = {
+  hoje: "Fazer hoje",
+  semana: "Esta semana",
+  mes: "Este mês",
+  nao_fazer: "Não fazer agora",
+};
+
+const OBJETIVOS = ["vender_mais", "lucrar_mais", "melhorar_nota", "reduzir_cancelamento", "aumentar_recompra"] as const;
+const OBJETIVO_LABEL: Record<string, string> = {
+  vender_mais: "Vender mais",
+  lucrar_mais: "Lucrar mais",
+  melhorar_nota: "Melhorar nota",
+  reduzir_cancelamento: "Reduzir cancelamento",
+  aumentar_recompra: "Aumentar recompra",
+};
+
+function classifyHorizonte(a: any): typeof HORIZONTES[number] {
+  if (a.priority === "baixa" && !a.due_date) return "nao_fazer";
+  if (a.due_date) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const d = new Date(a.due_date);
+    const diff = (d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+    if (diff <= 1) return "hoje";
+    if (diff <= 7) return "semana";
+    return "mes";
+  }
+  if (a.priority === "alta") return "semana";
+  return "mes";
+}
+
+function classifyObjetivo(a: any): typeof OBJETIVOS[number] {
+  const area = (a.area || "").toLowerCase();
+  if (area.includes("preco") || area.includes("preço") || area.includes("margem") || area.includes("lucro")) return "lucrar_mais";
+  if (area.includes("reput") || area.includes("avalia") || area.includes("nota")) return "melhorar_nota";
+  if (area.includes("opera") || area.includes("entrega") || area.includes("cancel")) return "reduzir_cancelamento";
+  if (area.includes("recompra") || area.includes("fideliz")) return "aumentar_recompra";
+  return "vender_mais";
+}
+
 export default function ActionPlan() {
   const { id } = useParams();
   const { actions, loading, reload } = useStoreData(id);
-  const [filter, setFilter] = useState<string>("todos");
+  const [groupBy, setGroupBy] = useState<GroupBy>("horizonte");
   const [outcomeFor, setOutcomeFor] = useState<any>(null);
   const [outcome, setOutcome] = useState<string>("positivo");
   const [comment, setComment] = useState("");
