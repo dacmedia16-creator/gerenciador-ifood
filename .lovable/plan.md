@@ -1,33 +1,23 @@
-## Unificar em um único fluxo de diagnóstico
+## Objetivo
+Restaurar a tela `/app/diagnosis/welcome` como uma **tela de boas-vindas real** (não redirecionar automaticamente). O usuário verá uma apresentação curta e clica em um botão para abrir o wizard de 13 etapas.
 
-Hoje existem **3 caminhos sobrepostos** que confundem o usuário:
+## Mudanças
 
-1. Sidebar > **"Meu Diagnóstico"** → tela Welcome com 3 modos (Prints / Fazer os dois / Formulário)
-2. Sidebar (loja) > **"Diagnóstico"** → página antiga `/app/stores/:id/diagnostics`
-3. Sidebar (loja) > **"Importar dados"** → página `/app/stores/:id/uploads` (prints, mas separado do wizard)
+### 1. `src/pages/app/diagnosis/DiagnosisWelcome.tsx` (reescrever)
+Remover o `useEffect` que redireciona. Em vez disso, renderizar:
 
-Vou consolidar em **um único fluxo**: o wizard completo (`mode=full`), que já inclui upload de prints + formulário + meta na mesma jornada.
+- Título: **"Vamos diagnosticar sua loja"**
+- Subtítulo curto explicando: ~13 perguntas, leva 8–10 min, salva automaticamente, pode pausar e voltar
+- 3 bullets rápidos do que vamos cobrir (cardápio, preço/lucro, operação, avaliações…)
+- Aviso: "Você pode enviar prints da sua loja durante o processo"
+- Botão primário **"Começar diagnóstico"** → cria/recupera sessão via `getOrCreateUserSession` e navega para `/app/diagnosis/:id`
+- Se já existir rascunho: o botão muda para **"Continuar de onde parou"** + link secundário "Recomeçar do zero" (reseta sessão)
+- Loading state enquanto chama `getOrCreateUserSession`
 
-### Mudanças
+### 2. Sidebar (`src/components/AppSidebar.tsx`)
+Sem mudanças — "Meu Diagnóstico" continua apontando para `/app/diagnosis/welcome`.
 
-**1. Pular a tela Welcome (escolha de modo)**
-- `src/pages/app/diagnosis/DiagnosisWelcome.tsx`: ao montar, cria/recupera a sessão e redireciona automaticamente para `/app/diagnosis/:sessionId?mode=full`. Sem cards de escolha.
-- Mantenho a rota para não quebrar links antigos, mas vira só um "loader → redirect".
-
-**2. Wizard sem `mode` = full**
-- `DiagnosisWizard.tsx` (`filterStepsByMode`): default já é `STEPS` completos. O parâmetro `?mode=full` continua funcionando, mas como agora ele é o único caminho, fica redundante (ok manter).
-
-**3. Sidebar limpa**
-- Remover **"Diagnóstico"** (`/app/stores/:id/diagnostics`) do grupo "Análise da minha loja" — fica redundante com "Meu Diagnóstico".
-- Remover o grupo **"Dados" / "Importar dados"** (`/app/stores/:id/uploads`) — upload de prints agora vive dentro do wizard.
-- Mantido: "Meu Diagnóstico" (geral), "Score", "Plano de melhoria", "Meta", "Evolução", "Relatório".
-
-**4. Rotas antigas**
-- `/app/stores/:id/diagnostics` e `/app/stores/:id/uploads` continuam acessíveis por URL direta (sem quebrar links antigos), só somem do menu.
-
-### Arquivos
-- editar `src/pages/app/diagnosis/DiagnosisWelcome.tsx` (auto-redirect)
-- editar `src/components/AppSidebar.tsx` (remover 2 itens)
-
-### Resultado
-Sidebar mostra apenas **"Meu Diagnóstico"** → abre direto no wizard de 13 etapas, com card de upload de prints embutido. Um único caminho, sem duplicação.
+## Detalhe técnico
+- Buscar a sessão existente na montagem (sem criar) para decidir o texto do botão.
+- Só criar nova sessão ao clicar.
+- Mantém suporte a `?storeId=` na URL.
