@@ -119,6 +119,21 @@ const TOOL_SCHEMA = {
           },
         },
         do_not_do_now: { type: "array", items: { type: "string" } },
+        money_leaks: {
+          type: "array",
+          description: "Onde a loja está perdendo dinheiro agora, em linguagem de dono. Cada item: where (o que/onde), monthly_estimate_brl (estimativa em R$ por mês, 0 se não der pra estimar), why (por que perde), fix (o que fazer).",
+          items: {
+            type: "object",
+            properties: {
+              where: { type: "string" },
+              monthly_estimate_brl: { type: "number" },
+              why: { type: "string" },
+              fix: { type: "string" },
+            },
+            required: ["where", "monthly_estimate_brl", "why", "fix"],
+            additionalProperties: false,
+          },
+        },
         avoided_repetitions: {
           type: "array",
           description: "Recomendações que NÃO foram repetidas porque já tinham sido ignoradas/falharam",
@@ -143,6 +158,7 @@ const TOOL_SCHEMA = {
         "plan_7_days",
         "plan_30_days",
         "do_not_do_now",
+        "money_leaks",
         "avoided_repetitions",
         "missing_data_for_better_diagnosis",
         "disclaimers",
