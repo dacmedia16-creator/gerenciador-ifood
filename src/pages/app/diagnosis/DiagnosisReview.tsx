@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Pencil,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EvidenceCard } from "@/components/diagnosis/EvidenceCard";
