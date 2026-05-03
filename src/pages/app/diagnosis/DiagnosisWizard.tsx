@@ -113,7 +113,7 @@ export default function DiagnosisWizard() {
         )}
 
         <div className="space-y-5">
-          {step.questions.map((q) => (
+          {step.questions.filter((q) => shouldShowQuestion(q, values)).map((q) => (
             <QuestionField key={q.key} question={q} value={values[q.key]} onChange={(v) => setValue(q.key, v)} />
           ))}
         </div>
