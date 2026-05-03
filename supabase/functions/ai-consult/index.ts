@@ -67,8 +67,13 @@ const TOOL_SCHEMA = {
               confidence: { type: "string", enum: ["alta", "media", "baixa"] },
               source: { type: "string", enum: ["evidence", "store_history", "similar_case", "knowledge_base"] },
               source_ref: { type: "string" },
+              how_to_apply: { type: "string", description: "Passo a passo prático (3-6 passos curtos), na linguagem do dono da loja." },
+              example: { type: "string", description: "Exemplo concreto aplicado a esta loja (use nome de produto, bairro, ticket etc. quando disponível)." },
+              how_to_measure: { type: "string", description: "Como o lojista vai saber se funcionou (qual KPI olhar, em quanto tempo)." },
+              effort: { type: "string", enum: ["baixo", "medio", "alto"] },
+              suggested_deadline: { type: "string", description: "Prazo sugerido em linguagem natural, ex: '7 dias', '2 semanas'." },
             },
-            required: ["rule_id", "title", "why_it_matters", "evidence_cited", "confidence", "source", "source_ref"],
+            required: ["rule_id", "title", "why_it_matters", "evidence_cited", "confidence", "source", "source_ref", "how_to_apply", "example", "how_to_measure", "effort", "suggested_deadline"],
             additionalProperties: false,
           },
         },
@@ -197,7 +202,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR, goalsR] = await Promise.all([
+    const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR, goalsR, recentUpdatesR] = await Promise.all([
       supabase.from("stores").select("*").eq("id", storeId).single(),
       supabase.from("products").select("*").eq("store_id", storeId).limit(50),
       supabase.from("competitors").select("*").eq("store_id", storeId).limit(20),
@@ -205,6 +210,7 @@ Deno.serve(async (req) => {
       supabase.from("metrics").select("*").eq("store_id", storeId).order("period_end", { ascending: false }).limit(3),
       supabase.from("reports").select("id, report_data").eq("store_id", storeId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("store_goals").select("goal_type, metric_key, target_value, current_value, deadline, priority, notes").eq("store_id", storeId).eq("status", "ativa").order("priority", { ascending: false }).limit(5),
+      supabase.from("action_updates").select("action_id, what_changed, metrics_delta, has_new_data, created_at").eq("store_id", storeId).order("created_at", { ascending: false }).limit(10),
     ]);
 
     if (storeR.error || !storeR.data) {
@@ -364,6 +370,9 @@ ${JSON.stringify(storeMemory ?? { aviso: "memória vazia — primeira análise" 
 PAST_RECOMMENDATIONS (últimos 90 dias com status e outcome):
 ${JSON.stringify(pastRecs, null, 2)}
 
+RECENT_ACTION_UPDATES (o que o lojista executou e relatou nas últimas ações — use para julgar evolução, não para inventar problema novo):
+${JSON.stringify(recentUpdatesR.data ?? [], null, 2)}
+
 SIMILAR_CASES (top ${similarCases.length} de lojas parecidas):
 ${JSON.stringify(similarCases, null, 2)}
 
@@ -516,9 +525,15 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
               area: ev?.area ?? null,
               priority: rank?.priority ?? (ev?.severity === "alto" ? "alta" : ev?.severity === "medio" ? "media" : "baixa"),
               impact: ev?.business_impact?.slice(0, 200) ?? null,
-              effort: null,
+              effort: p.effort ?? null,
               status: "pendente",
               description: p.why_it_matters?.slice(0, 1000) ?? null,
+              why_it_matters: p.why_it_matters ?? null,
+              how_to_apply: p.how_to_apply ?? null,
+              example: p.example ?? null,
+              how_to_measure: p.how_to_measure ?? null,
+              source: "ai-consult",
+              source_ref: p.recommendation_id,
             };
           });
         if (planRows.length) {

@@ -88,8 +88,21 @@ Deno.serve(async (req) => {
     if (!result) throw new Error("IA não retornou análise");
 
     const lastUpdate = updates?.[0];
+
+    // Tenta amarrar ao mesmo diagnosis_cycle da recomendação original (se houver)
+    let cycleId: string | null = null;
+    if (action.recommendation_id) {
+      const { data: origRec } = await admin
+        .from("recommendation_history")
+        .select("diagnosis_cycle_id")
+        .eq("id", action.recommendation_id)
+        .maybeSingle();
+      cycleId = origRec?.diagnosis_cycle_id ?? null;
+    }
+
     await admin.from("recommendation_history").insert({
       store_id: action.store_id,
+      diagnosis_cycle_id: cycleId,
       recommendation: action.title,
       source: "reanalyze-action",
       source_ref: action_id,
@@ -102,7 +115,46 @@ Deno.serve(async (req) => {
       expected_impact: result.proxima_recomendacao,
     });
 
-    return new Response(JSON.stringify({ ok: true, ...result }), {
+    // Se a IA propôs próxima recomendação, cria automaticamente um próximo action_plan
+    // para fechar o ciclo diagnóstico → execução → reavaliação → próximo passo.
+    let nextActionId: string | null = null;
+    const next = (result.proxima_recomendacao || "").trim();
+    if (next && next.toLowerCase() !== "nenhuma" && next.length > 8) {
+      const { data: nextRec } = await admin
+        .from("recommendation_history")
+        .insert({
+          store_id: action.store_id,
+          diagnosis_cycle_id: cycleId,
+          recommendation: next,
+          source: "reanalyze-action",
+          source_ref: action_id,
+          status: "pendente",
+          expected_impact: result.impacto_na_meta ?? null,
+        })
+        .select("id")
+        .single();
+
+      const { data: newAction } = await admin
+        .from("action_plans")
+        .insert({
+          store_id: action.store_id,
+          recommendation_id: nextRec?.id ?? null,
+          title: next.slice(0, 200),
+          area: action.area,
+          priority: action.priority ?? "media",
+          status: "pendente",
+          description: result.ainda_precisa_ajustar ?? null,
+          why_it_matters: result.impacto_na_meta ?? null,
+          how_to_apply: next,
+          source: "reanalyze-action",
+          source_ref: action_id,
+        })
+        .select("id")
+        .single();
+      nextActionId = newAction?.id ?? null;
+    }
+
+    return new Response(JSON.stringify({ ok: true, next_action_id: nextActionId, ...result }), {
       headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (e: any) {
