@@ -26,7 +26,6 @@ const adminGeneralExtras = [
 
 const storeAnalysis = (id: string) => [
   { title: "Visão geral", url: `/app/stores/${id}`, icon: Home },
-  { title: "Diagnóstico", url: `/app/stores/${id}/diagnostics`, icon: Stethoscope },
   { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
   { title: "Plano de melhoria", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
   { title: "Meta da loja", url: `/app/stores/${id}/goal`, icon: Target },
@@ -46,10 +45,6 @@ const storeOperations = (id: string) => [
   { title: "Campanhas", url: `/app/stores/${id}/campaigns`, icon: Megaphone },
   { title: "Melhor horário", url: `/app/stores/${id}/best-hours`, icon: Clock },
   { title: "Métricas", url: `/app/stores/${id}/metrics`, icon: BarChart3 },
-];
-
-const storeData = (id: string) => [
-  { title: "Importar dados", url: `/app/stores/${id}/uploads`, icon: Upload },
 ];
 
 const adminGeneral = [
