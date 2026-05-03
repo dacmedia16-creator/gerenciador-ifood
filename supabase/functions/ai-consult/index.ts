@@ -525,9 +525,15 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
               area: ev?.area ?? null,
               priority: rank?.priority ?? (ev?.severity === "alto" ? "alta" : ev?.severity === "medio" ? "media" : "baixa"),
               impact: ev?.business_impact?.slice(0, 200) ?? null,
-              effort: null,
+              effort: p.effort ?? null,
               status: "pendente",
               description: p.why_it_matters?.slice(0, 1000) ?? null,
+              why_it_matters: p.why_it_matters ?? null,
+              how_to_apply: p.how_to_apply ?? null,
+              example: p.example ?? null,
+              how_to_measure: p.how_to_measure ?? null,
+              source: "ai-consult",
+              source_ref: p.recommendation_id,
             };
           });
         if (planRows.length) {
