@@ -373,7 +373,66 @@ Deno.serve(async (req) => {
           ? "MODO DE COLETA: APENAS FORMULÁRIO. O usuário NÃO enviou prints. Ignore qualquer suposição baseada em OCR — não há print_snippets."
           : "MODO DE COLETA: PRINTS + FORMULÁRIO. Ambas as fontes estão disponíveis.";
 
+    const SEGMENT_PLAYBOOKS: Record<string, string[]> = {
+      hamburgueria: [
+        "Combo lanche+batata+bebida com desconto sutil para subir ticket",
+        "Foto profissional do hambúrguer carro-chefe (corte ao meio mostrando recheio)",
+        "Versão 'duplo' do mais vendido para opção de maior valor",
+        "Embalagem que mantém o pão crocante (papel + caixa ventilada)",
+      ],
+      pizzaria: [
+        "Kit família: pizza grande + refri 2L + borda recheada",
+        "Promoção dia da semana mais fraco (ex: terça da pizza)",
+        "Meia/meia bem destacado no topo do cardápio",
+        "Borda recheada como upsell de 1 clique",
+      ],
+      marmitaria: [
+        "Plano semanal/mensal com desconto progressivo (fideliza recorrência)",
+        "Cardápio fixo da semana publicado domingo à noite",
+        "Combo executivo: marmita + suco + sobremesa",
+        "Cupom de retorno automático no segundo pedido",
+      ],
+      acaiteria: ["Programa de pontos (10 pedidos = 1 grátis)", "Combo família (1L + 4 acompanhamentos)", "Topping premium como upsell", "Açaí da casa fotografado com todos os toppings visíveis"],
+      doceria: ["Caixa de presente com card personalizado", "Mini-versão de doces para experimentar", "Combo data especial (dia das mães etc.)", "Foto macro mostrando textura"],
+      japones: ["Combo individual + combo família lado a lado", "Rodízio delivery por preço fechado", "Foto de combinado em bandeja preta para realçar cor", "Hot roll com molho destacado"],
+      tradicional: ["PF executivo no almoço com tempo de entrega curto", "Marmita feijoada na quarta/sábado", "Combo casal aos finais de semana", "Sobremesa caseira como upsell barato"],
+    };
+    function detectSegment(category?: string | null): string | null {
+      if (!category) return null;
+      const c = category.toLowerCase();
+      if (c.includes("hamb") || c.includes("burger")) return "hamburgueria";
+      if (c.includes("pizz")) return "pizzaria";
+      if (c.includes("marmit")) return "marmitaria";
+      if (c.includes("açaí") || c.includes("acai")) return "acaiteria";
+      if (c.includes("doce") || c.includes("confeit") || c.includes("bolo")) return "doceria";
+      if (c.includes("japon") || c.includes("sushi") || c.includes("temaki")) return "japones";
+      if (c.includes("brasil") || c.includes("caseir") || c.includes("tradic") || c.includes("pf") || c.includes("executiv")) return "tradicional";
+      return null;
+    }
+    const segment = detectSegment(storeR.data.category);
+    const segmentPlaybook = segment ? SEGMENT_PLAYBOOKS[segment] : null;
+
+    const OBJECTIVE_HINT: Record<string, string> = {
+      vender_mais: "Foque em visibilidade, conversão e ticket. Priorize ações de cardápio, fotos, combos e promoções.",
+      lucrar_mais: "Foque em margem: precificação, custos, taxa do app, desconto/cupom, mix de produtos. Mostre money_leaks com valor em R$.",
+      melhorar_nota: "Foque em qualidade percebida, expectativa vs entrega, atendimento, embalagem e resposta a avaliações.",
+      reduzir_cancelamento: "Foque em tempo de entrega, disponibilidade, comunicação proativa e qualidade do produto na entrega.",
+      aumentar_recompra: "Foque em pós-venda, cupom de retorno, programa de pontos, frequência e relacionamento.",
+    };
+    const objectiveNote = objective && OBJECTIVE_HINT[objective]
+      ? `OBJETIVO PRINCIPAL DO DONO: ${objective}. ${OBJECTIVE_HINT[objective]} As 3 primeiras ações DEVEM endereçar esse objetivo.`
+      : "Sem objetivo declarado — ataque o gargalo de maior impacto financeiro.";
+
+    const segmentNote = segmentPlaybook
+      ? `SEGMENTO DA LOJA: ${segment}. Use o playbook abaixo como referência (não copie literalmente; adapte aos dados reais da loja):
+${segmentPlaybook.map((p, i) => `${i + 1}. ${p}`).join("\n")}`
+      : "Segmento não identificado — use recomendações genéricas apenas se necessário.";
+
     const userPrompt = `${modeNote}
+
+${objectiveNote}
+
+${segmentNote}
 
 RULE_EVIDENCES (fonte da verdade objetiva):
 ${JSON.stringify(ruleEvidences, null, 2)}
@@ -399,7 +458,7 @@ ${JSON.stringify(kbSnippets, null, 2)}
 RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo daqui; print_snippets contém OCR bruto dos prints enviados):
 ${JSON.stringify(rawContext, null, 2)}
 
-Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em cada main_problem.`;
+Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em cada main_problem. Preencha money_leaks com 2-5 itens concretos sempre que houver dados de produto/preço/custo/cancelamento/cupom — em linguagem de dono ("você está perdendo X reais por mês porque...").`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
