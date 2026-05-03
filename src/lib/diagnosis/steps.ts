@@ -673,15 +673,70 @@ export const STEPS: StepDef[] = [
       { key: "platform_coupon", label: "Usa cupom da plataforma?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
       { key: "free_delivery", label: "Já testou frete grátis?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
       { key: "promo_profitable", label: "Você sente que essas promoções dão lucro?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
+
+      // Marketing fora do app
+      {
+        key: "unique_value",
+        label: "Em uma frase, por que o cliente deveria escolher VOCÊ e não o concorrente?",
+        type: "textarea",
+        essential: true,
+        placeholder: "Ex.: hambúrguer artesanal com pão da casa e entrega rápida",
+      },
+      { key: "instagram_active", label: "Você usa Instagram para divulgar a loja?", type: "yesno" },
+      {
+        key: "instagram_frequency",
+        label: "Com que frequência posta?",
+        type: "select",
+        condition: { key: "instagram_active", equals: true },
+        options: [
+          { value: "diario", label: "Quase todo dia" },
+          { value: "semanal", label: "Algumas vezes por semana" },
+          { value: "mensal", label: "Raramente / só quando lembro" },
+        ],
+      },
+      { key: "whatsapp_orders", label: "Recebe pedidos por WhatsApp?", type: "yesno" },
+      {
+        key: "whatsapp_base_size",
+        label: "Quantos contatos você tem na sua base de WhatsApp?",
+        type: "select",
+        condition: { key: "whatsapp_orders", equals: true },
+        options: [
+          { value: "50", label: "Menos de 100" },
+          { value: "300", label: "100 a 500" },
+          { value: "1000", label: "500 a 2.000" },
+          { value: "3000", label: "Mais de 2.000" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "top_competitors",
+        label: "Cite até 3 concorrentes que mais te preocupam (nome + por quê).",
+        type: "textarea",
+        placeholder: "Um por linha. Ex.: Burger X — vende mais barato",
+      },
+      {
+        key: "competitor_advantage",
+        label: "O que esses concorrentes fazem melhor que você?",
+        type: "multiselect",
+        options: [
+          { value: "preco", label: "Preço mais baixo" },
+          { value: "fotos", label: "Fotos e cardápio" },
+          { value: "combos", label: "Combos / promoções" },
+          { value: "nota", label: "Nota mais alta" },
+          { value: "entrega", label: "Tempo de entrega" },
+          { value: "marketing", label: "Marketing / Instagram" },
+          { value: "nada", label: "Acho que estou na frente" },
+        ],
+      },
     ],
   },
 
   // ============================================================
-  // 10) FIDELIZAÇÃO
+  // 11) FIDELIZAÇÃO
   // ============================================================
   {
     key: "loyalty",
-    index: 10,
+    index: 11,
     title: "Fazer o cliente voltar",
     subtitle: "Recompra é mais barato que cliente novo",
     questions: [
