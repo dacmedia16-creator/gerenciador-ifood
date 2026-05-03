@@ -108,6 +108,7 @@ export default function DiagnosisReview() {
       const aiRes = await invokeAI<{ diagnosis: any }>("ai-consult", {
         storeId: result.storeId,
         sessionId,
+        mode,
       });
 
       if (aiRes?.diagnosis) {
