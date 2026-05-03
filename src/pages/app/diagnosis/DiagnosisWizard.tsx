@@ -150,6 +150,28 @@ export default function DiagnosisWizard() {
       onJump={(i) => goTo(i - 1)}
       headerActions={<ResetDiagnosisButton storeId={session?.store_id} size="sm" />}
     >
+      {proposals.length > 0 && user && (
+        <PrintProposalsCard
+          sessionId={sessionId}
+          userId={user.id}
+          storeId={session?.store_id}
+          proposals={proposals}
+          allAnswers={allAnswers}
+          onApplied={(applied) => {
+            setAllAnswers((prev) => {
+              const next = { ...prev };
+              for (const p of applied) {
+                next[p.stepKey] = { ...(next[p.stepKey] || {}), [p.questionKey]: p.value };
+              }
+              return next;
+            });
+          }}
+          onIgnore={() => {
+            try { localStorage.setItem(ignoreKey, "1"); } catch {}
+            setIgnored(true);
+          }}
+        />
+      )}
       <Card className="p-6 shadow-card">
         <div className="mb-6">
           <h1 className="text-2xl font-bold flex items-center gap-2">
