@@ -52,6 +52,8 @@ const Knowledge = lazy(() => import("./pages/app/Knowledge"));
 const StoreEvolution = lazy(() => import("./pages/app/StoreEvolution"));
 const Chat = lazy(() => import("./pages/app/Chat"));
 const Admin = lazy(() => import("./pages/app/Admin"));
+const Planos = lazy(() => import("./pages/app/Planos"));
+const Configuracoes = lazy(() => import("./pages/app/Configuracoes"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
