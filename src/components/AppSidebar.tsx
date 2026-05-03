@@ -15,7 +15,7 @@ import logoGD from "@/assets/logo-gestor-delivery.png";
 
 const general = [
   { title: "Painel do Dono", url: "/app/dashboard", icon: LayoutDashboard },
-  { title: "Meu Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
+  { title: "Meu Diagnóstico", url: "/app/diagnosis/welcome", icon: Sparkles },
   { title: "Minha loja", url: "/app/store", icon: Store },
   { title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare },
 ];
