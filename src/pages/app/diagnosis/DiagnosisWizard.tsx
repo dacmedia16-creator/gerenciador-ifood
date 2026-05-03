@@ -22,17 +22,22 @@ export default function DiagnosisWizard() {
   const { sessionId = "" } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const mode = params.get("mode");
+
+  const activeSteps = useMemo(() => filterStepsByMode(mode), [mode]);
 
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any>(null);
   const [statuses, setStatuses] = useState<any[]>([]);
   const [allAnswers, setAllAnswers] = useState<Record<string, Record<string, any>>>({});
-  const [currentIndex, setCurrentIndex] = useState(1);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const step = stepByIndex(currentIndex)!;
-  const values = allAnswers[step.key] || {};
+  const step = activeSteps[currentIndex];
+  const values = step ? allAnswers[step.key] || {} : {};
 
   const setValue = (key: string, v: any) => {
+    if (!step) return;
     setAllAnswers((prev) => ({ ...prev, [step.key]: { ...(prev[step.key] || {}), [key]: v } }));
   };
 
