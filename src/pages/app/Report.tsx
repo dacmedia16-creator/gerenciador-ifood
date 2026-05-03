@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore, scoreLabel } from "@/lib/diagnostics/engine";
 import { SeverityBadge, PriorityBadge, ScoreBadge } from "@/components/StatusBadges";
-import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight, History, Eye } from "lucide-react";
+import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight, History, Eye, ChevronDown } from "lucide-react";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
@@ -141,9 +141,25 @@ export default function Report() {
         </div>
       </div>
 
-      {aiConsult && (
+      {aiConsult ? (
         <Card className="p-6 shadow-elegant border-primary/30">
           <AIConsultReport data={aiConsult} storeId={id} />
+        </Card>
+      ) : (
+        <Card className="p-6 border-dashed border-primary/40 bg-primary/5">
+          <div className="flex items-start gap-3">
+            <Sparkles className="h-6 w-6 text-primary shrink-0 mt-1" />
+            <div className="flex-1">
+              <h2 className="font-bold text-lg">Gere a análise da sua loja</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Em menos de 1 minuto, o Gestor IA mostra onde você está perdendo dinheiro,
+                o que fazer primeiro e como medir o resultado.
+              </p>
+              <Button onClick={runAIConsult} disabled={aiLoading} className="mt-4 gradient-primary text-primary-foreground">
+                {aiLoading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Analisando…</> : <><Sparkles className="h-4 w-4 mr-1" />Analisar minha loja agora</>}
+              </Button>
+            </div>
+          </div>
         </Card>
       )}
 
@@ -198,12 +214,17 @@ export default function Report() {
       </Dialog>
 
 
-      <Card className="p-8 shadow-elegant">
-        <header className="border-b pb-4 mb-6">
-          <h1 className="text-3xl font-bold">{store.name}</h1>
-          <p className="text-muted-foreground">{store.platform} · {store.city} · {store.neighborhood}</p>
-          <p className="text-xs text-muted-foreground mt-1">Gerado em {new Date().toLocaleDateString("pt-BR")}</p>
-        </header>
+      <details className="group">
+        <summary className="cursor-pointer list-none flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground py-2 no-print">
+          <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+          Ver relatório técnico completo (jornada, scores por área, 6 perguntas)
+        </summary>
+        <Card className="p-8 shadow-elegant mt-4">
+          <header className="border-b pb-4 mb-6">
+            <h1 className="text-3xl font-bold">{store.name}</h1>
+            <p className="text-muted-foreground">{store.platform} · {store.city} · {store.neighborhood}</p>
+            <p className="text-xs text-muted-foreground mt-1">Gerado em {new Date().toLocaleDateString("pt-BR")}</p>
+          </header>
 
         {/* Resumo executivo */}
         <section className="mb-8">
@@ -387,7 +408,8 @@ export default function Report() {
             ))}
           </div>
         </section>
-      </Card>
+        </Card>
+      </details>
     </div>
   );
 }
