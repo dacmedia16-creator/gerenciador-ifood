@@ -1,14 +1,62 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useStoreData } from "@/hooks/useStoreData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SeverityBadge, PriorityBadge } from "@/components/StatusBadges";
-import { Sparkles, FileText } from "lucide-react";
+import { Sparkles, FileText, RotateCcw } from "lucide-react";
 import { LoadingState } from "@/components/LoadingState";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Diagnostics() {
   const { id } = useParams();
   const { diagnostics, loading } = useStoreData(id);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [resetting, setResetting] = useState(false);
+
+  const handleReset = async () => {
+    if (!id || !user) return;
+    setResetting(true);
+    try {
+      const { data: sessions } = await supabase
+        .from("diagnosis_sessions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("store_id", id);
+      const sessionIds = (sessions || []).map((s) => s.id);
+
+      if (sessionIds.length) {
+        await supabase.from("diagnosis_step_status").delete().in("session_id", sessionIds);
+        await supabase.from("diagnosis_answers").delete().in("session_id", sessionIds);
+        await supabase.from("diagnosis_sessions").delete().in("id", sessionIds);
+      }
+
+      await supabase.from("action_plans").delete().eq("store_id", id);
+      await supabase.from("diagnostics").delete().eq("store_id", id);
+      await supabase.from("reports").delete().eq("store_id", id);
+
+      toast.success("Diagnóstico resetado. Você pode começar do zero.");
+      navigate(`/app/stores/${id}/dashboard`);
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao resetar diagnóstico");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   if (loading) return <LoadingState />;
 
@@ -21,12 +69,38 @@ export default function Diagnostics() {
             {diagnostics?.length || 0} diagnósticos do motor de regras.
           </p>
         </div>
-        <Button asChild className="gradient-primary text-primary-foreground">
-          <Link to={`/app/stores/${id}/report`}>
-            <Sparkles className="h-4 w-4 mr-1" />
-            Consultar Gestor IA
-          </Link>
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" disabled={resetting}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Resetar diagnóstico
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Resetar diagnóstico desta loja?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Isso apaga as respostas do funil, diagnósticos gerados, planos de ação
+                  e relatórios desta loja. Os dados da loja, produtos, métricas e
+                  avaliações continuam intactos. Essa ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleReset} disabled={resetting}>
+                  {resetting ? "Resetando…" : "Sim, resetar"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button asChild className="gradient-primary text-primary-foreground">
+            <Link to={`/app/stores/${id}/report`}>
+              <Sparkles className="h-4 w-4 mr-1" />
+              Consultar Gestor IA
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4 bg-muted/30 border-dashed text-sm text-muted-foreground">
