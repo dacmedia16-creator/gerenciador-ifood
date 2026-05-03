@@ -15,6 +15,8 @@ import { Sparkles } from "lucide-react";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { syncDiagnosisProductsToStore } from "@/lib/diagnosis/syncProducts";
 import { syncStoreFromDiagnosis, syncMetricsSnapshot, syncStoreGoal } from "@/lib/diagnosis/syncToStore";
+import { findNextIncompleteStepIndex } from "@/lib/diagnosis/journey";
+import { computeStepCompletion } from "@/lib/diagnosis/session";
 
 function filterStepsByMode(mode: string | null) {
   if (mode === "prints") {
