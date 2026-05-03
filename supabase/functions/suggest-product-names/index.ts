@@ -33,12 +33,24 @@ Deno.serve(async (req) => {
     const segment: string = body.segment ?? "delivery";
     if (!products.length) return new Response(JSON.stringify({ error: "products required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // Cache (TTL 30 dias)
+    const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
+    const cacheKey = await buildCacheKey({ segment, products });
+    const cached = await getCached(admin, cacheKey);
+    if (cached) {
+      return new Response(JSON.stringify(cached.response), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" },
+      });
+    }
+
     const systemPrompt = `Você é um especialista em SEO de cardápio para iFood/Rappi. Reescreva nomes de produtos no formato:
 Categoria + Ingrediente principal + Diferencial + palavra-chave do segmento (${segment}).
 Exemplo: "X-Burger" -> "X-Burger Artesanal com Queijo Derretido e Molho Especial".
 Mantenha entre 5 e 9 palavras. Português do Brasil. Apetitoso, claro, vendedor.`;
 
     const userMsg = JSON.stringify({ produtos: products });
+
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
