@@ -1,43 +1,59 @@
-## Sistema de feedback por solução de diagnóstico
+## Objetivo
 
-Cada problema do diagnóstico ganha botões de avaliação no drawer. O feedback é salvo no próprio diagnóstico e alimenta a `case_library` global de forma anonimizada — fechando o ciclo de aprendizado contínuo da IA.
+Substituir a estrutura atual de **18 etapas / ~120 perguntas técnicas** por **9 etapas / ~55 perguntas em linguagem do dono da loja**, com faixas, "Não sei", condicionais e tooltips de "onde encontro no iFood".
 
-## UX
+## Princípio de compatibilidade
 
-No rodapé do `ProblemDetailSheet`, abaixo da solução:
+`src/lib/diagnosis/rules.ts`, `evidences.ts` e `journey.ts` leem respostas por `answers.<step_key>.<question_key>` (ex.: `answers.basic.average_ticket`, `answers.delivery.cancellation_rate`). Para **não quebrar o motor de diagnóstico**:
 
-- 👍 **Útil** / 👎 **Não útil**
-- ✅ **Apliquei** / ❌ **Ignorei**
-- Quando "Não útil": botões de motivo (*errada*, *falta contexto*, *difícil de executar*)
-- Campo opcional de comentário
-- Após enviar: "Feedback registrado — a IA vai aprender com isso" e mostra o último voto
+- Mantemos as **mesmas chaves internas** (`step_key` + `question_key`) sempre que possível.
+- Mudamos apenas: **labels, tipos de campo, tooltips, agrupamento visual e perguntas removidas**.
+- Quando uma pergunta vira "faixa" (select), as regras que esperam número ganham um helper `rangeToNumber()` para converter (ex.: "30–49" → 40).
 
-Disponível para **todo dono de loja**, não só admin.
+Diagnósticos antigos continuam funcionando porque o JSON de respostas mantém as chaves.
 
-## Plano técnico
+## Nova estrutura (9 etapas)
 
-### 1. Edge function `rate-diagnostic`
-- Input: `{ diagnosticId, rating, applied?, comment? }`
-- Valida JWT + ownership via RLS (lê o `diagnostic` com client autenticado).
-- Salva o feedback dentro de `diagnostics.detailed_solution._feedback` (histórico) e `_last_feedback` (último), via service role.
-- Quando o sinal é claro (positivo/negativo), insere linha **anonimizada** na `case_library` com `outcome` correspondente — só `category` e `platform`, sem `store_id`/`user_id`/nome.
+```text
+1. Sobre a loja            (basic)        — nome, categoria, plataforma, cidade, ticket/pedidos em FAIXAS
+2. Horários e capacidade   (operations)   — horário, fecha em pico, pedidos/h, quem entrega
+3. Vendas e reputação      (performance)  — nota, pausas, ruptura de estoque (faixas)
+4. Cardápio e fotos        (menu)         — fotos top 5, organização, adicionais (funde menu+photos)
+5. Preço e margem          (pricing)      — top 3 simplificado (3 linhas), preço vs concorrente
+6. Combos e ticket         (combos)       — combos prontos, sugestões, tamanhos
+7. Entrega e qualidade     (delivery)     — tempo prometido, atraso, embalagem térmica, motivos cancel
+8. Avaliações e problemas  (reviews)      — reclamações por checkbox, item problemático
+9. Promoções, ads e fidelização (growth)  — promoções, ads (objetivo), recompra (funde promotions+ads+loyalty)
+```
 
-### 2. Componente `ProblemFeedback.tsx`
-- Estilo similar ao `RecommendationFeedback`.
-- Props: `diagnosticId`, `initialFeedback` (último voto vindo de `_last_feedback`).
-- Estado local + toast após envio.
+Cortes: **welcome, conversion, products (tabela), competitors (tabela), demand, final_questions, uploads** — viram seções condicionais ou somem.
 
-### 3. Integração no `ProblemDetailSheet`
-- Renderiza `<ProblemFeedback />` no rodapé do drawer.
-- Lê `detailed_solution._last_feedback` para mostrar estado atual.
+## Mudanças de UX
 
-## Privacidade
-
-- Feedback fica no JSON do próprio `diagnostic` (RLS de `has_store_access` já protege).
-- Inserção em `case_library` é via service role e **não inclui** `store_id`, `user_id`, nome ou cidade.
+- **Faixas em vez de números exatos** para ticket, pedidos/mês, nota, tempo.
+- **Sempre opção "Não sei"** em selects.
+- **Condicionais**: pergunta de motivo de atraso só aparece se respondeu que atrasa; custo só se "sei o custo"; ROI/objetivo só se "anuncia".
+- **Tooltips** com "Onde achar no iFood" (Portal Parceiro > Desempenho / Avaliações / Cardápio / Minha Loja).
+- **Top 3 produtos** em mini-tabela (3 linhas: nome, preço, custo opcional) em vez da tabela completa de 9 colunas.
+- **Sem tabela de concorrentes** — vira pergunta única "seu preço vs concorrentes" (mais barato/igual/mais caro/não sei).
+- Microcopy no welcome: "Leva ~10 minutos. Pode pular o que não souber. Salvamos automaticamente."
 
 ## Arquivos
 
-- **Novo:** `supabase/functions/rate-diagnostic/index.ts`
-- **Novo:** `src/components/diagnosis/ProblemFeedback.tsx`
-- **Editar:** `src/components/diagnosis/ProblemDetailSheet.tsx`
+- **Reescrever:** `src/lib/diagnosis/steps.ts` — nova lista `STEPS` com 9 etapas, novos labels/tipos/tooltips, mantendo chaves internas.
+- **Editar:** `src/lib/diagnosis/rules.ts` — adicionar `rangeToNumber()` e aplicar onde regras esperam número exato (ticket, nota, pedidos, tempo, cancelamento).
+- **Editar:** `src/lib/diagnosis/evidences.ts` e `journey.ts` — mesmo helper de faixa para campos numéricos.
+- **Editar:** `src/components/diagnosis/QuestionField.tsx` — adicionar suporte a novo tipo `range` (select de faixas) + checkbox múltipla (`multiselect`).
+- **Editar:** `src/lib/diagnosis/steps.ts` (tipos) — adicionar `multiselect` e `range` em `FieldType`, e flag `condition?: { key: string; equals?: any; in?: any[] }` para perguntas condicionais.
+- **Editar:** `src/pages/app/diagnosis/DiagnosisWizard.tsx` — filtrar perguntas pela `condition` antes de renderizar.
+- **Editar:** `src/pages/app/diagnosis/DiagnosisReview.tsx` e `WizardShell.tsx` — nada a fazer (já leem `STEPS` dinamicamente).
+
+## Migração de dados
+
+Diagnósticos em andamento mantêm as respostas (chaves preservadas). Se um usuário já completou etapas removidas (ex.: `competitors` tabela), o dado fica salvo em `diagnosis_answers` mas não é mais editável — o motor ainda usa via `evidences.ts`. Sem migração SQL necessária.
+
+## Resultado esperado
+
+- Tempo de preenchimento: **15 min → 8 min**.
+- Abandono esperado: queda significativa (faixas + condicionais + sem tabelas).
+- Diagnóstico: igual ou melhor (perguntas novas de capacidade/ruptura/embalagem cobrem causas raiz que faltavam).
