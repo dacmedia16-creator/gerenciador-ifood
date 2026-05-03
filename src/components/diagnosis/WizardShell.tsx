@@ -108,9 +108,17 @@ export function WizardShell({
           {children}
 
           <div className="flex flex-wrap justify-between gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={onPrev} disabled={currentStepIndex <= 1}>
-              <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
-            </Button>
+            {currentStepIndex <= 1 ? (
+              <Button variant="outline" asChild>
+                <Link to="/app/diagnosis/welcome">
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={onPrev}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+              </Button>
+            )}
             <div className="flex gap-2">
               <Button variant="ghost" asChild>
                 <Link to="/app/dashboard">
