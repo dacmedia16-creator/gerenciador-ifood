@@ -115,11 +115,14 @@ export default function DiagnosisReview() {
             Confira suas respostas, os problemas já detectados e o que ainda pode melhorar a precisão do seu diagnóstico.
           </p>
         </div>
-        <Button variant="ghost" asChild>
-          <Link to={`/app/diagnosis/${sessionId}`}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao funil
-          </Link>
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <ResetDiagnosisButton storeId={data?.storeId} />
+          <Button variant="ghost" asChild>
+            <Link to={`/app/diagnosis/${sessionId}`}>
+              <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao funil
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Resumo de prontidão */}
