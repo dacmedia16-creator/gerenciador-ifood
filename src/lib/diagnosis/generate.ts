@@ -126,6 +126,7 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
   const basic = map.basic || {};
   const front = map.storefront || {};
   const delivery = map.delivery || {};
+  const goalAns = map.goal || {};
 
   const storeId = await ensureStore(userId, sessionId, basic, front, delivery);
 
@@ -133,6 +134,32 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
   await syncProducts(storeId, map.products?.items || []);
   await syncCompetitors(storeId, map.competitors?.items || []);
   await syncReviews(storeId, map.reviews?.real_reviews, map.reviews?.main_complaints);
+
+  // Salvar meta (uma ativa por loja)
+  if (goalAns.goal_type) {
+    const deadlineDays = num(goalAns.deadline);
+    const deadlineDate = deadlineDays
+      ? new Date(Date.now() + deadlineDays * 86400000).toISOString().slice(0, 10)
+      : null;
+    // desativa metas antigas
+    await supabase.from("store_goals").update({ status: "pausada" }).eq("store_id", storeId).eq("status", "ativa");
+    await supabase.from("store_goals").insert({
+      store_id: storeId,
+      user_id: userId,
+      goal_type: goalAns.goal_type,
+      current_value: num(goalAns.current_value),
+      target_value: num(goalAns.target_value),
+      deadline: deadlineDate,
+      priority: goalAns.priority || "media",
+      status: "ativa",
+    });
+  }
+
+  // Vincular prints da sessão à loja recém-criada
+  await supabase.from("diagnosis_uploads")
+    .update({ store_id: storeId })
+    .eq("session_id", sessionId)
+    .is("store_id", null);
 
   // Métricas
   if (basic.monthly_revenue || basic.monthly_orders) {
@@ -206,6 +233,10 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
         impact: d.severity === "critico" ? "alto" : "medio",
         effort: "medio",
         status: "pendente",
+        why_it_matters: d.business_impact || d.evidence,
+        how_to_apply: d.practical_action,
+        how_to_measure: d.suggested_deadline ? `Reavaliar em ${d.suggested_deadline}` : "Reavaliar em 7-14 dias",
+        source: "rule_engine",
       }))
     );
   }

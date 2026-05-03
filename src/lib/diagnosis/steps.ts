@@ -18,6 +18,7 @@ export type FieldType =
   | "products"
   | "competitors"
   | "files"
+  | "prints"
   | "info";
 
 export interface Question {
@@ -754,6 +755,83 @@ export const STEPS: StepDef[] = [
           { value: "40", label: "Entre 30% e 50%" },
           { value: "60", label: "Mais de 50%" },
           { value: "", label: "Não sei" },
+        ],
+      },
+    ],
+  },
+
+  // ============================================================
+  // 12) PRINTS (opcional — pode pular)
+  // ============================================================
+  {
+    key: "prints",
+    index: 12,
+    title: "Envie prints da sua loja",
+    subtitle: "Opcional, mas acelera muito o diagnóstico",
+    intro:
+      "Mande print do iFood, 99Food, WhatsApp, Instagram, cardápio, avaliações, indicadores, faturamento — o que tiver. A IA lê cada print e extrai os dados automaticamente. Pode pular se preferir só responder o formulário.",
+    questions: [
+      { key: "uploads", label: "Prints enviados", type: "prints" },
+    ],
+  },
+
+  // ============================================================
+  // 13) META PRINCIPAL DA LOJA
+  // ============================================================
+  {
+    key: "goal",
+    index: 13,
+    title: "Sua meta principal",
+    subtitle: "Para onde vamos te ajudar a chegar",
+    intro:
+      "A IA usa essa meta para priorizar as ações certas para você. Sem promessa de resultado garantido — mas com foco no que mais importa para o seu negócio agora.",
+    questions: [
+      {
+        key: "goal_type",
+        label: "Qual é o seu objetivo principal nos próximos 90 dias?",
+        type: "select",
+        essential: true,
+        options: [
+          { value: "vender_mais", label: "Vender mais pedidos" },
+          { value: "aumentar_lucro", label: "Aumentar o lucro" },
+          { value: "melhorar_nota", label: "Melhorar a nota da loja" },
+          { value: "fidelizar", label: "Fazer o cliente voltar mais" },
+          { value: "organizar_operacao", label: "Organizar a operação" },
+        ],
+      },
+      {
+        key: "current_value",
+        label: "Onde você está hoje? (ex.: faturamento atual, nota atual, pedidos/mês)",
+        type: "number",
+        placeholder: "Valor atual",
+      },
+      {
+        key: "target_value",
+        label: "E onde quer chegar?",
+        type: "number",
+        essential: true,
+        placeholder: "Valor desejado",
+      },
+      {
+        key: "deadline",
+        label: "Em quanto tempo quer alcançar?",
+        type: "select",
+        options: [
+          { value: "30", label: "30 dias" },
+          { value: "60", label: "60 dias" },
+          { value: "90", label: "90 dias" },
+          { value: "180", label: "6 meses" },
+          { value: "365", label: "1 ano" },
+        ],
+      },
+      {
+        key: "priority",
+        label: "Qual sua prioridade hoje?",
+        type: "select",
+        options: [
+          { value: "alta", label: "Alta — preciso resolver isso já" },
+          { value: "media", label: "Média — quero melhorar com tempo" },
+          { value: "baixa", label: "Baixa — só estou olhando opções" },
         ],
       },
     ],
