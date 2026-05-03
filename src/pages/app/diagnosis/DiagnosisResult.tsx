@@ -69,9 +69,12 @@ export default function DiagnosisResult() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Diagnóstico gerado!</h1>
-        <p className="text-sm text-muted-foreground">{store.name} · {store.platform} · {store.city}</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Diagnóstico gerado!</h1>
+          <p className="text-sm text-muted-foreground">{store.name} · {store.platform} · {store.city}</p>
+        </div>
+        <ResetDiagnosisButton storeId={data.store_id} />
       </div>
 
       <Card className="p-6 shadow-card">
