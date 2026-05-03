@@ -127,7 +127,7 @@ export default function DiagnosisReview() {
           <Stat label="Etapas completas" value={`${completedSteps}/${STEPS.length}`} sub={`${overallPct}%`} />
           <Stat label="Pontos críticos" value={String(criticos.length)} tone={criticos.length ? "danger" : "ok"} />
           <Stat label="Pontos de atenção" value={String(atencoes.length)} tone={atencoes.length ? "warn" : "ok"} />
-          <Stat label="Dados faltantes" value={String(missingRequired.length + missingFromEvidences.length)} tone="muted" />
+          <Stat label="Dados faltantes" value={String(allMissing.length)} tone="muted" />
         </div>
       </Card>
 
