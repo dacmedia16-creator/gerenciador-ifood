@@ -552,7 +552,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
           });
         if (planRows.length) {
           const { error: apErr } = await supabase.from("action_plans").insert(planRows);
-          if (apErr) console.warn("action_plans insert failed", apErr);
+          if (apErr) console.error(JSON.stringify({ evt: "ai_consult.persist_failed", table: "action_plans", store_id: storeId, code: apErr.code, message: apErr.message }));
         }
       }
     }
