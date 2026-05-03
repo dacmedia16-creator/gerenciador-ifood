@@ -27,7 +27,7 @@ export default function DiagnosisResult() {
         navigate("/app/dashboard");
         return;
       }
-      const [s, m, p, r, c, ca, d, a] = await Promise.all([
+      const [s, m, p, r, c, ca, d, a, lastReport] = await Promise.all([
         supabase.from("stores").select("*").eq("id", session.store_id).single(),
         supabase.from("metrics").select("*").eq("store_id", session.store_id),
         supabase.from("products").select("*").eq("store_id", session.store_id),
@@ -36,7 +36,14 @@ export default function DiagnosisResult() {
         supabase.from("campaigns").select("*").eq("store_id", session.store_id),
         supabase.from("diagnostics").select("*").eq("store_id", session.store_id).order("created_at", { ascending: false }),
         supabase.from("action_plans").select("*").eq("store_id", session.store_id).order("created_at", { ascending: false }),
+        supabase.from("reports")
+          .select("id, report_data, general_score, executive_summary, created_at")
+          .eq("store_id", session.store_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
+      const aiConsult = (lastReport.data?.report_data as any)?.ai_consult ?? null;
       setData({
         store: s.data,
         store_id: session.store_id,
@@ -47,14 +54,19 @@ export default function DiagnosisResult() {
         campaigns: ca.data || [],
         diagnostics: d.data || [],
         actions: a.data || [],
+        aiConsult,
+        lastReport: lastReport.data,
       });
     })();
   }, [sessionId, navigate]);
 
   if (!data) return <div className="p-8 text-muted-foreground">Carregando resultado…</div>;
 
-  const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions } = data;
-  const { overall, areas } = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
+  const { store, products, reviews, competitors, campaigns, metrics, diagnostics, actions, aiConsult } = data;
+  const localScore = calculateScore({ store, metrics, products, reviews, competitors, campaigns });
+  // P14: prefere score da IA quando disponível
+  const overall = typeof aiConsult?.overall_score === "number" ? aiConsult.overall_score : localScore.overall;
+  const areas = localScore.areas;
 
   const sortedProblems = [...diagnostics].sort(
     (a: any, b: any) => severityRank(a.severity) - severityRank(b.severity),
@@ -80,7 +92,7 @@ export default function DiagnosisResult() {
       <Card className="p-6 shadow-card">
         <div className="grid md:grid-cols-3 gap-6 items-center">
           <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-2">Score geral</p>
+            <p className="text-sm text-muted-foreground mb-2">Score geral{aiConsult ? " (IA)" : ""}</p>
             <div className="text-7xl font-bold text-gradient">{overall}</div>
             <ScoreBadge score={overall} />
           </div>
@@ -98,6 +110,85 @@ export default function DiagnosisResult() {
           </div>
         </div>
       </Card>
+
+      {/* P1: Diagnóstico da IA (executive summary, plano 7d/30d, do not do, missing data) */}
+      {aiConsult && (
+        <Card className="p-6 border-primary/30 bg-primary/5 space-y-5">
+          <div className="flex items-start gap-3">
+            <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <h2 className="font-semibold text-lg">Análise inteligente</h2>
+              {aiConsult.executive_summary && (
+                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                  {aiConsult.executive_summary}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {Array.isArray(aiConsult.plan_7_days) && aiConsult.plan_7_days.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2 text-sm">Plano para os próximos 7 dias</h3>
+              <ol className="space-y-2">
+                {aiConsult.plan_7_days.map((p: any, i: number) => (
+                  <li key={i} className="text-sm border rounded-md p-3 bg-background">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px]">Dia {p.day}</Badge>
+                      <span className="font-medium">{p.title}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{p.action}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {Array.isArray(aiConsult.plan_30_days) && aiConsult.plan_30_days.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2 text-sm">Plano para 30 dias</h3>
+              <ol className="space-y-2">
+                {aiConsult.plan_30_days.map((p: any, i: number) => (
+                  <li key={i} className="text-sm border rounded-md p-3 bg-background">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px]">Semana {p.week}</Badge>
+                      <span className="font-medium">{p.title}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{p.action}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {Array.isArray(aiConsult.do_not_do_now) && aiConsult.do_not_do_now.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2 text-sm">O que NÃO fazer agora</h3>
+              <ul className="space-y-1 text-sm">
+                {aiConsult.do_not_do_now.map((it: string, i: number) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-destructive">✕</span>
+                    <span className="text-muted-foreground">{it}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {Array.isArray(aiConsult.missing_data_for_better_diagnosis) && aiConsult.missing_data_for_better_diagnosis.length > 0 && (
+            <div className="text-xs text-muted-foreground border-t pt-3">
+              <span className="font-medium">Dados que melhorariam o diagnóstico: </span>
+              {aiConsult.missing_data_for_better_diagnosis.join(" · ")}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {!aiConsult && (
+        <Card className="p-4 border-dashed text-sm text-muted-foreground flex items-center gap-2">
+          <Info className="h-4 w-4 shrink-0" />
+          A análise inteligente não está disponível neste ciclo. Você pode rodá-la novamente no relatório completo.
+        </Card>
+      )}
 
       {lowDataMode && (
         <Card className="p-5 border-l-4 border-warning bg-warning/5">
@@ -232,8 +323,13 @@ export default function DiagnosisResult() {
 
       <div className="flex flex-wrap gap-2">
         <Button asChild size="lg">
+          <Link to={`/app/stores/${data.store_id}/action-plan`}>
+            <ListTodo className="h-4 w-4 mr-1" /> Ver plano de ação
+          </Link>
+        </Button>
+        <Button variant="outline" asChild size="lg">
           <Link to={`/app/stores/${data.store_id}/report`}>
-            <FileText className="h-4 w-4 mr-1" /> Ver relatório completo
+            <FileText className="h-4 w-4 mr-1" /> Relatório completo
           </Link>
         </Button>
         <Button variant="outline" asChild>

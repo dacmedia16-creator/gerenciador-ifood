@@ -221,25 +221,10 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
     );
   }
 
-  // Plano de ação (a partir dos diagnósticos)
-  if (diagnostics.length) {
-    await supabase.from("action_plans").insert(
-      diagnostics.map((d) => ({
-        store_id: storeId,
-        title: d.recommended_solution.slice(0, 120),
-        description: d.practical_action,
-        area: d.area,
-        priority: d.priority,
-        impact: d.severity === "critico" ? "alto" : "medio",
-        effort: "medio",
-        status: "pendente",
-        why_it_matters: d.business_impact || d.evidence,
-        how_to_apply: d.practical_action,
-        how_to_measure: d.suggested_deadline ? `Reavaliar em ${d.suggested_deadline}` : "Reavaliar em 7-14 dias",
-        source: "rule_engine",
-      }))
-    );
-  }
+  // P3: Não criamos action_plans aqui. A `ai-consult` é a fonte única
+  // de tarefas com recommendation_id vinculado a recommendation_history.
+  // Os `diagnostics` (regra local) seguem sendo criados acima como sinal
+  // de evidência, mas não viram tarefas duplicadas.
 
   // Relatório consolidado
   const reviews = map.reviews || {};

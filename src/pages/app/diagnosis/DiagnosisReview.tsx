@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Pencil,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { EvidenceCard } from "@/components/diagnosis/EvidenceCard";
@@ -94,14 +95,22 @@ export default function DiagnosisReview() {
     if (!user) return;
     setGenerating(true);
     try {
+      // 1) Geração local (cria store, sincroniza dados, calcula evidências, salva report base)
       const result = await generateDiagnosis(sessionId, user.id);
-      toast.success(`Diagnóstico gerado: ${result.diagnosticsCount} problemas identificados`);
-      // Dispara o Gestor IA já com a sessão (respostas do funil + prints)
-      // — não bloqueia a navegação se demorar; o Report recarrega quando concluir.
-      invokeAI<{ diagnosis: any }>("ai-consult", {
+
+      // 2) Dispara IA e AGUARDA antes de navegar — sem engolir erro.
+      //    Se a IA falhar, mostramos o erro mas seguimos para o resultado
+      //    (o usuário ainda vê os problemas da regra local).
+      const aiRes = await invokeAI<{ diagnosis: any }>("ai-consult", {
         storeId: result.storeId,
         sessionId,
-      }).catch(() => { /* silencioso: usuário pode rodar manual depois */ });
+      });
+
+      if (aiRes?.diagnosis) {
+        toast.success("Diagnóstico inteligente concluído");
+      } else {
+        toast.warning("Recomendações da IA indisponíveis no momento — exibindo análise básica");
+      }
       navigate(`/app/diagnosis/${sessionId}/result`);
     } catch (e: any) {
       toast.error(e.message || "Erro ao gerar diagnóstico");
@@ -111,6 +120,25 @@ export default function DiagnosisReview() {
   };
 
   if (loading) return <div className="p-8 text-muted-foreground">Carregando…</div>;
+
+  if (generating) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <Card className="p-10 max-w-md text-center space-y-4 shadow-card">
+          <div className="mx-auto h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+            <Sparkles className="h-7 w-7 text-primary animate-pulse" />
+          </div>
+          <h2 className="text-xl font-semibold">Gerando seu diagnóstico…</h2>
+          <p className="text-sm text-muted-foreground">
+            A IA está analisando suas respostas, prints e dados da loja. Isso pode levar até 30 segundos.
+          </p>
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground pt-2">
+            <Loader2 className="h-3 w-3 animate-spin" /> Não feche esta tela
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
