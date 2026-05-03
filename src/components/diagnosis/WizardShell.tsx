@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { STEPS } from "@/lib/diagnosis/steps";
+import { STEPS, type StepDef } from "@/lib/diagnosis/steps";
 import { CheckCircle2, Circle, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
@@ -17,6 +17,8 @@ interface Props {
   onJump?: (index: number) => void;
   headerActions?: ReactNode;
   children: ReactNode;
+  steps?: StepDef[];
+  totalSteps?: number;
 }
 
 export function WizardShell({
@@ -29,9 +31,14 @@ export function WizardShell({
   onJump,
   headerActions,
   children,
+  steps,
+  totalSteps,
 }: Props) {
-  const overallPct = Math.round((statuses.filter((s) => s.is_completed).length / STEPS.length) * 100);
-  const current = STEPS.find((s) => s.index === currentStepIndex);
+  const stepList = steps ?? STEPS;
+  const total = totalSteps ?? stepList.length;
+  const completedInScope = statuses.filter((s) => s.is_completed && stepList.some((st) => st.key === s.step_key)).length;
+  const overallPct = Math.round((completedInScope / Math.max(total, 1)) * 100);
+  const current = stepList[currentStepIndex - 1];
 
   return (
     <div className="min-h-screen bg-background">
