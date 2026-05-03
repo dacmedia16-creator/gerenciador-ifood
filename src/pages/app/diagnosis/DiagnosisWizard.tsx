@@ -162,11 +162,15 @@ export default function DiagnosisWizard() {
           fresh.forEach((p) => n.add(`${p.stepKey}.${p.questionKey}`));
           return n;
         });
-        toast.success(`IA preencheu ${fresh.length} ${fresh.length === 1 ? "campo" : "campos"} a partir dos prints.`);
+        const printsCount = uploads.filter((u) => u.status === "processed").length;
+        toast.success(
+          `IA preencheu ${fresh.length} ${fresh.length === 1 ? "campo" : "campos"} a partir de ${printsCount} ${printsCount === 1 ? "print" : "prints"}.`,
+          { duration: 5000 },
+        );
 
-        // Pula direto para a primeira etapa com campos obrigatórios faltando
         const nextIdx = findNextIncompleteStepIndex(activeSteps, merged, currentIndex + 1);
         if (nextIdx === -1) {
+          toast.success("Diagnóstico completo! Indo para a revisão…");
           navigate(`/app/diagnosis/${sessionId}/review`);
         } else {
           await goTo(nextIdx);
