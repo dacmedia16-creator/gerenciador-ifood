@@ -187,6 +187,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
     const sessionId: string | undefined = body?.sessionId;
+    const rawMode = String(body?.mode ?? "both").toLowerCase();
+    const mode: "prints" | "form" | "both" =
+      rawMode === "prints" ? "prints" : rawMode === "form" ? "form" : "both";
     const model: string = body?.model ?? "google/gemini-3-flash-preview";
     if (!storeId) {
       return new Response(JSON.stringify({ error: "storeId é obrigatório" }), {
