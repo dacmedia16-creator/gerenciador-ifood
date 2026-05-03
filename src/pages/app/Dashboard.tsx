@@ -13,6 +13,7 @@ import { Plus, Sparkles, Store, BarChart3, Star, Clock, AlertTriangle, DollarSig
 import { refreshSystem } from "@/lib/system/refresh";
 import { DashboardSkeleton } from "@/components/DashboardSkeleton";
 import { DoFirstBlock } from "@/components/dashboard/DoFirstBlock";
+import { MoneyLeakBlock } from "@/components/dashboard/MoneyLeakBlock";
 
 const DashboardCharts = lazy(() => import("@/components/dashboard/DashboardCharts"));
 
@@ -243,6 +244,9 @@ export default function Dashboard() {
 
       {/* Faça isso primeiro — top 3 ações priorizadas */}
       <DoFirstBlock storeId={store.id} />
+
+      {/* Onde você está perdendo dinheiro — análise por produto */}
+      <MoneyLeakBlock storeId={store.id} />
 
       {/* Perguntas que este painel responde — atalhos para o dono */}
       <Card className="p-4 shadow-card">

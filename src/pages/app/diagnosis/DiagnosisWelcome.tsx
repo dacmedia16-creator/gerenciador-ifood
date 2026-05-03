@@ -146,18 +146,23 @@ export default function DiagnosisWelcome() {
         ) : (
           <div className="space-y-3 pt-2">
             <p className="text-sm font-medium">Como você prefere começar?</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Button
+                size="lg"
+                disabled={starting}
+                onClick={() => navigate(`/app/diagnosis/express${params.get("storeId") ? `?storeId=${params.get("storeId")}` : ""}`)}
+                className="h-auto py-4 flex-col items-start gap-1 text-left gradient-primary text-primary-foreground md:col-span-2"
+              >
+                <span className="font-semibold">⚡ Diagnóstico expresso (5 minutos)</span>
+                <span className="text-xs opacity-90 font-normal">Recomendado para começar — objetivo, prints e 5 perguntas</span>
+              </Button>
               <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("prints")} className="h-auto py-4 flex-col items-start gap-1 text-left">
                 <span className="font-semibold">📸 Só prints</span>
                 <span className="text-xs text-muted-foreground font-normal">A IA extrai os dados das suas telas</span>
               </Button>
-              <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("form")} className="h-auto py-4 flex-col items-start gap-1 text-left">
-                <span className="font-semibold">📝 Só formulário</span>
-                <span className="text-xs text-muted-foreground font-normal">Responda perguntas guiadas</span>
-              </Button>
-              <Button size="lg" disabled={starting} onClick={() => handleStart("both")} className="h-auto py-4 flex-col items-start gap-1 text-left">
-                <span className="font-semibold">⚡ Prints + formulário</span>
-                <span className="text-xs opacity-90 font-normal">Diagnóstico mais preciso (recomendado)</span>
+              <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("both")} className="h-auto py-4 flex-col items-start gap-1 text-left">
+                <span className="font-semibold">📝 Diagnóstico completo</span>
+                <span className="text-xs text-muted-foreground font-normal">Funil de 13 etapas para análise mais profunda</span>
               </Button>
             </div>
             {starting && (
