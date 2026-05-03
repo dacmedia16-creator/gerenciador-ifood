@@ -233,6 +233,10 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
         impact: d.severity === "critico" ? "alto" : "medio",
         effort: "medio",
         status: "pendente",
+        why_it_matters: d.business_impact || d.evidence,
+        how_to_apply: d.practical_action,
+        how_to_measure: d.suggested_deadline ? `Reavaliar em ${d.suggested_deadline}` : "Reavaliar em 7-14 dias",
+        source: "rule_engine",
       }))
     );
   }
