@@ -141,9 +141,25 @@ export default function Report() {
         </div>
       </div>
 
-      {aiConsult && (
+      {aiConsult ? (
         <Card className="p-6 shadow-elegant border-primary/30">
           <AIConsultReport data={aiConsult} storeId={id} />
+        </Card>
+      ) : (
+        <Card className="p-6 border-dashed border-primary/40 bg-primary/5">
+          <div className="flex items-start gap-3">
+            <Sparkles className="h-6 w-6 text-primary shrink-0 mt-1" />
+            <div className="flex-1">
+              <h2 className="font-bold text-lg">Gere a análise da sua loja</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Em menos de 1 minuto, o Gestor IA mostra onde você está perdendo dinheiro,
+                o que fazer primeiro e como medir o resultado.
+              </p>
+              <Button onClick={runAIConsult} disabled={aiLoading} className="mt-4 gradient-primary text-primary-foreground">
+                {aiLoading ? <><Sparkles className="h-4 w-4 mr-1 animate-pulse" />Analisando…</> : <><Sparkles className="h-4 w-4 mr-1" />Analisar minha loja agora</>}
+              </Button>
+            </div>
+          </div>
         </Card>
       )}
 
