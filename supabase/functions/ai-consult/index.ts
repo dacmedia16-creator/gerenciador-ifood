@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
     const sessionId: string | undefined = body?.sessionId;
-    const model: string = body?.model ?? "google/gemini-2.5-pro";
+    const model: string = body?.model ?? "google/gemini-3-flash-preview";
     if (!storeId) {
       return new Response(JSON.stringify({ error: "storeId é obrigatório" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
