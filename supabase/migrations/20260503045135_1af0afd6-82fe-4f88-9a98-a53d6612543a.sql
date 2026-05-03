@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.has_store_access(uuid) TO authenticated, anon;

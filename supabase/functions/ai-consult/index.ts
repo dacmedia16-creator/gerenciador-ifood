@@ -475,7 +475,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
     const baseData = (reportR.data?.report_data as any) ?? {};
     const merged = { ...baseData, ai_consult: enriched };
 
-    const { data: inserted } = await supabase.from("reports").insert({
+    const { data: inserted, error: reportErr } = await supabase.from("reports").insert({
       store_id: storeId,
       title: `Diagnóstico IA — ${new Date().toLocaleDateString("pt-BR")}`,
       executive_summary: diagnosis.executive_summary,
@@ -483,7 +483,21 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       report_data: merged,
     }).select("id").single();
 
-    const newReportId = inserted?.id ?? null;
+    if (reportErr || !inserted?.id) {
+      console.error(JSON.stringify({
+        evt: "ai_consult.persist_failed",
+        table: "reports",
+        store_id: storeId,
+        code: reportErr?.code,
+        message: reportErr?.message,
+      }));
+      return new Response(JSON.stringify({
+        error: "Não foi possível salvar o diagnóstico. Tente novamente em instantes.",
+        details: reportErr?.message,
+      }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const newReportId = inserted.id;
 
     // Grava cada main_problem em recommendation_history e devolve os IDs
     // para o frontend amarrar feedback a cada recomendação.
@@ -505,7 +519,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
         .insert(rows)
         .select("id, rule_id");
       if (rhErr) {
-        console.warn("rec_history insert failed", rhErr);
+        console.error(JSON.stringify({ evt: "ai_consult.persist_failed", table: "recommendation_history", store_id: storeId, code: rhErr.code, message: rhErr.message }));
       } else if (insertedRecs?.length) {
         diagnosis.main_problems = diagnosis.main_problems.map((p: any, i: number) => ({
           ...p,
@@ -538,7 +552,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
           });
         if (planRows.length) {
           const { error: apErr } = await supabase.from("action_plans").insert(planRows);
-          if (apErr) console.warn("action_plans insert failed", apErr);
+          if (apErr) console.error(JSON.stringify({ evt: "ai_consult.persist_failed", table: "action_plans", store_id: storeId, code: apErr.code, message: apErr.message }));
         }
       }
     }
