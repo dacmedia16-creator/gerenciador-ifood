@@ -50,11 +50,26 @@ const TOOLTIP_PORTAL = "Você encontra essa informação no Portal do Parceiro i
 
 export const STEPS: StepDef[] = [
   // ============================================================
-  // 1) SOBRE A LOJA
+  // 1) PRINTS — primeiro, para a IA extrair dados e pré-preencher o resto
+  // ============================================================
+  {
+    key: "prints",
+    index: 1,
+    title: "Envie prints da sua loja",
+    subtitle: "Opcional, mas acelera muito o diagnóstico",
+    intro:
+      "Envie prints do iFood, 99Food, WhatsApp, Instagram, cardápio, avaliações, indicadores ou faturamento — o que tiver. A IA lê cada print e já preenche as próximas etapas pra você. Pode pular se preferir responder do zero.",
+    questions: [
+      { key: "uploads", label: "Prints enviados", type: "prints" },
+    ],
+  },
+
+  // ============================================================
+  // 2) SOBRE A LOJA
   // ============================================================
   {
     key: "basic",
-    index: 1,
+    index: 2,
     title: "Sobre a sua loja",
     subtitle: "Vamos começar com o básico",
     intro:
@@ -172,7 +187,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "storefront",
-    index: 2,
+    index: 3,
     title: "Como o cliente vê sua loja",
     subtitle: "A primeira impressão no app",
     questions: [
@@ -306,7 +321,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "menu",
-    index: 3,
+    index: 4,
     title: "Cardápio e fotos",
     subtitle: "Como seus produtos aparecem",
     questions: [
@@ -365,7 +380,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "products",
-    index: 4,
+    index: 5,
     title: "Seus produtos mais vendidos",
     subtitle: "Cadastre só os 3 principais",
     description:
@@ -380,7 +395,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "pricing",
-    index: 5,
+    index: 6,
     title: "Preço e lucro",
     subtitle: "Você está ganhando dinheiro de verdade?",
     questions: [
@@ -412,7 +427,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "combos",
-    index: 6,
+    index: 7,
     title: "Combos e valor por pedido",
     subtitle: "Como fazer o cliente gastar um pouco mais",
     questions: [
@@ -443,7 +458,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "delivery",
-    index: 7,
+    index: 8,
     title: "Entrega e qualidade",
     subtitle: "O pedido chega bem?",
     questions: [
@@ -516,7 +531,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "operations",
-    index: 8,
+    index: 9,
     title: "Operação e equipe",
     subtitle: "Onde aperta no dia a dia",
     questions: [
@@ -572,7 +587,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "reviews",
-    index: 9,
+    index: 10,
     title: "Avaliações e reclamações",
     subtitle: "O que os clientes mais falam",
     questions: [
@@ -623,7 +638,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "ads",
-    index: 10,
+    index: 11,
     title: "Anúncios e promoções",
     subtitle: "Como você atrai cliente novo",
     questions: [
@@ -737,7 +752,7 @@ export const STEPS: StepDef[] = [
   // ============================================================
   {
     key: "loyalty",
-    index: 11,
+    index: 12,
     title: "Fazer o cliente voltar",
     subtitle: "Recompra é mais barato que cliente novo",
     questions: [
@@ -759,22 +774,6 @@ export const STEPS: StepDef[] = [
       },
     ],
   },
-
-  // ============================================================
-  // 12) PRINTS (opcional — pode pular)
-  // ============================================================
-  {
-    key: "prints",
-    index: 12,
-    title: "Envie prints da sua loja",
-    subtitle: "Opcional, mas acelera muito o diagnóstico",
-    intro:
-      "Mande print do iFood, 99Food, WhatsApp, Instagram, cardápio, avaliações, indicadores, faturamento — o que tiver. A IA lê cada print e extrai os dados automaticamente. Pode pular se preferir só responder o formulário.",
-    questions: [
-      { key: "uploads", label: "Prints enviados", type: "prints" },
-    ],
-  },
-
   // ============================================================
   // 13) META PRINCIPAL DA LOJA
   // ============================================================
