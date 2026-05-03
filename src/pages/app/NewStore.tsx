@@ -31,8 +31,8 @@ export default function NewStore() {
     const { data, error } = await supabase.from("stores").insert(payload).select().single();
     setLoading(false);
     if (error) return toast.error(error.message);
-    toast.success("Loja cadastrada!");
-    navigate(`/app/stores/${data.id}`);
+    toast.success("Loja cadastrada! Vamos analisar agora.");
+    navigate(`/app/diagnosis/new?storeId=${data.id}`);
   };
 
   return (
