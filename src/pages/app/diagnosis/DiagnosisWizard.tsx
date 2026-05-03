@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
+import { syncDiagnosisProductsToStore } from "@/lib/diagnosis/syncProducts";
 
 function filterStepsByMode(mode: string | null) {
   if (mode === "prints") {
@@ -121,6 +122,14 @@ export default function DiagnosisWizard() {
   };
 
   const onNext = async () => {
+    // Sincroniza produtos do diagnóstico para a tabela `products` da loja
+    if (step?.key === "products" && session?.store_id && Array.isArray(values.items)) {
+      try {
+        await syncDiagnosisProductsToStore(session.store_id, values.items);
+      } catch (e) {
+        console.error("syncDiagnosisProductsToStore", e);
+      }
+    }
     if (currentIndex >= activeSteps.length - 1) {
       navigate(`/app/diagnosis/${sessionId}/review`);
       return;
