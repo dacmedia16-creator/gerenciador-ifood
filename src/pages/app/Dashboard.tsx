@@ -12,6 +12,7 @@ import { calculateScore } from "@/lib/diagnostics/engine";
 import { Plus, Sparkles, Store, BarChart3, Star, Clock, AlertTriangle, DollarSign, Users, RefreshCw } from "lucide-react";
 import { refreshSystem } from "@/lib/system/refresh";
 import { DashboardSkeleton } from "@/components/DashboardSkeleton";
+import { DoFirstBlock } from "@/components/dashboard/DoFirstBlock";
 
 const DashboardCharts = lazy(() => import("@/components/dashboard/DashboardCharts"));
 
@@ -192,7 +193,7 @@ export default function Dashboard() {
             <span className="hidden sm:inline">Atualizar sistema</span>
           </Button>
           <Button size="sm" onClick={() => navigate("/app/diagnosis/new?new=1")} className="flex-1 sm:flex-none">
-            <Sparkles className="h-4 w-4 mr-1" /> Novo Diagnóstico
+            <Sparkles className="h-4 w-4 mr-1" /> Analisar minha loja
           </Button>
         </div>
       </div>
@@ -223,7 +224,7 @@ export default function Dashboard() {
       <Card className="p-4 sm:p-6 shadow-card">
         <div className="grid md:grid-cols-4 gap-4 sm:gap-6 items-center">
           <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-2">Score geral</p>
+            <p className="text-sm text-muted-foreground mb-2">Sua nota geral</p>
             <div className="text-5xl sm:text-6xl font-bold text-gradient">{overall}</div>
             <ScoreBadge score={overall} />
           </div>
@@ -239,6 +240,9 @@ export default function Dashboard() {
           </div>
         </div>
       </Card>
+
+      {/* Faça isso primeiro — top 3 ações priorizadas */}
+      <DoFirstBlock storeId={store.id} />
 
       {/* Perguntas que este painel responde — atalhos para o dono */}
       <Card className="p-4 shadow-card">
@@ -278,7 +282,7 @@ export default function Dashboard() {
           <Button variant="link" size="sm" asChild className="px-0"><Link to={`/app/stores/${store.id}/diagnostics`}>Ver todos →</Link></Button>
         </Card>
         <Card className="p-4 shadow-card">
-          <h3 className="font-semibold mb-3">Plano de melhoria da sua loja</h3>
+          <h3 className="font-semibold mb-3">O que fazer para crescer</h3>
           {actions.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma ação pendente.</p> : (
             <ul className="space-y-2">
               {actions.slice(0, 5).map((a: any) => (
