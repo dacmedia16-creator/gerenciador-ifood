@@ -18,6 +18,7 @@ export type FieldType =
   | "products"
   | "competitors"
   | "files"
+  | "prints"
   | "info";
 
 export interface Question {
