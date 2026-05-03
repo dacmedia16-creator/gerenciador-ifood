@@ -17,51 +17,75 @@ export type Database = {
       action_plans: {
         Row: {
           area: string | null
+          completed_at: string | null
           created_at: string
           description: string | null
           diagnostic_id: string | null
           due_date: string | null
           effort: string | null
+          example: string | null
+          how_to_apply: string | null
+          how_to_measure: string | null
           id: string
           impact: string | null
           priority: string | null
           recommendation_id: string | null
           responsible: string | null
+          source: string | null
+          source_ref: string | null
+          started_at: string | null
           status: string
           store_id: string
           title: string
+          why_it_matters: string | null
         }
         Insert: {
           area?: string | null
+          completed_at?: string | null
           created_at?: string
           description?: string | null
           diagnostic_id?: string | null
           due_date?: string | null
           effort?: string | null
+          example?: string | null
+          how_to_apply?: string | null
+          how_to_measure?: string | null
           id?: string
           impact?: string | null
           priority?: string | null
           recommendation_id?: string | null
           responsible?: string | null
+          source?: string | null
+          source_ref?: string | null
+          started_at?: string | null
           status?: string
           store_id: string
           title: string
+          why_it_matters?: string | null
         }
         Update: {
           area?: string | null
+          completed_at?: string | null
           created_at?: string
           description?: string | null
           diagnostic_id?: string | null
           due_date?: string | null
           effort?: string | null
+          example?: string | null
+          how_to_apply?: string | null
+          how_to_measure?: string | null
           id?: string
           impact?: string | null
           priority?: string | null
           recommendation_id?: string | null
           responsible?: string | null
+          source?: string | null
+          source_ref?: string | null
+          started_at?: string | null
           status?: string
           store_id?: string
           title?: string
+          why_it_matters?: string | null
         }
         Relationships: [
           {
@@ -86,6 +110,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      action_updates: {
+        Row: {
+          action_id: string
+          created_at: string
+          has_new_data: boolean
+          has_new_print: boolean
+          id: string
+          metrics_delta: Json
+          store_id: string
+          user_id: string
+          what_changed: string | null
+        }
+        Insert: {
+          action_id: string
+          created_at?: string
+          has_new_data?: boolean
+          has_new_print?: boolean
+          id?: string
+          metrics_delta?: Json
+          store_id: string
+          user_id: string
+          what_changed?: string | null
+        }
+        Update: {
+          action_id?: string
+          created_at?: string
+          has_new_data?: boolean
+          has_new_print?: boolean
+          id?: string
+          metrics_delta?: Json
+          store_id?: string
+          user_id?: string
+          what_changed?: string | null
+        }
+        Relationships: []
       }
       campaigns: {
         Row: {
@@ -429,6 +489,54 @@ export type Database = {
           },
         ]
       }
+      diagnosis_uploads: {
+        Row: {
+          classification: string
+          created_at: string
+          error: string | null
+          extracted_text: string | null
+          id: string
+          mime_type: string | null
+          session_id: string | null
+          status: string
+          storage_path: string
+          store_id: string | null
+          structured_data: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          classification?: string
+          created_at?: string
+          error?: string | null
+          extracted_text?: string | null
+          id?: string
+          mime_type?: string | null
+          session_id?: string | null
+          status?: string
+          storage_path: string
+          store_id?: string | null
+          structured_data?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          classification?: string
+          created_at?: string
+          error?: string | null
+          extracted_text?: string | null
+          id?: string
+          mime_type?: string | null
+          session_id?: string | null
+          status?: string
+          storage_path?: string
+          store_id?: string | null
+          structured_data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       diagnostics: {
         Row: {
           area: string
@@ -487,6 +595,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      evolution_snapshots: {
+        Row: {
+          created_at: string
+          goal_progress: number | null
+          id: string
+          kpis: Json
+          score: number | null
+          scores_by_area: Json
+          snapshot_date: string
+          store_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal_progress?: number | null
+          id?: string
+          kpis?: Json
+          score?: number | null
+          scores_by_area?: Json
+          snapshot_date?: string
+          store_id: string
+        }
+        Update: {
+          created_at?: string
+          goal_progress?: number | null
+          id?: string
+          kpis?: Json
+          score?: number | null
+          scores_by_area?: Json
+          snapshot_date?: string
+          store_id?: string
+        }
+        Relationships: []
       }
       knowledge_base: {
         Row: {
@@ -1045,6 +1186,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      store_goals: {
+        Row: {
+          created_at: string
+          current_value: number | null
+          deadline: string | null
+          goal_type: string
+          id: string
+          metric_key: string | null
+          notes: string | null
+          priority: string | null
+          status: string
+          store_id: string
+          target_value: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_value?: number | null
+          deadline?: string | null
+          goal_type: string
+          id?: string
+          metric_key?: string | null
+          notes?: string | null
+          priority?: string | null
+          status?: string
+          store_id: string
+          target_value?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_value?: number | null
+          deadline?: string | null
+          goal_type?: string
+          id?: string
+          metric_key?: string | null
+          notes?: string | null
+          priority?: string | null
+          status?: string
+          store_id?: string
+          target_value?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       store_memory: {
         Row: {
