@@ -186,6 +186,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
+    const sessionId: string | undefined = body?.sessionId;
     const model: string = body?.model ?? "google/gemini-2.5-pro";
     if (!storeId) {
       return new Response(JSON.stringify({ error: "storeId é obrigatório" }), {
@@ -208,7 +209,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ===== Camada 1: evidências (motor de regras) =====
+    // ===== Camada 0: dados da sessão do funil (respostas + prints) =====
+    let sessionEvidences: RuleEvidence[] = [];
+    let sessionDebug: Record<string, any> = {};
+    if (sessionId) {
+      const [answersR, uploadsR] = await Promise.all([
+        supabase.from("diagnosis_answers")
+          .select("step_key, question_key, answer_value")
+          .eq("session_id", sessionId),
+        supabase.from("diagnosis_uploads")
+          .select("status, classification, structured_data")
+          .eq("session_id", sessionId),
+      ]);
+      const { evidences } = evidencesFromSession(
+        (answersR.data ?? []) as any,
+        (uploadsR.data ?? []) as any,
+      );
+      sessionEvidences = evidences;
+      sessionDebug = {
+        answers_count: answersR.data?.length ?? 0,
+        uploads_count: uploadsR.data?.length ?? 0,
+        session_evidences: evidences.length,
+      };
+      console.log(JSON.stringify({ evt: "ai_consult.session", session_id: sessionId, ...sessionDebug }));
+    }
+
+    // ===== Camada 1: evidências (motor de regras sobre dados da loja) =====
     const storeEvidences = evidencesFromStoreData({
       store: storeR.data,
       metrics: metricsR.data ?? [],
@@ -216,8 +242,11 @@ Deno.serve(async (req) => {
       reviews: reviewsR.data ?? [],
       competitors: competitorsR.data ?? [],
     });
-    const funnelEvidences: RuleEvidence[] = (reportR.data?.report_data as any)?.rule_evidences ?? [];
-    const ruleEvidences = mergeEvidences(funnelEvidences, storeEvidences);
+    const reportEvidences: RuleEvidence[] = (reportR.data?.report_data as any)?.rule_evidences ?? [];
+    const ruleEvidences = mergeEvidences(
+      mergeEvidences(sessionEvidences, reportEvidences),
+      storeEvidences,
+    );
     const validRuleIds = new Set(ruleEvidences.map((e) => e.rule_id));
 
     // ===== Camada 2: memória da loja =====
