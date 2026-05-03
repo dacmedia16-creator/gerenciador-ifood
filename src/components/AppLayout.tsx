@@ -1,11 +1,14 @@
-import { Outlet, Navigate, useLocation } from "react-router-dom";
+import { Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { MessageSquare } from "lucide-react";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
@@ -20,6 +23,8 @@ export default function AppLayout() {
     return <Navigate to={`/auth?redirect=${redirect}`} replace />;
   }
 
+  const isChatPage = location.pathname.startsWith("/app/chat");
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-muted/30">
@@ -32,6 +37,17 @@ export default function AppLayout() {
           <main className="flex-1 p-4 md:p-6 overflow-auto">
             <Outlet />
           </main>
+
+          {!isChatPage && (
+            <Button
+              onClick={() => navigate("/app/chat")}
+              size="icon"
+              className="fixed bottom-5 right-5 h-14 w-14 rounded-full shadow-lg z-40 no-print"
+              aria-label="Abrir chat com o Gestor IA"
+            >
+              <MessageSquare className="h-6 w-6" />
+            </Button>
+          )}
         </div>
       </div>
     </SidebarProvider>
