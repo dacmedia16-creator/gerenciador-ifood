@@ -1,5 +1,6 @@
 // Process a print uploaded by the user: download from storage, send to Lovable AI
-// (multimodal), AUTO-classify the print and extract structured data in a single call.
+// (multimodal), AUTO-classify the print and extract the largest set of structured
+// fields possible — feeding the diagnosis form automatically.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 
@@ -19,45 +20,103 @@ const CATEGORIES = [
   "outro",
 ] as const;
 
-// Union schema — todos os campos possíveis de qualquer categoria.
-// A IA preenche apenas os que conseguir ver. additionalProperties = false
-// para evitar lixo, mas todos os campos são opcionais.
+// Schema unificado: a IA preenche apenas o que enxerga. Todos os campos opcionais.
 const UNION_PROPS = {
-  // faturamento
-  revenue: { type: "number", description: "Faturamento total no período (R$)" },
-  orders: { type: "number" },
-  average_ticket: { type: "number" },
-  period: { type: "string" },
-  // indicadores / avaliacoes
+  // Identidade da loja
+  store_name: { type: "string", description: "Nome da loja como aparece no app" },
+  food_category: {
+    type: "string",
+    enum: ["Lanches", "Pizzaria", "Açaí", "Brasileira", "Japonesa", "Marmita", "Doces", "Saudável", "Outros"],
+    description: "Tipo de comida vendida",
+  },
+  city: { type: "string" },
+  neighborhood: { type: "string" },
+  platform: {
+    type: "string",
+    enum: ["iFood", "Rappi", "WhatsApp", "App próprio", "Outros"],
+  },
+  opening_hours_text: { type: "string", description: "Horário de funcionamento ex: 'Seg-Dom 18h às 23h'" },
+
+  // Faturamento
+  revenue: { type: "number", description: "Faturamento em R$ no período mostrado" },
+  orders: { type: "number", description: "Quantidade de pedidos no período" },
+  average_ticket: { type: "number", description: "Ticket médio em R$" },
+  period: { type: "string", description: "Ex.: '7 dias', 'Mês 10/2025'" },
+
+  // Vitrine / loja
   rating: { type: "number", description: "Nota da loja (0-5)" },
-  reviews_count: { type: "number" },
-  cancellation_rate: { type: "number", description: "% de cancelamentos" },
-  delivery_time_min: { type: "number" },
-  prep_time_min: { type: "number" },
-  average_rating: { type: "number" },
-  total_reviews: { type: "number" },
-  top_complaints: { type: "array", items: { type: "string" } },
-  top_compliments: { type: "array", items: { type: "string" } },
-  // cardapio / produto
-  products_visible: { type: "number" },
-  products_with_photo: { type: "number" },
+  reviews_count: { type: "number", description: "Quantidade total de avaliações" },
+  has_cover: { type: "boolean", description: "Tem foto de capa?" },
+  has_logo: { type: "boolean", description: "Tem logo visível?" },
+  looks_professional: { type: "string", enum: ["sim", "medio", "nao"] },
+  delivery_fee: { type: "number", description: "Taxa de entrega em R$ (0 se 'Grátis')" },
+  promised_delivery_time_min: { type: "number", description: "Tempo prometido de entrega em minutos (use o ponto médio se for faixa)" },
+
+  // Operação
+  delivery_time_min: { type: "number", description: "Tempo REAL de entrega em minutos" },
+  prep_time_min: { type: "number", description: "Tempo de preparo da cozinha em minutos" },
+  cancellation_rate: { type: "number", description: "% de cancelamento" },
+
+  // Cardápio
+  products_visible: { type: "number", description: "Total de produtos visíveis no cardápio" },
+  products_with_photo: { type: "number", description: "Quantos produtos têm foto" },
+  products_with_description: { type: "number" },
   has_combos: { type: "boolean" },
-  name: { type: "string" },
-  price: { type: "number" },
-  has_photo: { type: "boolean" },
-  has_description: { type: "boolean" },
-  description_quality: { type: "string", enum: ["boa", "media", "ruim"] },
-  // promocoes
+  has_addons: { type: "boolean", description: "Permite adicionais (queijo extra, bacon etc.)?" },
+  has_drinks: { type: "boolean" },
+  has_desserts: { type: "boolean" },
+  menu_organized: { type: "string", enum: ["sim", "medio", "nao"], description: "Cardápio organizado em categorias claras?" },
+
+  // Top produtos detectados (até 3)
+  top_products: {
+    type: "array",
+    maxItems: 3,
+    items: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        price: { type: "number" },
+        has_photo: { type: "boolean" },
+        has_description: { type: "boolean" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+  },
+
+  // Avaliações
+  top_complaints: {
+    type: "array",
+    maxItems: 5,
+    items: { type: "string" },
+    description: "Principais reclamações em palavras curtas (frio, atraso, errado, embalagem, pequeno...)",
+  },
+  top_compliments: { type: "array", maxItems: 5, items: { type: "string" } },
+  complaint_cold: { type: "boolean", description: "Há reclamação recorrente de comida fria?" },
+  complaint_late: { type: "boolean" },
+  complaint_wrong: { type: "boolean" },
+  complaint_packaging: { type: "boolean" },
+  complaint_small: { type: "boolean" },
+  sample_negative_reviews: {
+    type: "array",
+    maxItems: 5,
+    items: { type: "string" },
+    description: "Texto literal de avaliações negativas vistas no print",
+  },
+
+  // Promoções / ads
   has_coupon: { type: "boolean" },
   has_free_delivery: { type: "boolean" },
   discount_percent: { type: "number" },
-  // loja
-  has_cover: { type: "boolean" },
-  has_logo: { type: "boolean" },
-  looks_professional: { type: "string", enum: ["sim", "medio", "nao"] },
-  // genérico
-  price_range: { type: "string" },
-  notes: { type: "string", description: "Observações livres sobre o print" },
+  uses_ifood_ads: { type: "boolean" },
+
+  // Concorrente (quando o print for de outra loja)
+  competitor_name: { type: "string" },
+  competitor_price_range: { type: "string", enum: ["$", "$$", "$$$"] },
+
+  // Texto livre para IA capturar valor diferencial visível (slogan, descrição da loja)
+  store_unique_value_text: { type: "string", description: "Frase de posicionamento/slogan visível" },
+  notes: { type: "string", description: "Observações livres" },
 };
 
 Deno.serve(async (req) => {
@@ -80,7 +139,6 @@ Deno.serve(async (req) => {
       .single();
     if (uErr || !upload) throw new Error("Upload não encontrado");
 
-    // Download file from storage
     const { data: file, error: dErr } = await admin.storage
       .from("diagnosis-uploads")
       .download(upload.storage_path);
@@ -96,8 +154,6 @@ Deno.serve(async (req) => {
     const mime = upload.mime_type || "image/png";
     const dataUrl = `data:${mime};base64,${b64}`;
 
-    // Se o usuário escolheu manualmente algo diferente de "outro", respeitamos.
-    // Caso contrário (default "outro"), pedimos pra IA classificar.
     const userCls = upload.classification || "outro";
     const shouldAutoClassify = userCls === "outro";
 
@@ -105,7 +161,7 @@ Deno.serve(async (req) => {
       type: "function",
       function: {
         name: "analyze_print",
-        description: "Classifica o print de delivery e extrai os dados visíveis.",
+        description: "Classifica o print de delivery e extrai o máximo de dados visíveis para preencher um formulário.",
         parameters: {
           type: "object",
           properties: {
@@ -113,14 +169,16 @@ Deno.serve(async (req) => {
               type: "string",
               enum: [...CATEGORIES],
               description:
-                "Tipo do print: faturamento (relatório de vendas), indicadores (operação: tempo, cancelamento), avaliacoes (lista/nota de avaliações), cardapio (lista de produtos), produto (página de um item), promocoes (cupom/desconto), concorrentes (loja de outro), loja (capa/perfil da própria loja), outro.",
+                "Tipo do print: faturamento, indicadores, avaliacoes, cardapio, produto, promocoes, concorrentes, loja, outro.",
             },
             extracted_text: { type: "string", description: "Todo texto visível no print" },
             structured: {
               type: "object",
               properties: UNION_PROPS,
               additionalProperties: false,
-              description: "Preencha APENAS os campos que aparecem no print. Não invente.",
+              description:
+                "Preencha TODOS os campos visíveis no print. NUNCA invente. Se não enxergar, omita o campo. " +
+                "Tempos: converta faixas para o ponto médio (ex.: '30-40 min' = 35). Taxa 'Grátis' = 0.",
             },
             confidence: { type: "string", enum: ["alta", "media", "baixa"] },
           },
@@ -131,12 +189,10 @@ Deno.serve(async (req) => {
     };
 
     const systemMsg = shouldAutoClassify
-      ? "Você analisa prints de painéis de delivery (iFood, Rappi, 99Food, WhatsApp, Instagram). Primeiro IDENTIFIQUE o tipo do print (category), depois EXTRAIA os dados visíveis. NUNCA invente números — se não estiver na imagem, omita o campo."
-      : `Você analisa prints de painéis de delivery. O usuário já classificou como '${userCls}'. Use essa categoria e extraia os dados visíveis. NUNCA invente números — se não estiver na imagem, omita o campo.`;
+      ? "Você analisa prints de painéis de delivery (iFood, Rappi, 99Food, WhatsApp, Instagram). Identifique a categoria do print E extraia o MÁXIMO de dados visíveis para preencher um formulário de diagnóstico. Preencha TODOS os campos que enxergar — nome da loja, nota, preços, combos, reclamações, etc. NUNCA invente."
+      : `Você analisa prints de painéis de delivery. Categoria: '${userCls}'. Extraia o MÁXIMO de dados visíveis. NUNCA invente.`;
 
-    const userText = shouldAutoClassify
-      ? "Identifique a categoria deste print e extraia todos os dados visíveis (números, notas, nomes, preços, flags)."
-      : `Categoria já definida: ${userCls}. Extraia todos os dados visíveis.`;
+    const userText = "Identifique a categoria e extraia TODOS os dados que conseguir ver: identidade da loja, números, nota, avaliações, produtos, combos, promoções, reclamações. Preencha o máximo de campos.";
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

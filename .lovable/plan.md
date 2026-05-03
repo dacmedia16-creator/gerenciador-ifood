@@ -1,56 +1,63 @@
-## Diagnóstico
+## Foco: prints preenchem TUDO que dá pra preencher
 
-Verifiquei os últimos 10 prints enviados no banco: **todos com `classification = "outro"`**. Isso quebra a cadeia inteira:
+Hoje a IA até lê os prints, mas só mapeio ~10 campos numéricos (rating, faturamento, ticket, tempo de entrega…). O formulário tem ~80 perguntas — texto, sim/não, multiselect, listas — e quase nenhuma é alimentada pelos prints.
 
-1. `process-print` recebe `classification = "outro"` → usa o schema só com `notes` (texto livre).
-2. `structured_data` fica praticamente vazio (só `notes` + `_confidence`).
-3. `printMapper.ts` ignora prints `outro` → nenhuma proposal é gerada.
-4. O `useEffect` de auto-aplicar no `DiagnosisWizard` não tem nada para aplicar → nada preenche, nada navega.
+Vou alargar a ponte inteira: **schema da IA → extração → mapeamento → preenchimento automático**.
 
-A IA está lendo os prints (as `notes` mostram que reconheceu loja, avaliações, cardápio, faturamento, etc.), mas como o pipeline depende da classificação manual, o conteúdo nunca vira campo estruturado.
+## O que vai mudar
 
-## Solução: auto-classificação na edge function
+### 1. `process-print` (edge function): extrair muito mais
 
-Vou fazer o `process-print` **classificar a imagem automaticamente** antes de extrair, em vez de depender do `defaultClassification` do uploader.
+Adiciono ao schema da IA todos os campos que conseguem ser inferidos visualmente de prints de iFood/Rappi/WhatsApp/Instagram:
 
-### Mudanças
+- **Identidade**: nome da loja, categoria de comida, cidade, bairro, horário de funcionamento, plataforma.
+- **Vitrine**: nota, qtd avaliações, tem capa, tem logo, taxa de entrega, tempo prometido, parece profissional.
+- **Cardápio**: total de produtos, sem foto, sem descrição, tem combos, tem adicionais, tem bebidas, tem sobremesa, organização em categorias.
+- **Top 3 produtos**: nome, preço, tem foto, tem descrição (lista de até 3).
+- **Operação/entrega**: tempo real de entrega, tempo de preparo, taxa de cancelamento (%), comida quente, atrasos frequentes.
+- **Avaliações**: top 3 reclamações + top 3 elogios (já vem do print "avaliacoes"), com flags booleanas para `complaint_cold/late/wrong/packaging/small`.
+- **Faturamento**: receita, pedidos, ticket médio, período.
+- **Promoções/ads**: tem cupom, frete grátis, anuncia, % desconto.
 
-**1. `supabase/functions/process-print/index.ts`**
-- Antes da extração, fazer uma chamada curta à IA (ou incluir no mesmo prompt via tool) pedindo para escolher a classificação correta dentre o enum: `faturamento | indicadores | avaliacoes | cardapio | produto | promocoes | concorrentes | loja | outro`.
-- Usar a classificação detectada para escolher o schema certo de extração.
-- Salvar a classificação detectada em `diagnosis_uploads.classification` (sobrescrevendo o "outro" inicial).
-- Manter o respeito à classificação se o usuário escolheu manualmente algo diferente de "outro" (regra: só auto-classifica quando vier "outro").
+Tudo continua opcional — a IA preenche só o que vê. Mantenho a auto-classificação que acabamos de criar.
 
-Implementação prática: uma única chamada à IA com **duas tools**:
-- `classify_print(category, confidence)` — IA chama primeiro
-- depois, no servidor, escolho o schema certo e faço a segunda chamada `extract_print_data` com o schema correspondente.
+### 2. `printMapper.ts`: mapear pra TODOS os tipos de campo
 
-Mais simples e barato: **uma chamada só** com prompt: "Primeiro identifique a categoria do print. Depois extraia os campos relevantes." Tool única com `category` + `structured` (union de todos os schemas, com `additionalProperties: true` no `structured` para aceitar qualquer campo dos 9 schemas). O servidor depois filtra/normaliza pela `category` retornada.
+Hoje só cobre `number → bucket`. Vou adicionar:
 
-Vou seguir essa segunda abordagem (uma chamada só, mais rápida e mais barata).
+- **String → bucket de select** (ex.: `"Lanches"` da loja → `category` no formulário).
+- **Booleano → yesno** (já tem, expandir uso).
+- **Texto → preenche textarea** (ex.: `unique_value`, `notes`, `biggest_problem` quando IA inferir do contexto).
+- **Multiselect → array** (ex.: top reclamações detectadas → `main_complaints` + flags `complaint_*`).
+- **Lista → top 3 produtos** (alimenta a etapa `products.items` automaticamente quando o print é cardápio/loja com itens em destaque).
+- **Mapeamento por horário/dias da semana** quando o print mostra horário de funcionamento.
+- **Conversão automática**: tempo "30-40 min" → 35; rating "4.9" → bucket `4.85`; taxa "Grátis" → 0.
 
-**2. `src/lib/diagnosis/printMapper.ts`**
-- Ampliar o mapeamento para também tratar `produto` e `promocoes` (hoje são ignorados).
-- Garantir que se a IA devolver campos válidos mesmo em `outro`, eles ainda sejam aproveitados (fallback: tentar mapear todos os campos conhecidos independente da classificação).
+### 3. Auto-aplicar mais agressivo no `DiagnosisWizard`
 
-**3. `src/components/diagnosis/PrintUploader.tsx`**
-- Mudar o texto do badge "Analisando…" para deixar claro que a IA também está identificando o tipo do print.
-- Quando o backend devolver classificação detectada, refletir no `<select>` automaticamente (já acontece via `load()` após o `invoke`, só preciso garantir que o select use o valor atualizado).
+Já temos auto-aplicar + auto-navegar. Vou:
 
-### Resultado esperado
+- Mostrar contador melhor: *"IA preencheu 23 campos a partir de 5 prints"*.
+- Garantir que mesmo quando o usuário troca a `classification` manualmente no card, o re-processamento dispara novo auto-apply.
+- Após auto-aplicar, se TUDO ficou completo, ir direto pra `/review` em vez de só pular um step.
 
-```text
-Usuário envia 8 prints sem classificar
-  → process-print classifica cada um (cardapio, avaliacoes, loja…)
-  → extrai os campos certos (rating, products_visible, has_combos…)
-  → printMapper gera proposals
-  → DiagnosisWizard auto-aplica e pula para o próximo step incompleto
-```
+### 4. Card de feedback no PrintUploader
 
-### Arquivos afetados
+Logo abaixo dos prints, mostrar lista enxuta: *"Detectei: nota 4.9, 334 avaliações, taxa grátis, combos sim, top reclamação: comida fria…"*. Dá confiança ao usuário e deixa ele revisar rapidinho.
 
-- `supabase/functions/process-print/index.ts` — auto-classificação + extração combinadas
-- `src/lib/diagnosis/printMapper.ts` — mapeamentos para `produto` e `promocoes`, fallback
-- `src/components/diagnosis/PrintUploader.tsx` — micro-ajustes de UX
+## Arquivos afetados
 
-Sem mudanças de schema no banco.
+- `supabase/functions/process-print/index.ts` — schema gigante + prompt mais explícito
+- `src/lib/diagnosis/printMapper.ts` — handlers de string/array/texto/lista
+- `src/pages/app/diagnosis/DiagnosisWizard.tsx` — auto-apply mais robusto + feedback
+- `src/components/diagnosis/PrintUploader.tsx` — resumo do que foi detectado
+
+Sem mudanças no banco. Só código.
+
+## O que NÃO vou fazer agora
+
+- Mexer no visual geral (você marcou "feio", mas no foco imediato escolheu prints).
+- Mexer em Dashboard/Minha Loja (vai ser o próximo passo natural — quanto mais dado vier dos prints, mais preenchidas essas telas ficam, então isso já melhora indiretamente).
+- Adicionar etapas novas — só preencher melhor as existentes.
+
+Posso seguir?
