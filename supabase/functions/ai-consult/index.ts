@@ -519,7 +519,7 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
         .insert(rows)
         .select("id, rule_id");
       if (rhErr) {
-        console.warn("rec_history insert failed", rhErr);
+        console.error(JSON.stringify({ evt: "ai_consult.persist_failed", table: "recommendation_history", store_id: storeId, code: rhErr.code, message: rhErr.message }));
       } else if (insertedRecs?.length) {
         diagnosis.main_problems = diagnosis.main_problems.map((p: any, i: number) => ({
           ...p,
