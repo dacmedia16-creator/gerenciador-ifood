@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore, scoreLabel } from "@/lib/diagnostics/engine";
 import { SeverityBadge, PriorityBadge, ScoreBadge } from "@/components/StatusBadges";
-import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight, History, Eye } from "lucide-react";
+import { Printer, Download, Sparkles, FileText, AlertTriangle, CheckCircle2, ArrowRight, History, Eye, ChevronDown } from "lucide-react";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { LoadingState } from "@/components/LoadingState";
 import { EmptyState } from "@/components/EmptyState";
