@@ -1,129 +1,116 @@
+# Plano: Dashboard reorganizado + Plano de Ação reestruturado
 
-# Plano de implementação — Simplificação do Gestor IA
+## 1. Migration (Supabase)
 
-Três frentes paralelas, sem quebrar features existentes. Tudo o que sai do sidebar continua existindo nas rotas — apenas deixa de ser exibido para usuários comuns.
+Adicionar campos opcionais (nullable) sem quebrar dados existentes:
 
----
+```sql
+-- action_plans: novos campos para o plano reestruturado
+ALTER TABLE public.action_plans
+  ADD COLUMN IF NOT EXISTS impacto_financeiro numeric,
+  ADD COLUMN IF NOT EXISTS dificuldade text,        -- 'facil' | 'medio' | 'dificil'
+  ADD COLUMN IF NOT EXISTS tempo_estimado text,     -- ex: '15 min', 'Esta semana'
+  ADD COLUMN IF NOT EXISTS categoria text,          -- ex: 'Cardápio'
+  ADD COLUMN IF NOT EXISTS feedback_text text,
+  ADD COLUMN IF NOT EXISTS has_feedback boolean NOT NULL DEFAULT false;
 
-## PARTE 1 — Funil de diagnóstico em 5 etapas
+-- weekly_snapshots: tabela nova para o check-in semanal
+CREATE TABLE IF NOT EXISTS public.weekly_snapshots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  store_id uuid NOT NULL,
+  week_start date NOT NULL,
+  rating numeric,
+  cancellation_rate numeric,
+  weekly_revenue numeric,
+  score integer,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (store_id, week_start)
+);
+ALTER TABLE public.weekly_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY weekly_snapshots_all_own ON public.weekly_snapshots
+  FOR ALL TO authenticated
+  USING (auth.uid() = user_id AND public.has_store_access(store_id))
+  WITH CHECK (auth.uid() = user_id AND public.has_store_access(store_id));
+```
 
-### Estratégia
-Criar um novo wizard "Express" como caminho padrão, preservando o wizard de 16 etapas como fluxo de "Aprofundamento" opcional pós-diagnóstico. Hoje já existe `src/pages/app/diagnosis/DiagnosisExpress.tsx` e `DiagnosisWizard.tsx` — vamos reaproveitar.
+Não alterar tabelas existentes além das colunas adicionais. Sem mudança em RLS de `action_plans`.
 
-### Mudanças
+## 2. Dashboard (`src/pages/app/Dashboard.tsx`)
 
-**1. Novo wizard de 5 etapas**
-- Reescrever `src/pages/app/diagnosis/DiagnosisExpress.tsx` com 5 steps + 1 tela intermediária de print.
-- Estado local em React, persistência por etapa em `diagnosis_sessions` (atualizando `current_step`) e `diagnosis_answers` (uma linha por `question_key`).
-- Header com `<Progress />` mostrando "Etapa X de 5" + título/subtítulo.
-- Botões: "Voltar" (a partir da 2), "Continuar" (primário, altura 48px).
-- Mobile-first: layout em coluna, inputs grandes.
+Substituir o conteúdo após o header (loja/seletor) pelos 4 blocos abaixo. **Manter** o header existente (seletor de loja, botão Nova loja, botão Atualizar sistema, botão Analisar minha loja) e o card de "Diagnóstico em andamento" (`draftSession`). **Remover** os blocos `KPI grid antigo`, `DoFirstBlock`, `MoneyLeakBlock`, "Perguntas que este painel responde", `DashboardCharts`, e os 2 cards finais de "alertas críticos" / "ações para crescer".
 
-**2. Etapas (chaves salvas em `diagnosis_answers.question_key`)**
+### Bloco A — `WeeklyCheckinCard` (novo componente)
+- Visível só se `new Date().getDay() === 1` (segunda) E não existir `weekly_snapshots` para `week_start = início da semana atual` (segunda).
+- Card amber (`bg-amber-50 border-amber-200`), ícone calendário, 3 inputs (`rating`, `cancellation_rate`, `weekly_revenue`).
+- Ao salvar: insere `weekly_snapshots` com `score` calculado via `calculateScore`. Compara com snapshot da semana anterior; abre `Dialog` mostrando deltas (score, nota). Botão "Pular por hoje" → `localStorage.setItem('weeklyCheckinSkipped:' + weekStart, '1')`.
 
-| # | question_key | UI | Valor |
-|---|---|---|---|
-| 1 | `revenue_range` | 4 botões de seleção única | string |
-| 2 | `current_rating` | input number, step 0.1, 0–5 | number |
-| 3 | `cancellation_rate` | input number, step 0.1, 0–100, sufixo % + dica | number |
-| 4 | `avg_ticket` | input number, prefixo R$ + dica | number |
-| 5 | `main_problem` | 6 botões com emoji + label | string |
+### Bloco B — Score + Impacto Financeiro (grid 2 colunas md+, empilhado mobile)
+- Card 1: número grande do score atual (`overall`) + variação semanal (diff vs `weekly_snapshots` anterior) com ▲/▼ colorido + data do último diagnóstico (`diagnostics[0].created_at`). Vazio → "—" + botão "Fazer primeiro diagnóstico" → `/app/diagnosis/welcome`.
+- Card 2: soma de `impacto_financeiro` das ações pendentes; número grande em `text-orange-600`. Vazio/zero → mensagem positiva.
 
-Cada etapa salva via upsert em `diagnosis_answers` (já existe `autosave.ts`) e atualiza `diagnosis_sessions.current_step`.
+### Bloco C — `WeekActionsBlock` (novo componente)
+- Carrega top 3 ações com `status NOT IN ('aplicada','ignorada','rejeitada','completed')` ordenadas por `impacto_financeiro DESC NULLS LAST`.
+- Card por ação com badges: impacto verde, dificuldade (mapa cor), tempo, botão "Marcar como feito" (dispara `CompletionModal` compartilhado com ActionPlan), botão "Ver detalhes" → `/app/stores/:id/action-plan/:actionId`.
+- Estados vazios conforme spec.
 
-**3. Tela intermediária — upload de print**
-- Após etapa 5, antes de gerar: tela com dropzone (reaproveitar `PrintUploader.tsx`), preview, botão primário "Gerar diagnóstico com print" e link "Pular e gerar agora".
-- Upload para bucket `diagnosis-uploads` (já existe), insert em `diagnosis_uploads` com `session_id` (a edge function `process-print` já trata).
+### Bloco D — `ToolsGrid` (novo componente)
+- Lê `useIsAdmin` apenas como fallback; para `plano`, usar profile/feature flag. Como ainda não existe campo `plan`, **assumir `pro` para usuários autenticados** com `TODO`/comentário, e renderizar grid 2 colunas dos 4 atalhos: PricingSimulator, BestHours, Reviews, StoreEvolution. Para `plan === 'free'` renderizar versão com `blur-sm pointer-events-none` + cadeado + texto "Disponível no Pro" → CTA `/app/planos`.
+- Como não há campo de plano hoje, **deixar comportamento atual = visível**, com `getUserPlan()` helper isolado em `src/lib/plan.ts` retornando `'pro'`. Quando o campo existir, basta trocar a função.
 
-**4. Geração e redirecionamento**
-- Chamar a edge function de diagnóstico existente (`ai-consult` via `src/lib/diagnosis/generate.ts`) com os 5 campos.
-- Redirecionar para `DiagnosisResult`.
+### Remover do Dashboard
+Conforme spec: nenhum atalho de admin/configuração/lista de lojas para gestão além do que já está no header (seletor + nova loja, que é necessário para multi-loja).
 
-**5. Rotas**
-- `/app/diagnosis/new` e `/app/diagnosis/welcome` passam a apontar para o novo Express.
-- `DiagnosisWizard` (16 etapas) fica acessível apenas via botão "Adicionar mais detalhes" na tela de resultado e dentro do Plano de Ação, em rota `/app/diagnosis/:id/advanced`.
-- Sessões em andamento com `current_step > 5` continuam abrindo o wizard antigo automaticamente (detectar pelo status/step).
+## 3. Plano de Ação (`src/pages/app/ActionPlan.tsx`)
 
-**6. Login**
-A arquitetura atual exige login (RLS por `user_id`). Mantemos login obrigatório, mas o wizard antigo de onboarding extenso é pulado — usuário vai direto ao Express após signup.
+Reescrever a estrutura visual mantendo a lógica de `change`/`submitOutcome` e o `Dialog` de outcome (renomeado para "Ação concluída").
 
----
+### Header
+- Título "Seu Plano de Ação".
+- Subtítulo: `${pendentes} ações pendentes · Impacto total estimado: ~R$ ${soma}/mês` (soma `impacto_financeiro` das pendentes).
+- Filtros (chips): Todas / Fácil / Médio / Difícil / Concluídas. Estado local `filter`.
 
-## PARTE 2 — Sidebar enxuto (5 abas + extras)
+### Card de ação
+- Layout em 3 linhas conforme spec, com `Checkbox` grande (h-6 w-6, área de toque ≥ 48px via padding).
+- Linha 2: badges de dificuldade (cor por valor), tempo (`tempo_estimado`), categoria.
+- Linha 3 (collapsible via `useState` por card, ou `<details>`): descrição completa, causa (`why_it_matters`), passo a passo (`how_to_apply`), botão `Abrir [ferramenta]` se `toolForAction` retornar.
+- Concluídas: `opacity-60`, checkbox marcado, data de conclusão (`completed_at`), badge "✓ Você reportou melhora" se `has_feedback`.
 
-### Mudanças em `src/components/AppSidebar.tsx`
+### Fluxo de conclusão
+Quando checkbox/Marcar como feito é acionado:
+1. `update action_plans set status='aplicada', completed_at=now() where id=`.
+2. Abrir modal de celebração com texto fixo "Ação concluída! 🎉" + valor de impacto.
+3. Textarea opcional. Botão Salvar:
+   - Se houver texto: `update action_plans set feedback_text=, has_feedback=true`.
+   - Chamar `supabase.functions.invoke('record-feedback', { body: { recommendation_id, status:'aplicada', applied:true, generated_result:'sim', outcome_explanation: feedback, comment: feedback } })` (reutiliza fluxo já existente).
+4. Fechar modal e `reload()`.
 
-**Itens visíveis para todos os usuários:**
-1. 🏠 Início → `/app/dashboard`
-2. 🔍 Diagnóstico → `/app/diagnosis/welcome`
-3. ✅ Plano de Ação → `/app/stores/:id/action-plan` (usa storeId ativa do contexto; se não houver, redireciona para criação)
-4. 🍔 Cardápio & Margem → `/app/stores/:id/menu`
-5. ⭐ Avaliações → `/app/stores/:id/reviews`
+### Estado vazio
+Card centralizado + botão "Fazer diagnóstico agora" → `/app/diagnosis/welcome`.
 
-Separador visual + :
-6. 💎 Planos → `/app/planos` (página nova, placeholder simples com CTA)
-7. ⚙️ Configurações → `/app/configuracoes` (página nova, placeholder com perfil/sair)
+### Botão flutuante
+`fixed bottom-6 right-6 z-40` com `Plus` + "Novo diagnóstico". Renderizado dentro da página.
 
-**Removidos do sidebar (rotas mantidas, só ocultas para não-admin):**
-- Minha loja, Todas as lojas, Score, Meta, Evolução, Relatório, Produtos, Nomes (SEO), Margem & Preço, Simulador, Expectativa×Entrega, Concorrentes, Campanhas, Melhor horário, Métricas, Chat, Admin, Prospects, Knowledge, ReportTemplate.
+## 4. Componentes novos
 
-**Ferramentas contextuais dentro do Plano de Ação**
-Em `src/pages/app/ActionPlan.tsx` (e `ActionDetail.tsx`), adicionar mapeamento ação→ferramenta e renderizar botão "Usar ferramenta: [nome]" que abre a rota dedicada (já existente):
+- `src/components/dashboard/WeeklyCheckinCard.tsx`
+- `src/components/dashboard/ScoreImpactBlocks.tsx`
+- `src/components/dashboard/WeekActionsBlock.tsx`
+- `src/components/dashboard/ToolsGrid.tsx`
+- `src/components/actions/ActionCompletionModal.tsx` (reuso entre Dashboard e ActionPlan)
+- `src/lib/plan.ts` — `getUserPlan()` retornando `'pro'` por enquanto.
 
-| Tipo da ação (heurística por `area`/`title`) | Ferramenta |
-|---|---|
-| preço/margem | `/app/stores/:id/pricing-simulator` |
-| cardápio/nome do produto | `/app/stores/:id/product-names` |
-| horário/operação | `/app/stores/:id/best-hours` |
-| expectativa/foto | `/app/stores/:id/expectation` |
-| meta/evolução | `/app/stores/:id/goal` ou `/evolution` |
+## 5. Regras técnicas
 
-**Chat flutuante**
-Adicionar botão flutuante (FAB) em `AppLayout` que abre `/app/chat` (apenas usuários autenticados).
+- TypeScript estrito; sem `any` desnecessário (apenas onde já existia).
+- Mobile-first: botões `min-h-[48px]`, cards toque-amigáveis.
+- Componentes shadcn existentes (`Card`, `Button`, `Badge`, `Dialog`, `Textarea`, `Checkbox`, `Input`).
+- Sem alterar `src/integrations/supabase/{client,types}.ts`.
+- Não remover rotas, não tocar em `useStoreData` (ele já traz `actions`).
+- Manter `DoFirstBlock` e `MoneyLeakBlock` no codebase (apenas removidos do Dashboard) caso sejam reusados.
 
----
+## Arquivos afetados
 
-## PARTE 3 — Proteção admin
-
-O projeto já tem `src/components/AdminRoute.tsx` usando `useIsAdmin` (verifica `user_roles` com `role='admin'`, padrão correto — não usar `profiles.role` para evitar privilege escalation).
-
-### Mudanças
-
-**1. Ajustar `AdminRoute`** para mostrar toast "Acesso restrito." (sonner) antes do redirect para `/app/dashboard`.
-
-**2. Envolver com `AdminRoute` em `src/App.tsx` as rotas:**
-- `/app/admin`
-- `/app/stores`, `/app/stores/new`
-- `/app/prospects`
-- `/app/knowledge`
-- `/app/stores/:id/report/template` (ReportTemplate)
-
-**3. Sidebar** — bloco "Super Admin" já é condicionado a `isAdmin`. Confirmar e remover qualquer item admin que esteja escapando para usuários comuns.
-
-**Observação importante:** o spec do usuário pede "verificar via `profiles.role`". Vamos manter o padrão correto (`user_roles` + `has_role`) que já existe no projeto, pois é a recomendação de segurança da plataforma. Mesmo comportamento, implementação mais segura.
-
----
-
-## Detalhes técnicos
-
-- **Stack:** React + TS estrito, shadcn/ui, Tailwind, react-router, TanStack Query, Supabase client existente.
-- **Persistência do funil:** reutilizar `src/lib/diagnosis/autosave.ts` e `session.ts`.
-- **Sem migrations de schema:** `diagnosis_answers` é genérico (`question_key` + `answer_value` jsonb), cabe os 5 novos campos sem alterar tabela.
-- **`print_jobs`:** o spec menciona, mas o projeto usa `diagnosis_uploads` (mesmo papel). Vamos usar a tabela existente, sem criar `print_jobs`.
-- **Páginas novas:** `Planos.tsx` e `Configuracoes.tsx` como placeholders simples seguindo design system.
-- **Mobile-first:** botões `min-h-12`, inputs `text-base`, layouts `grid` responsivos.
-- **RLS:** intacta.
-- **Backward compat:** sessões com `current_step > 5` continuam no wizard antigo; nada é deletado.
-
-## Arquivos afetados (resumo)
-
-- `src/pages/app/diagnosis/DiagnosisExpress.tsx` — reescrito (5 etapas + print)
-- `src/pages/app/diagnosis/DiagnosisWelcome.tsx` — CTA aponta para Express
-- `src/pages/app/diagnosis/DiagnosisResult.tsx` — botão "Adicionar mais detalhes"
-- `src/pages/app/ActionPlan.tsx` + `ActionDetail.tsx` — botões de ferramentas contextuais
-- `src/components/AppSidebar.tsx` — reduzido a 5 + 2 itens
-- `src/components/AppLayout.tsx` — FAB do Chat
-- `src/components/AdminRoute.tsx` — adicionar toast
-- `src/App.tsx` — envolver rotas admin com `AdminRoute`; adicionar `/app/planos` e `/app/configuracoes`
-- `src/pages/app/Planos.tsx` (novo)
-- `src/pages/app/Configuracoes.tsx` (novo)
+- **Migration:** novos campos em `action_plans`, nova tabela `weekly_snapshots` + RLS.
+- **Editados:** `src/pages/app/Dashboard.tsx`, `src/pages/app/ActionPlan.tsx`.
+- **Criados:** 5 componentes + `src/lib/plan.ts` listados acima.

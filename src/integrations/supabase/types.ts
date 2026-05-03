@@ -17,17 +17,22 @@ export type Database = {
       action_plans: {
         Row: {
           area: string | null
+          categoria: string | null
           completed_at: string | null
           created_at: string
           description: string | null
           diagnostic_id: string | null
+          dificuldade: string | null
           due_date: string | null
           effort: string | null
           example: string | null
+          feedback_text: string | null
+          has_feedback: boolean
           how_to_apply: string | null
           how_to_measure: string | null
           id: string
           impact: string | null
+          impacto_financeiro: number | null
           priority: string | null
           recommendation_id: string | null
           responsible: string | null
@@ -36,22 +41,28 @@ export type Database = {
           started_at: string | null
           status: string
           store_id: string
+          tempo_estimado: string | null
           title: string
           why_it_matters: string | null
         }
         Insert: {
           area?: string | null
+          categoria?: string | null
           completed_at?: string | null
           created_at?: string
           description?: string | null
           diagnostic_id?: string | null
+          dificuldade?: string | null
           due_date?: string | null
           effort?: string | null
           example?: string | null
+          feedback_text?: string | null
+          has_feedback?: boolean
           how_to_apply?: string | null
           how_to_measure?: string | null
           id?: string
           impact?: string | null
+          impacto_financeiro?: number | null
           priority?: string | null
           recommendation_id?: string | null
           responsible?: string | null
@@ -60,22 +71,28 @@ export type Database = {
           started_at?: string | null
           status?: string
           store_id: string
+          tempo_estimado?: string | null
           title: string
           why_it_matters?: string | null
         }
         Update: {
           area?: string | null
+          categoria?: string | null
           completed_at?: string | null
           created_at?: string
           description?: string | null
           diagnostic_id?: string | null
+          dificuldade?: string | null
           due_date?: string | null
           effort?: string | null
           example?: string | null
+          feedback_text?: string | null
+          has_feedback?: boolean
           how_to_apply?: string | null
           how_to_measure?: string | null
           id?: string
           impact?: string | null
+          impacto_financeiro?: number | null
           priority?: string | null
           recommendation_id?: string | null
           responsible?: string | null
@@ -84,6 +101,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           store_id?: string
+          tempo_estimado?: string | null
           title?: string
           why_it_matters?: string | null
         }
@@ -1417,6 +1435,42 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      weekly_snapshots: {
+        Row: {
+          cancellation_rate: number | null
+          created_at: string
+          id: string
+          rating: number | null
+          score: number | null
+          store_id: string
+          user_id: string
+          week_start: string
+          weekly_revenue: number | null
+        }
+        Insert: {
+          cancellation_rate?: number | null
+          created_at?: string
+          id?: string
+          rating?: number | null
+          score?: number | null
+          store_id: string
+          user_id: string
+          week_start: string
+          weekly_revenue?: number | null
+        }
+        Update: {
+          cancellation_rate?: number | null
+          created_at?: string
+          id?: string
+          rating?: number | null
+          score?: number | null
+          store_id?: string
+          user_id?: string
+          week_start?: string
+          weekly_revenue?: number | null
         }
         Relationships: []
       }
