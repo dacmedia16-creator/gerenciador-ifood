@@ -44,6 +44,8 @@ export default function DiagnosisWizard() {
   const [allAnswers, setAllAnswers] = useState<Record<string, Record<string, any>>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [uploads, setUploads] = useState<any[]>([]);
+  const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
+  const [autoApplying, setAutoApplying] = useState(false);
   const ignoreKey = `diagnosis:proposals-ignored:${sessionId}`;
   const [ignored, setIgnored] = useState<boolean>(() => {
     try { return localStorage.getItem(ignoreKey) === "1"; } catch { return false; }
