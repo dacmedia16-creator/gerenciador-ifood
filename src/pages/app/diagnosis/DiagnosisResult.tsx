@@ -237,6 +237,16 @@ export default function DiagnosisResult() {
           </Link>
         </Button>
         <Button variant="outline" asChild>
+          <Link to={`/app/stores/${data.store_id}/goal`}>
+            <Target className="h-4 w-4 mr-1" /> Ver minha meta
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link to={`/app/stores/${data.store_id}/evolution`}>
+            Evolução da loja
+          </Link>
+        </Button>
+        <Button variant="outline" asChild>
           <Link to={`/app/stores/${data.store_id}`}>
             Ir para a loja <ArrowRight className="h-4 w-4 ml-1" />
           </Link>
