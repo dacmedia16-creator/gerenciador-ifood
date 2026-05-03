@@ -48,7 +48,20 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, processed: 0, message: "Nenhuma avaliação pendente." });
     }
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Cache: hash sobre os comentários ordenados
+    const cacheKey = await buildCacheKey({
+      reviews: [...reviews]
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+        .map((r) => ({ id: r.id, comment: r.comment, rating: r.rating })),
+      topics: TOPICS,
+    });
+    const cachedReviews = await getCached(admin, cacheKey);
+    let results: Array<{ id: string; sentiment: string; topics: string[] }>;
+    if (cachedReviews) {
+      console.log(JSON.stringify({ evt: "analyze-reviews.cache_hit", store_id, hash: cacheKey }));
+      results = (cachedReviews.response as any).results ?? [];
+    } else {
+      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
