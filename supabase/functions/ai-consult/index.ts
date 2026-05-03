@@ -726,8 +726,20 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       }));
     }
 
-    return new Response(JSON.stringify({ diagnosis: enriched, report_id: newReportId }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const finalPayload = { diagnosis: enriched, report_id: newReportId };
+    // Limpa cache antigo desta loja e grava novo (TTL 7d)
+    invalidateDiagnosisCache(adminForLimits, storeId).catch(() => {});
+    putCached(adminForLimits, {
+      inputHash: cacheHash,
+      storeId,
+      cacheType: "diagnosis",
+      response: finalPayload,
+      model,
+      ttlSeconds: CACHE_TTL.diagnosis,
+    }).catch((e) => console.warn("cache put failed", e));
+
+    return new Response(JSON.stringify(finalPayload), {
+      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" },
     });
   } catch (e) {
     console.error("ai-consult error", e);
