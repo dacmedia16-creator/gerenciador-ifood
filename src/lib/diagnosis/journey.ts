@@ -167,3 +167,19 @@ export function buildJourney(answers: Record<string, Record<string, any>>): Jour
     },
   ];
 }
+
+import { computeStepCompletion } from "./session";
+
+export function findNextIncompleteStepIndex(
+  activeSteps: { key: string }[],
+  allAnswers: Record<string, Record<string, any>>,
+  fromIndex: number,
+): number {
+  for (let i = fromIndex; i < activeSteps.length; i++) {
+    const sk = activeSteps[i].key;
+    if (sk === "prints") continue;
+    const info = computeStepCompletion(sk, allAnswers[sk] || {});
+    if (!info.is_completed) return i;
+  }
+  return -1;
+}
