@@ -147,20 +147,59 @@ export default function ActionPlan() {
 
   if (loading) return <LoadingState />;
 
-  const list = (actions || []).filter((a: any) => filter === "todos" || a.status === filter);
-  const sorted = [...list].sort((a: any, b: any) => {
+  const open = (actions || []).filter((a: any) => !["aplicada", "ignorada", "rejeitada"].includes(a.status));
+  const sortByPriority = (arr: any[]) => [...arr].sort((a, b) => {
     const order = { alta: 0, media: 1, baixa: 2 } as any;
     return (order[a.priority] || 3) - (order[b.priority] || 3);
   });
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Plano de ação</h1>
-        <select className="border rounded-md px-3 py-2 bg-background text-sm" value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="todos">Todos</option>
+  const groups: { key: string; label: string; items: any[] }[] =
+    groupBy === "horizonte"
+      ? HORIZONTES.map((h) => ({ key: h, label: HORIZONTE_LABEL[h], items: sortByPriority(open.filter((a) => classifyHorizonte(a) === h)) }))
+      : groupBy === "objetivo"
+      ? OBJETIVOS.map((o) => ({ key: o, label: OBJETIVO_LABEL[o], items: sortByPriority(open.filter((a) => classifyObjetivo(a) === o)) }))
+      : STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s], items: sortByPriority((actions || []).filter((a: any) => a.status === s)) }));
+
+  const renderAction = (a: any) => (
+    <Card key={a.id} className="p-4 shadow-card">
+      <div className="flex flex-wrap justify-between gap-3 items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <PriorityBadge priority={a.priority} />
+            <span className="text-xs text-muted-foreground">{a.area}</span>
+          </div>
+          <Link to={`/app/stores/${id}/action-plan/${a.id}`} className="font-semibold hover:text-primary hover:underline">
+            {a.title}
+          </Link>
+          {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
+          <div className="text-xs text-muted-foreground mt-2 flex gap-3 flex-wrap">
+            {a.impact && <span>Impacto: {a.impact}</span>}
+            {a.effort && <span>Esforço: {a.effort}</span>}
+            {a.due_date && <span>Prazo: {new Date(a.due_date).toLocaleDateString("pt-BR")}</span>}
+          </div>
+        </div>
+        <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
           {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
+      </div>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-2xl font-bold">Plano de ação</h1>
+        <div className="flex gap-1 p-1 bg-muted rounded-lg">
+          {(["horizonte", "objetivo", "status"] as GroupBy[]).map((g) => (
+            <button
+              key={g}
+              onClick={() => setGroupBy(g)}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${groupBy === g ? "bg-background shadow-sm font-semibold" : "text-muted-foreground"}`}
+            >
+              Por {g}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-5 gap-3 text-sm">
@@ -170,34 +209,20 @@ export default function ActionPlan() {
         })}
       </div>
 
-      {sorted.length === 0 && <Card className="p-6 text-center text-muted-foreground">Nenhuma ação no filtro.</Card>}
+      {groups.every((g) => g.items.length === 0) && (
+        <Card className="p-6 text-center text-muted-foreground">Nenhuma ação no momento.</Card>
+      )}
 
-      <div className="space-y-3">
-        {sorted.map((a: any) => (
-          <Card key={a.id} className="p-4 shadow-card">
-            <div className="flex flex-wrap justify-between gap-3 items-start">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <PriorityBadge priority={a.priority} />
-                  <span className="text-xs text-muted-foreground">{a.area}</span>
-                </div>
-                <Link
-                  to={`/app/stores/${id}/action-plan/${a.id}`}
-                  className="font-semibold hover:text-primary hover:underline"
-                >
-                  {a.title}
-                </Link>
-                {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
-                <div className="text-xs text-muted-foreground mt-2 flex gap-3">
-                  <span>Impacto: {a.impact}</span><span>Esforço: {a.effort}</span>
-                  {a.due_date && <span>Prazo: {a.due_date}</span>}
-                </div>
-              </div>
-              <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
-                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-              </select>
+      <div className="space-y-6">
+        {groups.filter((g) => g.items.length > 0).map((g) => (
+          <div key={g.key} className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              {g.label} <span className="text-xs">({g.items.length})</span>
+            </h2>
+            <div className="space-y-2">
+              {g.items.map(renderAction)}
             </div>
-          </Card>
+          </div>
         ))}
       </div>
 
