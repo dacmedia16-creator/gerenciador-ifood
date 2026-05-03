@@ -1,59 +1,65 @@
-## Objetivo
+## Tela de Revisão Pré-Geração — Enriquecimento
 
-Substituir a estrutura atual de **18 etapas / ~120 perguntas técnicas** por **9 etapas / ~55 perguntas em linguagem do dono da loja**, com faixas, "Não sei", condicionais e tooltips de "onde encontro no iFood".
+A rota `/app/diagnosis/:sessionId/review` já existe, mas hoje só mostra o status percentual de cada etapa. Vamos transformá-la em uma revisão completa: respostas dadas, evidências calculadas e pontos críticos detectados — tudo antes de o dono da loja confirmar a geração do plano.
 
-## Princípio de compatibilidade
+### O que será exibido
 
-`src/lib/diagnosis/rules.ts`, `evidences.ts` e `journey.ts` leem respostas por `answers.<step_key>.<question_key>` (ex.: `answers.basic.average_ticket`, `answers.delivery.cancellation_rate`). Para **não quebrar o motor de diagnóstico**:
+1. **Cabeçalho de prontidão**
+   - Score de completude geral (% das 10 etapas)
+   - Contagem: respostas preenchidas / pontos críticos / atenções / dados faltantes
+   - Botão "Voltar ao funil" e "Gerar plano de ação"
 
-- Mantemos as **mesmas chaves internas** (`step_key` + `question_key`) sempre que possível.
-- Mudamos apenas: **labels, tipos de campo, tooltips, agrupamento visual e perguntas removidas**.
-- Quando uma pergunta vira "faixa" (select), as regras que esperam número ganham um helper `rangeToNumber()` para converter (ex.: "30–49" → 40).
+2. **Pontos críticos detectados** (topo, destaque vermelho)
+   - Lista das evidências com `severity = "critico"` calculadas em tempo real por `evidencesFromAnswers()`
+   - Cada card: área, métrica atual vs. referência, impacto no negócio, ação recomendada
+   - Ex.: "Tempo de entrega 45 min (ref ≤35) — cliente desiste no checkout"
 
-Diagnósticos antigos continuam funcionando porque o JSON de respostas mantém as chaves.
+3. **Pontos de atenção** (amarelo, recolhível)
+   - Mesmo formato, severity = "atencao"
 
-## Nova estrutura (9 etapas)
+4. **Dados faltantes que reduzem precisão** (cinza)
+   - Agregado de `missing_data` das evidências + `missing_required_fields` dos status
+   - Cada item com link "Preencher agora" → volta para a etapa correspondente
 
-```text
-1. Sobre a loja            (basic)        — nome, categoria, plataforma, cidade, ticket/pedidos em FAIXAS
-2. Horários e capacidade   (operations)   — horário, fecha em pico, pedidos/h, quem entrega
-3. Vendas e reputação      (performance)  — nota, pausas, ruptura de estoque (faixas)
-4. Cardápio e fotos        (menu)         — fotos top 5, organização, adicionais (funde menu+photos)
-5. Preço e margem          (pricing)      — top 3 simplificado (3 linhas), preço vs concorrente
-6. Combos e ticket         (combos)       — combos prontos, sugestões, tamanhos
-7. Entrega e qualidade     (delivery)     — tempo prometido, atraso, embalagem térmica, motivos cancel
-8. Avaliações e problemas  (reviews)      — reclamações por checkbox, item problemático
-9. Promoções, ads e fidelização (growth)  — promoções, ads (objetivo), recompra (funde promotions+ads+loyalty)
-```
+5. **Suas respostas, etapa por etapa** (accordion, uma seção por step)
+   - Para cada etapa: ícone de status, % completo, lista "Pergunta → Resposta"
+   - Respostas formatadas: ranges legíveis ("R$ 30–49"), arrays virando vírgula, tabelas (produtos, concorrentes) renderizadas como mini-tabela
+   - Botão "Editar etapa" em cada bloco
 
-Cortes: **welcome, conversion, products (tabela), competitors (tabela), demand, final_questions, uploads** — viram seções condicionais ou somem.
+6. **CTA final**
+   - Card "Pronto para gerar" com resumo (X críticos, Y atenções, Z etapas pendentes)
+   - Aviso quando há etapa essencial vazia: "Você pode gerar mesmo assim, mas o plano será mais genérico"
 
-## Mudanças de UX
+### Mudanças técnicas
 
-- **Faixas em vez de números exatos** para ticket, pedidos/mês, nota, tempo.
-- **Sempre opção "Não sei"** em selects.
-- **Condicionais**: pergunta de motivo de atraso só aparece se respondeu que atrasa; custo só se "sei o custo"; ROI/objetivo só se "anuncia".
-- **Tooltips** com "Onde achar no iFood" (Portal Parceiro > Desempenho / Avaliações / Cardápio / Minha Loja).
-- **Top 3 produtos** em mini-tabela (3 linhas: nome, preço, custo opcional) em vez da tabela completa de 9 colunas.
-- **Sem tabela de concorrentes** — vira pergunta única "seu preço vs concorrentes" (mais barato/igual/mais caro/não sei).
-- Microcopy no welcome: "Leva ~10 minutos. Pode pular o que não souber. Salvamos automaticamente."
+- **`src/pages/app/diagnosis/DiagnosisReview.tsx`** (rewrite)
+  - Carregar `session + answers + statuses` via `loadSession()`
+  - Construir `answersByStep` com `answersAsMap()`
+  - Rodar `evidencesFromAnswers(answersByStep)` localmente para gerar críticos/atenções/dados faltantes (sem precisar chamar a IA)
+  - Renderizar 5 blocos descritos acima usando `Card`, `Badge`, `Accordion` (shadcn) e `Separator`
+  - Link "Editar etapa" usa `?step=N` que o wizard já lê
 
-## Arquivos
+- **`src/components/diagnosis/ReviewAnswerList.tsx`** (novo, ~80 linhas)
+  - Helper de apresentação que recebe `step` (de `STEPS`) + `values` e formata cada `Question`:
+    - `range/select`: mostra o `label` da opção (não o value bruto)
+    - `multiselect`: junta labels com vírgula
+    - `boolean/radio`: "Sim/Não"
+    - `table`: mini-`<table>` com colunas das `Question.columns`
+    - vazio: cinza "—"
 
-- **Reescrever:** `src/lib/diagnosis/steps.ts` — nova lista `STEPS` com 9 etapas, novos labels/tipos/tooltips, mantendo chaves internas.
-- **Editar:** `src/lib/diagnosis/rules.ts` — adicionar `rangeToNumber()` e aplicar onde regras esperam número exato (ticket, nota, pedidos, tempo, cancelamento).
-- **Editar:** `src/lib/diagnosis/evidences.ts` e `journey.ts` — mesmo helper de faixa para campos numéricos.
-- **Editar:** `src/components/diagnosis/QuestionField.tsx` — adicionar suporte a novo tipo `range` (select de faixas) + checkbox múltipla (`multiselect`).
-- **Editar:** `src/lib/diagnosis/steps.ts` (tipos) — adicionar `multiselect` e `range` em `FieldType`, e flag `condition?: { key: string; equals?: any; in?: any[] }` para perguntas condicionais.
-- **Editar:** `src/pages/app/diagnosis/DiagnosisWizard.tsx` — filtrar perguntas pela `condition` antes de renderizar.
-- **Editar:** `src/pages/app/diagnosis/DiagnosisReview.tsx` e `WizardShell.tsx` — nada a fazer (já leem `STEPS` dinamicamente).
+- **`src/components/diagnosis/EvidenceCard.tsx`** (novo, ~40 linhas)
+  - Recebe uma `RuleEvidence` e renderiza card compacto com cores por severidade
 
-## Migração de dados
+### Sem mudanças necessárias
 
-Diagnósticos em andamento mantêm as respostas (chaves preservadas). Se um usuário já completou etapas removidas (ex.: `competitors` tabela), o dado fica salvo em `diagnosis_answers` mas não é mais editável — o motor ainda usa via `evidences.ts`. Sem migração SQL necessária.
+- `evidences.ts`, `rules.ts`, `session.ts`, `steps.ts`: já fornecem tudo
+- Roteamento: rota já existe em `App.tsx` e `DiagnosisWizard` já redireciona pra ela ao terminar
+- Backend: revisão é 100% client-side; a geração só acontece quando o usuário clica no CTA (fluxo atual mantido)
 
-## Resultado esperado
+### Resultado
 
-- Tempo de preenchimento: **15 min → 8 min**.
-- Abandono esperado: queda significativa (faixas + condicionais + sem tabelas).
-- Diagnóstico: igual ou melhor (perguntas novas de capacidade/ruptura/embalagem cobrem causas raiz que faltavam).
+O dono da loja chega na revisão e vê, antes de gerar o relatório:
+- Tudo que já respondeu (em linguagem dele)
+- O que o sistema já consegue afirmar como problema crítico
+- O que falta preencher para o diagnóstico ficar mais preciso
+- E só então confirma a geração do plano de ação.
