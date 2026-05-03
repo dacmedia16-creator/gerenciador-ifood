@@ -57,6 +57,7 @@ export function evidencesFromAnswers(answers: AnswersByStep): RuleEvidence[] {
   const loyalty = answers.loyalty || {};
   const ads = answers.ads || {};
   const pricing = answers.pricing || {};
+  const operations = answers.operations || {};
 
   // === Reputação ===
   const rating = num(front.rating) ?? num(reviews.avg_rating);
