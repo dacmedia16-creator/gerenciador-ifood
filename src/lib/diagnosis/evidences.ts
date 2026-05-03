@@ -54,10 +54,9 @@ export function evidencesFromAnswers(answers: AnswersByStep): RuleEvidence[] {
   const combos = answers.combos || {};
   const reviews = answers.reviews || {};
   const delivery = answers.delivery || {};
-  const competitors: any[] = answers.competitors?.items || [];
   const loyalty = answers.loyalty || {};
   const ads = answers.ads || {};
-  const conversion = answers.conversion || {};
+  const pricing = answers.pricing || {};
 
   // === Reputação ===
   const rating = num(front.rating) ?? num(reviews.avg_rating);
