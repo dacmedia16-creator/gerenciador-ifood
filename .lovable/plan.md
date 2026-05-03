@@ -1,42 +1,43 @@
-# Corrigir persistência de relatório e plano de ação
+## Plano: Integrar Aula 3 (Listas, Cupons e Promoções iFood) ao RAG
 
-## Causa raiz
+Mesmo padrão das Aulas 1 e 2 já integradas. Vou adicionar ~70 chunks da nova aula ao `knowledge_base`, gerar embeddings e validar.
 
-A edge function `ai-consult` está gerando o diagnóstico com sucesso, mas falha ao gravar nas tabelas `reports`, `action_plans` e `recommendation_history`. O log mostra:
+### Conteúdo a ingerir
+Fonte: `aula-ifood-listas-cupons` (nova `source`)
+Total estimado: **~70 entradas** distribuídas em:
 
-```
-permission denied for function has_store_access
-```
+| Categoria | Qtd | Áreas principais |
+|---|---|---|
+| RAG geral (chunks 1–21) | 21 | promocoes, campanhas, cupons |
+| FAQ (15 perguntas) | 15 | faq |
+| Regras práticas (9) | 9 | regras |
+| Checklists (5) | 5 | checklists |
+| Diagnósticos (5) | 5 | diagnosticos |
+| Exemplos práticos (5) | 5 | exemplos |
+| Glossário (13 termos) | 13 | glossario |
 
-Todas as policies RLS dessas tabelas chamam `public.has_store_access(store_id)`, mas o privilégio `EXECUTE` dessa função só está concedido para `service_role` — `authenticated` e `anon` não têm. Como a edge usa o JWT do usuário (role `authenticated`), todo INSERT é rejeitado e silenciosamente engolido (`console.warn` apenas).
+### Áreas/tags-chave novas ou reforçadas
+- `promocoes`, `cupons`, `campanha-inteligente`, `campanha-subsidiada`, `campanha-automatizada`, `entrega-gratis`, `cac`, `precificacao`, `pedido-minimo`, `super-restaurante`
 
-Confirmado no banco: a loja `6e5c043b-…` tem 0 reports, 0 action_plans, 0 recommendation_history, mesmo com a IA tendo rodado e respondido.
+### Pontos críticos que a IA deve passar a recomendar
+- Sempre checar **investimento da loja vs subsídio iFood** antes de ativar lista
+- Tratar **cupom de primeiro cliente como CAC** (não embutir no preço)
+- Alertar para **pedido mínimo zerado** em campanha subsidiada
+- Recomendar **revisão semanal** de produtos nas listas (trocar baixo ticket por alto)
+- Avaliar **plano completo vs básico** da campanha inteligente
+- Fórmula do cupom fixo: `valor cupom ÷ média de itens = acréscimo por item`
+- Segmentação de entrega grátis (novos / inativos / todos)
 
-## Mudanças
+### Passos técnicos
+1. Gerar script SQL com `INSERT` em lote em `public.knowledge_base` (source=`aula-ifood-listas-cupons`, chunk_id único por entrada, tags + area corretas)
+2. Executar via migration
+3. Disparar Edge Function `embed-knowledge` em lotes para gerar embeddings vetoriais
+4. Validar:
+   - Total de linhas passa de 758 → ~828
+   - Todas com `embedding IS NOT NULL`
+   - Amostra de busca semântica retorna chunks novos para queries como "campanha subsidiada zera pedido mínimo" e "cupom de primeiro cliente CAC"
 
-### 1. Migração SQL (corrige o problema)
+### Pontos marcados como "validar" (não vou afirmar como verdade absoluta)
+Conforme item 10 da fonte: valores de cupons, limite R$500/dia, regras de selo Super Restaurante e disponibilidade de campanhas vão como **"pode variar por loja/período — confirmar no portal"** dentro do conteúdo dos chunks.
 
-```sql
-GRANT EXECUTE ON FUNCTION public.has_store_access(uuid) TO authenticated, anon;
-```
-
-Isso destrava as policies RLS sem alterá-las, mantendo a segurança (a função em si valida ownership via `auth.uid()`).
-
-### 2. `supabase/functions/ai-consult/index.ts` — falhar alto em vez de silenciar
-
-- Trocar os `console.warn` dos inserts (`reports`, `recommendation_history`, `action_plans`) por:
-  - log estruturado `evt: "ai_consult.persist_failed"` com a tabela e o código de erro;
-  - se o insert do `reports` falhar, retornar HTTP 500 com mensagem clara ("Não foi possível salvar o diagnóstico"), em vez de devolver 200 com `report_id: null`.
-- Assim, futuros problemas de RLS aparecem imediatamente para o usuário e nos logs, em vez de gerar a tela vazia atual.
-
-### 3. Sem outras alterações
-
-- Nenhuma mudança em telas, autenticação, dashboard, schema de tabelas ou outras edges.
-- Não toca em `auth`, `storage`, `realtime`, `vault`.
-
-## Validação após aplicar
-
-1. Rodar um novo diagnóstico pelo funil.
-2. Conferir no banco: `select count(*) from reports where store_id = …` deve voltar > 0.
-3. Abrir "Plano de ação" e "Relatório completo" — devem aparecer com conteúdo.
-4. Conferir log da edge: sem `permission denied`.
+Aprovando, executo a ingestão + embeddings e te confirmo o total final.
