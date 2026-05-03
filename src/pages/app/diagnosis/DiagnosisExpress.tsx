@@ -193,7 +193,7 @@ export default function DiagnosisExpress() {
   // Atualiza a store com os dados coletados (para a IA usar)
   const syncStoreFromAnswers = async () => {
     if (!storeId) return;
-    const update: Record<string, any> = {};
+    const update: Partial<{ rating: number; cancellation_rate: number; average_ticket: number; monthly_revenue: number }> = {};
     const rating = Number(form.current_rating.replace(",", "."));
     const cancel = Number(form.cancellation_rate.replace(",", "."));
     const ticket = Number(form.avg_ticket.replace(",", "."));
