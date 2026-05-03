@@ -1,31 +1,25 @@
-# Botão "Resetar diagnóstico" na página de Diagnóstico
+## Objetivo
+Permitir resetar o diagnóstico também a partir das telas do fluxo (`DiagnosisWizard`, `DiagnosisReview`, `DiagnosisResult`), além da listagem `Diagnostics`.
 
-Adicionar um botão na página `Diagnostics` que limpa todos os dados do diagnóstico **da loja atual** (não global), com confirmação.
+## Implementação
 
-## O que faz
+1. **Criar componente reutilizável** `src/components/diagnosis/ResetDiagnosisButton.tsx`:
+   - Props: `storeId`, `variant?`, `size?`, `redirectTo?` (default: `/app/dashboard`).
+   - Botão com ícone `RotateCcw` + `AlertDialog` de confirmação.
+   - Função `handleReset` que:
+     - Busca `diagnosis_sessions` por `user_id` + `store_id`.
+     - Deleta em cascata: `diagnosis_step_status`, `diagnosis_answers`, `diagnosis_sessions`.
+     - Deleta resultados: `action_plans`, `diagnostics`, `reports` por `store_id`.
+     - Toast de sucesso + redirect.
 
-Ao confirmar, executa via Supabase client (respeita RLS, só apaga o que o usuário pode):
+2. **Refatorar `src/pages/app/Diagnostics.tsx`**: substituir o botão/dialog atual pelo novo componente.
 
-1. Busca `diagnosis_sessions` da loja+usuário
-2. Apaga `diagnosis_step_status` e `diagnosis_answers` dessas sessões
-3. Apaga as próprias `diagnosis_sessions`
-4. Apaga `action_plans`, `diagnostics` e `reports` da loja
+3. **Adicionar o botão em**:
+   - `src/pages/app/diagnosis/DiagnosisWizard.tsx` (header)
+   - `src/pages/app/diagnosis/DiagnosisReview.tsx` (header)
+   - `src/pages/app/diagnosis/DiagnosisResult.tsx` (header)
 
-Mantém intactos: loja, produtos, métricas, avaliações, concorrentes.
+   Cada tela passa o `storeId` da sessão atual.
 
-## UI
-
-- Botão **"Resetar diagnóstico"** (variant outline + ícone `RotateCcw`) ao lado do "Consultar Gestor IA" no header da página `/app/stores/:id/diagnostics`.
-- Abre um `AlertDialog` confirmando a ação irreversível.
-- Toast de sucesso e redirect para o dashboard da loja.
-
-## Arquivo
-
-- `src/pages/app/Diagnostics.tsx`: adicionar handler + AlertDialog + botão.
-
-## Fora do escopo
-
-- Reset global (todos os usuários) — exigiria edge function admin.
-- Reset por sessão individual.
-
-Aprovar para eu implementar.
+## Resultado
+Mesmo botão de reset disponível em todas as telas do diagnóstico, sem duplicação de lógica.
