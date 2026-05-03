@@ -1,65 +1,59 @@
-## Tela de Revisão Pré-Geração — Enriquecimento
+# Expansão do Funil de Diagnóstico
 
-A rota `/app/diagnosis/:sessionId/review` já existe, mas hoje só mostra o status percentual de cada etapa. Vamos transformá-la em uma revisão completa: respostas dadas, evidências calculadas e pontos críticos detectados — tudo antes de o dono da loja confirmar a geração do plano.
+Hoje o funil tem 10 etapas focadas no dono leigo. Sua lista pede dados extras: **equipe/operação**, **marketing/redes (Instagram/WhatsApp/diferencial)**, **concorrência**, **tendência de vendas (dias fortes/fracos)** e **visualizações/conversão dos apps**. A proposta abaixo encaixa esses pontos no funil atual sem inflar demais e mantendo as chaves que o motor de regras já lê.
 
-### O que será exibido
+## O que muda
 
-1. **Cabeçalho de prontidão**
-   - Score de completude geral (% das 10 etapas)
-   - Contagem: respostas preenchidas / pontos críticos / atenções / dados faltantes
-   - Botão "Voltar ao funil" e "Gerar plano de ação"
+### 1. Etapa 1 (Sobre a loja) — adicionar
+- `team_size` (select faixas): Quantas pessoas trabalham na loja hoje?
+- `main_goal` (select): Qual seu objetivo principal nos próximos 90 dias?  
+  (vender mais / aumentar lucro / melhorar nota / fidelizar / organizar operação)
+- `biggest_problem` (textarea, essential): Qual é o maior problema da loja hoje?
 
-2. **Pontos críticos detectados** (topo, destaque vermelho)
-   - Lista das evidências com `severity = "critico"` calculadas em tempo real por `evidencesFromAnswers()`
-   - Cada card: área, métrica atual vs. referência, impacto no negócio, ação recomendada
-   - Ex.: "Tempo de entrega 45 min (ref ≤35) — cliente desiste no checkout"
+### 2. Etapa 2 (Vitrine) — adicionar
+- `monthly_views` (select faixas): Quantas pessoas visualizam sua loja por mês?  
+  (com tooltip: Portal > Desempenho > Visitas)
+- `conversion_feeling` (rating3): De quem vê sua loja, quantos pedem? (Bom / Médio / Ruim / Não sei)
+- `strong_days` / `weak_days` (multiselect dias da semana)
+- `sales_trend` (select): Suas vendas nos últimos 60 dias estão… (subindo / estáveis / caindo / não sei)
 
-3. **Pontos de atenção** (amarelo, recolhível)
-   - Mesmo formato, severity = "atencao"
+### 3. Nova Etapa 8.5 — "Operação e equipe" (vira etapa 8, empurrando as outras)
+Foco em gargalos sem virar formulário corporativo:
+- `team_roles` (multiselect): Quem cuida de quê? (cozinha / atendimento / entrega / dono faz tudo)
+- `peak_capacity_ok` (rating3): Nos horários de pico, a cozinha dá conta?
+- `order_check_process` (yesno): Existe conferência do pedido antes de sair?
+- `frequent_errors` (multiselect): Erros mais comuns (item faltando / troca / falta de estoque / nenhum)
+- `stockout_frequency` (select): Com que frequência falta item?
 
-4. **Dados faltantes que reduzem precisão** (cinza)
-   - Agregado de `missing_data` das evidências + `missing_required_fields` dos status
-   - Cada item com link "Preencher agora" → volta para a etapa correspondente
+### 4. Nova Etapa "Marketing e diferencial" (depois de Anúncios)
+Reaproveita a etapa 9 (`ads`) acrescentando blocos novos:
+- `unique_value` (textarea, essential): Em uma frase, por que o cliente deveria escolher você e não o concorrente?
+- `instagram_active` (yesno) + `instagram_frequency` (select condicional)
+- `whatsapp_orders` (yesno): Recebe pedido por WhatsApp?
+- `whatsapp_base_size` (select condicional): Tamanho da base de contatos
+- `top_competitors` (textarea): Cite até 3 concorrentes que mais te preocupam (nome + por quê)
+- `competitor_advantage` (multiselect): O que eles fazem melhor? (preço / fotos / combos / nota / entrega / marketing)
 
-5. **Suas respostas, etapa por etapa** (accordion, uma seção por step)
-   - Para cada etapa: ícone de status, % completo, lista "Pergunta → Resposta"
-   - Respostas formatadas: ranges legíveis ("R$ 30–49"), arrays virando vírgula, tabelas (produtos, concorrentes) renderizadas como mini-tabela
-   - Botão "Editar etapa" em cada bloco
+### 5. Pequenos ajustes de UX
+- Adicionar tipo de campo `multiselect_days` reutilizando o `multiselect` existente (sem novo tipo) com options seg→dom.
+- Manter "Não sei" em todos os selects com faixas.
+- Todas perguntas novas com `essential: false` exceto `biggest_problem` e `unique_value`.
 
-6. **CTA final**
-   - Card "Pronto para gerar" com resumo (X críticos, Y atenções, Z etapas pendentes)
-   - Aviso quando há etapa essencial vazia: "Você pode gerar mesmo assim, mas o plano será mais genérico"
+## Impacto técnico
 
-### Mudanças técnicas
+- **`src/lib/diagnosis/steps.ts`**: adicionar perguntas nas etapas 1, 2, 9 e criar 1 etapa nova (Operação). Total passa de 10 → 11 etapas. `TOTAL_STEPS` atualiza automaticamente.
+- **`src/lib/diagnosis/evidences.ts`** (e cópia em `supabase/functions/_shared/evidences.ts`): adicionar regras leves usando os novos campos:
+  - `sales_trend = "caindo"` → ponto crítico
+  - `stockout_frequency` alto → operação
+  - `monthly_views` alto + `conversion_feeling = "ruim"` → problema de conversão
+  - `competitor_advantage` inclui "preço/fotos" → input para recomendações
+- **`src/pages/app/diagnosis/DiagnosisReview.tsx`**: nada estrutural — já lê dinamicamente dos STEPS. Vai mostrar a nova etapa automaticamente.
+- **`src/components/diagnosis/ReviewAnswerList.tsx`**: garantir formatação dos novos selects/multiselects (já é genérico, só validar labels).
+- **Banco**: nada a alterar — `diagnosis_answers` armazena por `step_key` + `question_key` em jsonb.
+- **IA / `ai-diagnose`**: continua recebendo o mapa completo de respostas; novos campos viram contexto adicional sem mudança de schema.
 
-- **`src/pages/app/diagnosis/DiagnosisReview.tsx`** (rewrite)
-  - Carregar `session + answers + statuses` via `loadSession()`
-  - Construir `answersByStep` com `answersAsMap()`
-  - Rodar `evidencesFromAnswers(answersByStep)` localmente para gerar críticos/atenções/dados faltantes (sem precisar chamar a IA)
-  - Renderizar 5 blocos descritos acima usando `Card`, `Badge`, `Accordion` (shadcn) e `Separator`
-  - Link "Editar etapa" usa `?step=N` que o wizard já lê
+## Fora do escopo (sugestões para depois)
+- Geração separada das seções "plano 7 dias / 30 dias / projeção" — já existe em `generate.ts`/`AIConsultReport`; podemos enriquecer o prompt num passo seguinte usando os novos sinais.
+- Integração real com Instagram/WhatsApp (hoje só captura auto-declarado).
 
-- **`src/components/diagnosis/ReviewAnswerList.tsx`** (novo, ~80 linhas)
-  - Helper de apresentação que recebe `step` (de `STEPS`) + `values` e formata cada `Question`:
-    - `range/select`: mostra o `label` da opção (não o value bruto)
-    - `multiselect`: junta labels com vírgula
-    - `boolean/radio`: "Sim/Não"
-    - `table`: mini-`<table>` com colunas das `Question.columns`
-    - vazio: cinza "—"
-
-- **`src/components/diagnosis/EvidenceCard.tsx`** (novo, ~40 linhas)
-  - Recebe uma `RuleEvidence` e renderiza card compacto com cores por severidade
-
-### Sem mudanças necessárias
-
-- `evidences.ts`, `rules.ts`, `session.ts`, `steps.ts`: já fornecem tudo
-- Roteamento: rota já existe em `App.tsx` e `DiagnosisWizard` já redireciona pra ela ao terminar
-- Backend: revisão é 100% client-side; a geração só acontece quando o usuário clica no CTA (fluxo atual mantido)
-
-### Resultado
-
-O dono da loja chega na revisão e vê, antes de gerar o relatório:
-- Tudo que já respondeu (em linguagem dele)
-- O que o sistema já consegue afirmar como problema crítico
-- O que falta preencher para o diagnóstico ficar mais preciso
-- E só então confirma a geração do plano de ação.
+Posso seguir com essa expansão? Se aprovar, eu implemento direto: edito `steps.ts`, atualizo as regras e valido a tela de revisão.

@@ -130,7 +130,39 @@ export const STEPS: StepDef[] = [
           { value: "", label: "Não sei" },
         ],
       },
-      { key: "notes", label: "Algo importante sobre sua loja que devemos saber?", type: "textarea", placeholder: "Opcional" },
+      {
+        key: "team_size",
+        label: "Quantas pessoas trabalham na loja hoje (incluindo você)?",
+        type: "select",
+        options: [
+          { value: "1", label: "Só eu" },
+          { value: "2", label: "2 pessoas" },
+          { value: "4", label: "3 a 5 pessoas" },
+          { value: "8", label: "6 a 10 pessoas" },
+          { value: "15", label: "Mais de 10" },
+        ],
+      },
+      {
+        key: "main_goal",
+        label: "Qual seu objetivo principal nos próximos 90 dias?",
+        type: "select",
+        essential: true,
+        options: [
+          { value: "vender_mais", label: "Vender mais pedidos" },
+          { value: "aumentar_lucro", label: "Aumentar o lucro" },
+          { value: "melhorar_nota", label: "Melhorar a nota da loja" },
+          { value: "fidelizar", label: "Fazer o cliente voltar mais" },
+          { value: "organizar_operacao", label: "Organizar a operação" },
+        ],
+      },
+      {
+        key: "biggest_problem",
+        label: "Qual é o maior problema da sua loja hoje?",
+        type: "textarea",
+        essential: true,
+        placeholder: "Conte com suas palavras — pode ser uma frase só.",
+      },
+      { key: "notes", label: "Algo mais importante sobre sua loja que devemos saber?", type: "textarea", placeholder: "Opcional" },
     ],
   },
 
@@ -205,6 +237,65 @@ export const STEPS: StepDef[] = [
         key: "looks_professional",
         label: "Olhando de fora, sua loja transmite confiança?",
         type: "rating3",
+      },
+      {
+        key: "monthly_views",
+        label: "Quantas pessoas visualizam sua loja por mês?",
+        type: "select",
+        tooltip: `${TOOLTIP_PORTAL} Em Desempenho > Visitas.`,
+        options: [
+          { value: "500", label: "Menos de 1.000" },
+          { value: "2500", label: "1.000 a 5.000" },
+          { value: "7500", label: "5.000 a 10.000" },
+          { value: "20000", label: "10.000 a 30.000" },
+          { value: "50000", label: "Mais de 30.000" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "conversion_feeling",
+        label: "Das pessoas que veem sua loja, você sente que muitas pedem?",
+        type: "rating3",
+      },
+      {
+        key: "sales_trend",
+        label: "Suas vendas nos últimos 60 dias estão…",
+        type: "select",
+        essential: true,
+        options: [
+          { value: "subindo", label: "Subindo" },
+          { value: "estavel", label: "Estáveis" },
+          { value: "caindo", label: "Caindo" },
+          { value: "nao_sei", label: "Não sei dizer" },
+        ],
+      },
+      {
+        key: "strong_days",
+        label: "Quais dias da semana costumam ser os mais fortes?",
+        type: "multiselect",
+        options: [
+          { value: "seg", label: "Seg" },
+          { value: "ter", label: "Ter" },
+          { value: "qua", label: "Qua" },
+          { value: "qui", label: "Qui" },
+          { value: "sex", label: "Sex" },
+          { value: "sab", label: "Sáb" },
+          { value: "dom", label: "Dom" },
+        ],
+      },
+      {
+        key: "weak_days",
+        label: "E os dias mais fracos?",
+        type: "multiselect",
+        options: [
+          { value: "seg", label: "Seg" },
+          { value: "ter", label: "Ter" },
+          { value: "qua", label: "Qua" },
+          { value: "qui", label: "Qui" },
+          { value: "sex", label: "Sex" },
+          { value: "sab", label: "Sáb" },
+          { value: "dom", label: "Dom" },
+        ],
       },
     ],
   },
@@ -420,11 +511,67 @@ export const STEPS: StepDef[] = [
   },
 
   // ============================================================
-  // 8) AVALIAÇÕES E PROBLEMAS
+  // 8) OPERAÇÃO E EQUIPE
+  // ============================================================
+  {
+    key: "operations",
+    index: 8,
+    title: "Operação e equipe",
+    subtitle: "Onde aperta no dia a dia",
+    questions: [
+      {
+        key: "team_roles",
+        label: "Quem cuida de cada parte hoje?",
+        type: "multiselect",
+        options: [
+          { value: "cozinha", label: "Cozinha tem alguém dedicado" },
+          { value: "atendimento", label: "Atendimento tem alguém dedicado" },
+          { value: "entrega", label: "Entrega tem alguém dedicado" },
+          { value: "dono_faz_tudo", label: "O dono faz quase tudo" },
+        ],
+      },
+      {
+        key: "peak_capacity_ok",
+        label: "No horário de pico, a cozinha dá conta sem atrasar?",
+        type: "rating3",
+      },
+      {
+        key: "order_check_process",
+        label: "Existe alguma conferência do pedido antes de sair?",
+        type: "yesno",
+      },
+      {
+        key: "frequent_errors",
+        label: "Quais erros de operação mais aparecem?",
+        type: "multiselect",
+        options: [
+          { value: "item_faltando", label: "Item faltando no pedido" },
+          { value: "troca", label: "Troca de pedido" },
+          { value: "estoque", label: "Falta de ingrediente / estoque" },
+          { value: "demora", label: "Demora na cozinha" },
+          { value: "nenhum", label: "Quase não temos erro" },
+        ],
+      },
+      {
+        key: "stockout_frequency",
+        label: "Com que frequência falta algum item para vender?",
+        type: "select",
+        options: [
+          { value: "nunca", label: "Quase nunca" },
+          { value: "raro", label: "Raramente (1x por mês)" },
+          { value: "as_vezes", label: "Algumas vezes na semana" },
+          { value: "muito", label: "Quase todo dia" },
+        ],
+      },
+    ],
+  },
+
+  // ============================================================
+  // 9) AVALIAÇÕES E PROBLEMAS
   // ============================================================
   {
     key: "reviews",
-    index: 8,
+    index: 9,
     title: "Avaliações e reclamações",
     subtitle: "O que os clientes mais falam",
     questions: [
@@ -470,11 +617,12 @@ export const STEPS: StepDef[] = [
   },
 
   // ============================================================
-  // 9) ANÚNCIOS E PROMOÇÕES
+  // ============================================================
+  // 10) ANÚNCIOS E PROMOÇÕES
   // ============================================================
   {
     key: "ads",
-    index: 9,
+    index: 10,
     title: "Anúncios e promoções",
     subtitle: "Como você atrai cliente novo",
     questions: [
@@ -525,15 +673,70 @@ export const STEPS: StepDef[] = [
       { key: "platform_coupon", label: "Usa cupom da plataforma?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
       { key: "free_delivery", label: "Já testou frete grátis?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
       { key: "promo_profitable", label: "Você sente que essas promoções dão lucro?", type: "yesno", condition: { key: "uses_promotions", equals: true } },
+
+      // Marketing fora do app
+      {
+        key: "unique_value",
+        label: "Em uma frase, por que o cliente deveria escolher VOCÊ e não o concorrente?",
+        type: "textarea",
+        essential: true,
+        placeholder: "Ex.: hambúrguer artesanal com pão da casa e entrega rápida",
+      },
+      { key: "instagram_active", label: "Você usa Instagram para divulgar a loja?", type: "yesno" },
+      {
+        key: "instagram_frequency",
+        label: "Com que frequência posta?",
+        type: "select",
+        condition: { key: "instagram_active", equals: true },
+        options: [
+          { value: "diario", label: "Quase todo dia" },
+          { value: "semanal", label: "Algumas vezes por semana" },
+          { value: "mensal", label: "Raramente / só quando lembro" },
+        ],
+      },
+      { key: "whatsapp_orders", label: "Recebe pedidos por WhatsApp?", type: "yesno" },
+      {
+        key: "whatsapp_base_size",
+        label: "Quantos contatos você tem na sua base de WhatsApp?",
+        type: "select",
+        condition: { key: "whatsapp_orders", equals: true },
+        options: [
+          { value: "50", label: "Menos de 100" },
+          { value: "300", label: "100 a 500" },
+          { value: "1000", label: "500 a 2.000" },
+          { value: "3000", label: "Mais de 2.000" },
+          { value: "", label: "Não sei" },
+        ],
+      },
+      {
+        key: "top_competitors",
+        label: "Cite até 3 concorrentes que mais te preocupam (nome + por quê).",
+        type: "textarea",
+        placeholder: "Um por linha. Ex.: Burger X — vende mais barato",
+      },
+      {
+        key: "competitor_advantage",
+        label: "O que esses concorrentes fazem melhor que você?",
+        type: "multiselect",
+        options: [
+          { value: "preco", label: "Preço mais baixo" },
+          { value: "fotos", label: "Fotos e cardápio" },
+          { value: "combos", label: "Combos / promoções" },
+          { value: "nota", label: "Nota mais alta" },
+          { value: "entrega", label: "Tempo de entrega" },
+          { value: "marketing", label: "Marketing / Instagram" },
+          { value: "nada", label: "Acho que estou na frente" },
+        ],
+      },
     ],
   },
 
   // ============================================================
-  // 10) FIDELIZAÇÃO
+  // 11) FIDELIZAÇÃO
   // ============================================================
   {
     key: "loyalty",
-    index: 10,
+    index: 11,
     title: "Fazer o cliente voltar",
     subtitle: "Recompra é mais barato que cliente novo",
     questions: [
