@@ -1,5 +1,5 @@
 // Process a print uploaded by the user: download from storage, send to Lovable AI
-// (multimodal), extract text + structured data based on classification.
+// (multimodal), AUTO-classify the print and extract structured data in a single call.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 
@@ -7,62 +7,57 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const SCHEMA_BY_CLASSIFICATION: Record<string, any> = {
-  faturamento: {
-    revenue: { type: "number", description: "Faturamento total no período" },
-    orders: { type: "number" },
-    average_ticket: { type: "number" },
-    period: { type: "string", description: "Ex: '7 dias', 'Mês 10/2025'" },
-  },
-  indicadores: {
-    rating: { type: "number" },
-    reviews_count: { type: "number" },
-    cancellation_rate: { type: "number", description: "Em %" },
-    delivery_time_min: { type: "number" },
-    prep_time_min: { type: "number" },
-  },
-  avaliacoes: {
-    average_rating: { type: "number" },
-    total_reviews: { type: "number" },
-    top_complaints: { type: "array", items: { type: "string" } },
-    top_compliments: { type: "array", items: { type: "string" } },
-  },
-  cardapio: {
-    products_visible: { type: "number" },
-    products_with_photo: { type: "number" },
-    has_combos: { type: "boolean" },
-    notes: { type: "string" },
-  },
-  produto: {
-    name: { type: "string" },
-    price: { type: "number" },
-    has_photo: { type: "boolean" },
-    has_description: { type: "boolean" },
-    description_quality: { type: "string", enum: ["boa", "media", "ruim"] },
-  },
-  promocoes: {
-    has_coupon: { type: "boolean" },
-    has_free_delivery: { type: "boolean" },
-    discount_percent: { type: "number" },
-    notes: { type: "string" },
-  },
-  concorrentes: {
-    name: { type: "string" },
-    rating: { type: "number" },
-    delivery_time_min: { type: "number" },
-    price_range: { type: "string" },
-    notes: { type: "string" },
-  },
-  loja: {
-    has_cover: { type: "boolean" },
-    has_logo: { type: "boolean" },
-    looks_professional: { type: "string", enum: ["sim", "medio", "nao"] },
-    rating: { type: "number" },
-    notes: { type: "string" },
-  },
-  outro: {
-    notes: { type: "string" },
-  },
+const CATEGORIES = [
+  "faturamento",
+  "indicadores",
+  "avaliacoes",
+  "cardapio",
+  "produto",
+  "promocoes",
+  "concorrentes",
+  "loja",
+  "outro",
+] as const;
+
+// Union schema — todos os campos possíveis de qualquer categoria.
+// A IA preenche apenas os que conseguir ver. additionalProperties = false
+// para evitar lixo, mas todos os campos são opcionais.
+const UNION_PROPS = {
+  // faturamento
+  revenue: { type: "number", description: "Faturamento total no período (R$)" },
+  orders: { type: "number" },
+  average_ticket: { type: "number" },
+  period: { type: "string" },
+  // indicadores / avaliacoes
+  rating: { type: "number", description: "Nota da loja (0-5)" },
+  reviews_count: { type: "number" },
+  cancellation_rate: { type: "number", description: "% de cancelamentos" },
+  delivery_time_min: { type: "number" },
+  prep_time_min: { type: "number" },
+  average_rating: { type: "number" },
+  total_reviews: { type: "number" },
+  top_complaints: { type: "array", items: { type: "string" } },
+  top_compliments: { type: "array", items: { type: "string" } },
+  // cardapio / produto
+  products_visible: { type: "number" },
+  products_with_photo: { type: "number" },
+  has_combos: { type: "boolean" },
+  name: { type: "string" },
+  price: { type: "number" },
+  has_photo: { type: "boolean" },
+  has_description: { type: "boolean" },
+  description_quality: { type: "string", enum: ["boa", "media", "ruim"] },
+  // promocoes
+  has_coupon: { type: "boolean" },
+  has_free_delivery: { type: "boolean" },
+  discount_percent: { type: "number" },
+  // loja
+  has_cover: { type: "boolean" },
+  has_logo: { type: "boolean" },
+  looks_professional: { type: "string", enum: ["sim", "medio", "nao"] },
+  // genérico
+  price_range: { type: "string" },
+  notes: { type: "string", description: "Observações livres sobre o print" },
 };
 
 Deno.serve(async (req) => {
@@ -92,7 +87,6 @@ Deno.serve(async (req) => {
     if (dErr || !file) throw new Error("Falha ao baixar print do storage");
 
     const buf = new Uint8Array(await file.arrayBuffer());
-    // Chunked base64 encoding to avoid stack overflow on large screenshots
     let binary = "";
     const CHUNK = 0x8000;
     for (let i = 0; i < buf.length; i += CHUNK) {
@@ -102,30 +96,47 @@ Deno.serve(async (req) => {
     const mime = upload.mime_type || "image/png";
     const dataUrl = `data:${mime};base64,${b64}`;
 
-    const cls = upload.classification || "outro";
-    const schemaProps = SCHEMA_BY_CLASSIFICATION[cls] || SCHEMA_BY_CLASSIFICATION.outro;
+    // Se o usuário escolheu manualmente algo diferente de "outro", respeitamos.
+    // Caso contrário (default "outro"), pedimos pra IA classificar.
+    const userCls = upload.classification || "outro";
+    const shouldAutoClassify = userCls === "outro";
 
     const tool = {
       type: "function",
       function: {
-        name: "extract_print_data",
-        description: `Extrair dados de um print de ${cls} de delivery (iFood, Rappi, 99Food, WhatsApp, Instagram).`,
+        name: "analyze_print",
+        description: "Classifica o print de delivery e extrai os dados visíveis.",
         parameters: {
           type: "object",
           properties: {
+            category: {
+              type: "string",
+              enum: [...CATEGORIES],
+              description:
+                "Tipo do print: faturamento (relatório de vendas), indicadores (operação: tempo, cancelamento), avaliacoes (lista/nota de avaliações), cardapio (lista de produtos), produto (página de um item), promocoes (cupom/desconto), concorrentes (loja de outro), loja (capa/perfil da própria loja), outro.",
+            },
             extracted_text: { type: "string", description: "Todo texto visível no print" },
             structured: {
               type: "object",
-              properties: schemaProps,
+              properties: UNION_PROPS,
               additionalProperties: false,
+              description: "Preencha APENAS os campos que aparecem no print. Não invente.",
             },
             confidence: { type: "string", enum: ["alta", "media", "baixa"] },
           },
-          required: ["extracted_text", "structured", "confidence"],
+          required: ["category", "extracted_text", "structured", "confidence"],
           additionalProperties: false,
         },
       },
     };
+
+    const systemMsg = shouldAutoClassify
+      ? "Você analisa prints de painéis de delivery (iFood, Rappi, 99Food, WhatsApp, Instagram). Primeiro IDENTIFIQUE o tipo do print (category), depois EXTRAIA os dados visíveis. NUNCA invente números — se não estiver na imagem, omita o campo."
+      : `Você analisa prints de painéis de delivery. O usuário já classificou como '${userCls}'. Use essa categoria e extraia os dados visíveis. NUNCA invente números — se não estiver na imagem, omita o campo.`;
+
+    const userText = shouldAutoClassify
+      ? "Identifique a categoria deste print e extraia todos os dados visíveis (números, notas, nomes, preços, flags)."
+      : `Categoria já definida: ${userCls}. Extraia todos os dados visíveis.`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -134,22 +145,19 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [
-          {
-            role: "system",
-            content: "Você analisa prints de painéis de delivery e extrai dados objetivos. NÃO invente números — se não estiver visível, omita o campo.",
-          },
+          { role: "system", content: systemMsg },
           {
             role: "user",
             content: [
-              { type: "text", text: `Classificação informada: ${cls}. Extraia o que estiver visível.` },
+              { type: "text", text: userText },
               { type: "image_url", image_url: { url: dataUrl } },
             ],
           },
         ],
         tools: [tool],
-        tool_choice: { type: "function", function: { name: "extract_print_data" } },
+        tool_choice: { type: "function", function: { name: "analyze_print" } },
       }),
     });
 
@@ -172,21 +180,29 @@ Deno.serve(async (req) => {
 
     const aiJson = await aiResp.json();
     const toolCall = aiJson.choices?.[0]?.message?.tool_calls?.[0];
-    const args = toolCall ? JSON.parse(toolCall.function.arguments) : { extracted_text: "", structured: {}, confidence: "baixa" };
+    const args = toolCall
+      ? JSON.parse(toolCall.function.arguments)
+      : { category: userCls, extracted_text: "", structured: {}, confidence: "baixa" };
+
+    const finalCategory = shouldAutoClassify
+      ? (CATEGORIES as readonly string[]).includes(args.category) ? args.category : "outro"
+      : userCls;
 
     await admin
       .from("diagnosis_uploads")
       .update({
+        classification: finalCategory,
         extracted_text: args.extracted_text || null,
-        structured_data: { ...args.structured, _confidence: args.confidence },
+        structured_data: { ...args.structured, _confidence: args.confidence, _auto_classified: shouldAutoClassify },
         status: "processed",
         error: null,
       })
       .eq("id", upload_id);
 
-    return new Response(JSON.stringify({ ok: true, structured: args.structured, confidence: args.confidence }), {
-      headers: { ...cors, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ok: true, category: finalCategory, structured: args.structured, confidence: args.confidence }),
+      { headers: { ...cors, "Content-Type": "application/json" } },
+    );
   } catch (e: any) {
     console.error("process-print error", e);
     try {

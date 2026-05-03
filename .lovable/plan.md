@@ -1,52 +1,56 @@
-## Objetivo
+## Diagnóstico
 
-Quando o usuário enviar prints na etapa "prints" do diagnóstico, o sistema deve:
-1. Ler e analisar as imagens com IA (já funciona via `process-print`).
-2. **Preencher automaticamente** os campos detectados (sem precisar clicar em "Aplicar tudo").
-3. **Pular o usuário direto para a próxima etapa que ainda tem campos obrigatórios vazios**, em ordem.
+Verifiquei os últimos 10 prints enviados no banco: **todos com `classification = "outro"`**. Isso quebra a cadeia inteira:
 
-Hoje a IA já extrai os dados e o card `PrintProposalsCard` mostra os campos detectados, mas exige clique manual e não navega para os faltantes.
+1. `process-print` recebe `classification = "outro"` → usa o schema só com `notes` (texto livre).
+2. `structured_data` fica praticamente vazio (só `notes` + `_confidence`).
+3. `printMapper.ts` ignora prints `outro` → nenhuma proposal é gerada.
+4. O `useEffect` de auto-aplicar no `DiagnosisWizard` não tem nada para aplicar → nada preenche, nada navega.
 
-## Mudanças
+A IA está lendo os prints (as `notes` mostram que reconheceu loja, avaliações, cardápio, faturamento, etc.), mas como o pipeline depende da classificação manual, o conteúdo nunca vira campo estruturado.
 
-### 1. Auto-aplicar proposals quando prints terminam (`DiagnosisWizard.tsx`)
+## Solução: auto-classificação na edge function
 
-- Adicionar um `useEffect` que observa `proposals` e `uploads`.
-- Quando todos os uploads tiverem `status === "processed"` (nenhum `pending`) e existirem proposals novas ainda não aplicadas, chamar a mesma lógica de `apply()` do `PrintProposalsCard` automaticamente.
-- Mostrar um toast: *"IA preencheu N campos a partir dos seus prints"*.
-- Marcar as proposals já aplicadas em um `Set` no estado (`appliedKeys`) para não reaplicar em loop.
-- Manter o card visual apenas como confirmação (ou esconder após auto-aplicar).
+Vou fazer o `process-print` **classificar a imagem automaticamente** antes de extrair, em vez de depender do `defaultClassification` do uploader.
 
-### 2. Pular para a primeira etapa incompleta (`DiagnosisWizard.tsx`)
+### Mudanças
 
-- Após auto-aplicar, calcular via `computeStepCompletion` qual é o **primeiro `activeSteps`** (depois do step "prints") que ainda tem `missing_required_fields.length > 0`.
-- Chamar `goTo(thatIndex)` para já levar o usuário até lá.
-- Se todas as etapas estiverem completas, ir direto para `/review`.
+**1. `supabase/functions/process-print/index.ts`**
+- Antes da extração, fazer uma chamada curta à IA (ou incluir no mesmo prompt via tool) pedindo para escolher a classificação correta dentre o enum: `faturamento | indicadores | avaliacoes | cardapio | produto | promocoes | concorrentes | loja | outro`.
+- Usar a classificação detectada para escolher o schema certo de extração.
+- Salvar a classificação detectada em `diagnosis_uploads.classification` (sobrescrevendo o "outro" inicial).
+- Manter o respeito à classificação se o usuário escolheu manualmente algo diferente de "outro" (regra: só auto-classifica quando vier "outro").
 
-### 3. Helper de navegação (`src/lib/diagnosis/journey.ts` — já existe)
+Implementação prática: uma única chamada à IA com **duas tools**:
+- `classify_print(category, confidence)` — IA chama primeiro
+- depois, no servidor, escolho o schema certo e faço a segunda chamada `extract_print_data` com o schema correspondente.
 
-- Adicionar (ou reusar) `findNextIncompleteStepIndex(activeSteps, allAnswers, fromIndex)` que percorre as etapas em ordem e devolve o índice da primeira com campos obrigatórios vazios.
+Mais simples e barato: **uma chamada só** com prompt: "Primeiro identifique a categoria do print. Depois extraia os campos relevantes." Tool única com `category` + `structured` (union de todos os schemas, com `additionalProperties: true` no `structured` para aceitar qualquer campo dos 9 schemas). O servidor depois filtra/normaliza pela `category` retornada.
 
-### 4. Refator leve do `PrintProposalsCard`
+Vou seguir essa segunda abordagem (uma chamada só, mais rápida e mais barata).
 
-- Aceitar prop opcional `autoApplied?: boolean`. Quando `true`, mostrar um badge "Preenchido automaticamente" em vez dos botões "Aplicar tudo / Revisar".
-- O botão de "Revisar/Editar" continua disponível para o usuário corrigir manualmente o que a IA inferiu.
+**2. `src/lib/diagnosis/printMapper.ts`**
+- Ampliar o mapeamento para também tratar `produto` e `promocoes` (hoje são ignorados).
+- Garantir que se a IA devolver campos válidos mesmo em `outro`, eles ainda sejam aproveitados (fallback: tentar mapear todos os campos conhecidos independente da classificação).
 
-## Fluxo final do usuário
+**3. `src/components/diagnosis/PrintUploader.tsx`**
+- Mudar o texto do badge "Analisando…" para deixar claro que a IA também está identificando o tipo do print.
+- Quando o backend devolver classificação detectada, refletir no `<select>` automaticamente (já acontece via `load()` após o `invoke`, só preciso garantir que o select use o valor atualizado).
+
+### Resultado esperado
 
 ```text
-1. Usuário envia 3 prints na etapa "Prints"
-2. process-print analisa cada um (badge "Analisando…" → "Analisado")
-3. Wizard detecta proposals → auto-aplica → toast "IA preencheu 7 campos"
-4. Wizard pula automaticamente para a próxima etapa com campos vazios
-   (ex: "Sobre a loja" se rating já veio dos prints mas falta horário)
-5. Usuário só preenche o que faltou; ao avançar, mesmo loop continua
+Usuário envia 8 prints sem classificar
+  → process-print classifica cada um (cardapio, avaliacoes, loja…)
+  → extrai os campos certos (rating, products_visible, has_combos…)
+  → printMapper gera proposals
+  → DiagnosisWizard auto-aplica e pula para o próximo step incompleto
 ```
 
-## Arquivos afetados
+### Arquivos afetados
 
-- `src/pages/app/diagnosis/DiagnosisWizard.tsx` — auto-apply + auto-navegar
-- `src/components/diagnosis/PrintProposalsCard.tsx` — modo "autoApplied"
-- `src/lib/diagnosis/journey.ts` — helper `findNextIncompleteStepIndex`
+- `supabase/functions/process-print/index.ts` — auto-classificação + extração combinadas
+- `src/lib/diagnosis/printMapper.ts` — mapeamentos para `produto` e `promocoes`, fallback
+- `src/components/diagnosis/PrintUploader.tsx` — micro-ajustes de UX
 
-Sem mudanças no banco, no edge function `process-print` nem no mapper (`printMapper.ts` já cobre os campos suportados).
+Sem mudanças de schema no banco.
