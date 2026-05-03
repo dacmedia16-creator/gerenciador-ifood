@@ -187,20 +187,21 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const storeId: string | undefined = body?.storeId;
     const sessionId: string | undefined = body?.sessionId;
-    const model: string = body?.model ?? "google/gemini-2.5-pro";
+    const model: string = body?.model ?? "google/gemini-3-flash-preview";
     if (!storeId) {
       return new Response(JSON.stringify({ error: "storeId é obrigatório" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR] = await Promise.all([
+    const [storeR, productsR, competitorsR, reviewsR, metricsR, reportR, goalsR] = await Promise.all([
       supabase.from("stores").select("*").eq("id", storeId).single(),
       supabase.from("products").select("*").eq("store_id", storeId).limit(50),
       supabase.from("competitors").select("*").eq("store_id", storeId).limit(20),
       supabase.from("reviews").select("comment, sentiment, rating").eq("store_id", storeId).limit(40),
       supabase.from("metrics").select("*").eq("store_id", storeId).order("period_end", { ascending: false }).limit(3),
       supabase.from("reports").select("id, report_data").eq("store_id", storeId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("store_goals").select("goal_type, metric_key, target_value, current_value, deadline, priority, notes").eq("store_id", storeId).eq("status", "ativa").order("priority", { ascending: false }).limit(5),
     ]);
 
     if (storeR.error || !storeR.data) {
@@ -212,13 +213,14 @@ Deno.serve(async (req) => {
     // ===== Camada 0: dados da sessão do funil (respostas + prints) =====
     let sessionEvidences: RuleEvidence[] = [];
     let sessionDebug: Record<string, any> = {};
+    let printSnippets: Array<{ classification: string; text: string }> = [];
     if (sessionId) {
       const [answersR, uploadsR] = await Promise.all([
         supabase.from("diagnosis_answers")
           .select("step_key, question_key, answer_value")
           .eq("session_id", sessionId),
         supabase.from("diagnosis_uploads")
-          .select("status, classification, structured_data")
+          .select("status, classification, structured_data, extracted_text")
           .eq("session_id", sessionId),
       ]);
       const { evidences } = evidencesFromSession(
@@ -226,10 +228,18 @@ Deno.serve(async (req) => {
         (uploadsR.data ?? []) as any,
       );
       sessionEvidences = evidences;
+      printSnippets = (uploadsR.data ?? [])
+        .filter((u: any) => (u.status === "processed" || u.status === "done") && u.extracted_text)
+        .slice(0, 6)
+        .map((u: any) => ({
+          classification: u.classification ?? "outro",
+          text: String(u.extracted_text).slice(0, 800),
+        }));
       sessionDebug = {
         answers_count: answersR.data?.length ?? 0,
         uploads_count: uploadsR.data?.length ?? 0,
         session_evidences: evidences.length,
+        print_snippets: printSnippets.length,
       };
       console.log(JSON.stringify({ evt: "ai_consult.session", session_id: sessionId, ...sessionDebug }));
     }
@@ -308,10 +318,24 @@ Deno.serve(async (req) => {
       })),
       avaliacoes_amostra: (reviewsR.data ?? []).slice(0, 10),
       concorrentes: (competitorsR.data ?? []).slice(0, 5),
+      print_snippets: printSnippets,
     };
+
+    const storeGoals = (goalsR?.data ?? []).map((g: any) => ({
+      goal_type: g.goal_type,
+      metric_key: g.metric_key,
+      target_value: g.target_value,
+      current_value: g.current_value,
+      deadline: g.deadline,
+      priority: g.priority,
+      notes: g.notes,
+    }));
 
     const userPrompt = `RULE_EVIDENCES (fonte da verdade objetiva):
 ${JSON.stringify(ruleEvidences, null, 2)}
+
+STORE_GOALS (metas ativas declaradas pelo dono — priorize ações que aproximam dessas metas):
+${JSON.stringify(storeGoals.length ? storeGoals : { aviso: "nenhuma meta ativa cadastrada" }, null, 2)}
 
 STORE_MEMORY (perfil + recorrência + métricas 7/14/30d):
 ${JSON.stringify(storeMemory ?? { aviso: "memória vazia — primeira análise" }, null, 2)}
@@ -325,7 +349,7 @@ ${JSON.stringify(similarCases, null, 2)}
 KNOWLEDGE_SNIPPETS (top ${kbSnippets.length} da base de conhecimento):
 ${JSON.stringify(kbSnippets, null, 2)}
 
-RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo daqui):
+RAW_CONTEXT (apenas para escrever melhor — NÃO gere problema novo daqui; print_snippets contém OCR bruto dos prints enviados):
 ${JSON.stringify(rawContext, null, 2)}
 
 Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em cada main_problem.`;

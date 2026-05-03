@@ -30,12 +30,13 @@ export default function DiagnosisWelcome() {
     })();
   }, [user]);
 
-  const handleStart = async () => {
+  const handleStart = async (mode: "prints" | "form" | "both" = "both") => {
     if (!user) return;
     setStarting(true);
     try {
       const session = draft ?? (await createSession(user.id, params.get("storeId")));
-      navigate(`/app/diagnosis/${session.id}`);
+      try { sessionStorage.setItem(`diagnosis:${session.id}:mode`, mode); } catch {}
+      navigate(`/app/diagnosis/${session.id}?mode=${mode}`);
     } catch (e: any) {
       toast.error(e.message || "Erro ao iniciar diagnóstico");
       setStarting(false);
@@ -129,24 +130,43 @@ export default function DiagnosisWelcome() {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
-          <Button onClick={handleStart} disabled={starting} size="lg" className="flex-1">
-            {starting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Abrindo…
-              </>
-            ) : draft ? (
-              "Continuar de onde parei"
-            ) : (
-              "Começar diagnóstico"
-            )}
-          </Button>
-          {draft && (
+        {draft ? (
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button onClick={() => handleStart("both")} disabled={starting} size="lg" className="flex-1">
+              {starting ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Abrindo…</>
+              ) : (
+                "Continuar de onde parei"
+              )}
+            </Button>
             <Button variant="outline" onClick={handleRestart} disabled={starting} size="lg">
               Recomeçar do zero
             </Button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-2">
+            <p className="text-sm font-medium">Como você prefere começar?</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("prints")} className="h-auto py-4 flex-col items-start gap-1 text-left">
+                <span className="font-semibold">📸 Só prints</span>
+                <span className="text-xs text-muted-foreground font-normal">A IA extrai os dados das suas telas</span>
+              </Button>
+              <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("form")} className="h-auto py-4 flex-col items-start gap-1 text-left">
+                <span className="font-semibold">📝 Só formulário</span>
+                <span className="text-xs text-muted-foreground font-normal">Responda perguntas guiadas</span>
+              </Button>
+              <Button size="lg" disabled={starting} onClick={() => handleStart("both")} className="h-auto py-4 flex-col items-start gap-1 text-left">
+                <span className="font-semibold">⚡ Prints + formulário</span>
+                <span className="text-xs opacity-90 font-normal">Diagnóstico mais preciso (recomendado)</span>
+              </Button>
+            </div>
+            {starting && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Abrindo diagnóstico…
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );
