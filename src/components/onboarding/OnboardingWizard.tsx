@@ -181,8 +181,11 @@ export function OnboardingWizard() {
           <div className="space-y-4 text-center">
             <CheckCircle2 className="h-12 w-12 mx-auto text-success" />
             <h2 className="text-2xl font-bold">Sua loja está pronta!</h2>
-            <p className="text-muted-foreground">Geramos seu primeiro diagnóstico baseado nos dados informados. Você pode adicionar produtos, concorrentes e avaliações para análises mais ricas.</p>
-            <Button onClick={goToStore} className="gradient-primary text-primary-foreground">Ver minha loja<ArrowRight className="h-4 w-4 ml-1" /></Button>
+            <p className="text-muted-foreground">Agora vamos diagnosticar sua loja para mostrar onde você está perdendo dinheiro e o que fazer primeiro.</p>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+              <Button onClick={goToStore} className="gradient-primary text-primary-foreground">Começar diagnóstico<ArrowRight className="h-4 w-4 ml-1" /></Button>
+              <Button variant="ghost" onClick={() => navigate("/app")}>Ir para o painel</Button>
+            </div>
           </div>
         )}
       </Card>
