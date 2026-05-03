@@ -9,6 +9,7 @@ import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge, SeverityBadge } from "@/components/StatusBadges";
 import { ArrowRight, FileText, Sparkles, ChevronRight, Info, Target, ListTodo } from "lucide-react";
 import { ProblemDetailSheet } from "@/components/diagnosis/ProblemDetailSheet";
+import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 
 const severityRank = (s: string) => (s === "critico" ? 0 : s === "atencao" ? 1 : 2);
 
