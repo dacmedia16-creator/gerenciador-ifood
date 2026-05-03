@@ -86,7 +86,14 @@ export default function DiagnosisResult() {
           <h1 className="text-3xl font-bold">Diagnóstico gerado!</h1>
           <p className="text-sm text-muted-foreground">{store.name} · {store.platform} · {store.city}</p>
         </div>
-        <ResetDiagnosisButton storeId={data.store_id} />
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" asChild>
+            <Link to={`/app/diagnosis/${sessionId}`}>
+              <Info className="h-4 w-4 mr-1" /> Adicionar mais detalhes
+            </Link>
+          </Button>
+          <ResetDiagnosisButton storeId={data.store_id} />
+        </div>
       </div>
 
       <Card className="p-6 shadow-card">

@@ -1,63 +1,16 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  LayoutDashboard, Store, BarChart3, Package, Star, Users, Megaphone,
-  Upload, Stethoscope, Gauge, UtensilsCrossed, DollarSign, ListTodo, FileText, LogOut, Home, Palette, Sparkles, Type, Eye, Calculator, Target, Clock, BookOpen, TrendingUp, MessageSquare, Settings,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Home, Search, CheckCircle2, UtensilsCrossed, Star, Gem, Settings, LogOut, Shield, Store, Target, BookOpen, FileSliders } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { Shield } from "lucide-react";
 import logoGD from "@/assets/logo-gestor-delivery.png";
-
-const general = [
-  { title: "Painel do Dono", url: "/app/dashboard", icon: LayoutDashboard },
-  { title: "Meu Diagnóstico", url: "/app/diagnosis/welcome", icon: Sparkles },
-  { title: "Minha loja", url: "/app/store", icon: Store },
-  { title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare },
-];
-
-const adminGeneralExtras = [
-  { title: "Todas as lojas", url: "/app/stores", icon: Store },
-];
-
-const storeAnalysis = (id: string) => [
-  { title: "Visão geral", url: `/app/stores/${id}`, icon: Home },
-  { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
-  { title: "Plano de melhoria", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
-  { title: "Meta da loja", url: `/app/stores/${id}/goal`, icon: Target },
-  { title: "Evolução da loja", url: `/app/stores/${id}/evolution`, icon: TrendingUp },
-  { title: "Relatório da minha loja", url: `/app/stores/${id}/report`, icon: FileText },
-];
-
-const storeOperations = (id: string) => [
-  { title: "Cardápio", url: `/app/stores/${id}/menu`, icon: UtensilsCrossed },
-  { title: "Produtos", url: `/app/stores/${id}/products`, icon: Package },
-  { title: "Nomes (SEO)", url: `/app/stores/${id}/product-names`, icon: Type },
-  { title: "Margem & Preço", url: `/app/stores/${id}/pricing`, icon: DollarSign },
-  { title: "Simulador de preço", url: `/app/stores/${id}/pricing-simulator`, icon: Calculator },
-  { title: "Avaliações", url: `/app/stores/${id}/reviews`, icon: Star },
-  { title: "Expectativa × Entrega", url: `/app/stores/${id}/expectation`, icon: Eye },
-  { title: "Concorrentes", url: `/app/stores/${id}/competitors`, icon: Users },
-  { title: "Campanhas", url: `/app/stores/${id}/campaigns`, icon: Megaphone },
-  { title: "Melhor horário", url: `/app/stores/${id}/best-hours`, icon: Clock },
-  { title: "Métricas", url: `/app/stores/${id}/metrics`, icon: BarChart3 },
-];
-
-const adminGeneral = [
-  { title: "Painel Super Admin", url: "/app/admin", icon: Shield },
-  { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
-  { title: "Base de conhecimento", url: "/app/knowledge", icon: BookOpen },
-];
-
-const adminStore = (id: string) => [
-  { title: "Configurações do relatório", url: `/app/stores/${id}/report/template`, icon: Settings },
-];
-
-const adminAll = adminGeneralExtras;
 
 export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
@@ -67,12 +20,59 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
   const { isAdmin } = useIsAdmin();
+  const [primaryStoreId, setPrimaryStoreId] = useState<string | null>(null);
 
+  // Detecta storeId da rota; se não houver, busca a primeira loja do usuário
   const match = pathname.match(/\/app\/stores\/([0-9a-f-]{36})/);
-  const storeId = match?.[1] || params.id;
+  const routeStoreId = match?.[1] || (params.id as string | undefined) || null;
 
-  const isActive = (url: string) => pathname === url;
+  useEffect(() => {
+    if (routeStoreId || !user) return;
+    supabase
+      .from("stores")
+      .select("id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setPrimaryStoreId(data?.id ?? null));
+  }, [user, routeStoreId]);
+
+  const storeId = routeStoreId || primaryStoreId;
   const closeOnMobile = () => { if (isMobile) setOpenMobile(false); };
+  const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/");
+
+  const main = [
+    { title: "Início", url: "/app/dashboard", icon: Home },
+    { title: "Diagnóstico", url: "/app/diagnosis/welcome", icon: Search },
+    {
+      title: "Plano de Ação",
+      url: storeId ? `/app/stores/${storeId}/action-plan` : "/app/diagnosis/welcome",
+      icon: CheckCircle2,
+    },
+    {
+      title: "Cardápio & Margem",
+      url: storeId ? `/app/stores/${storeId}/menu` : "/app/diagnosis/welcome",
+      icon: UtensilsCrossed,
+    },
+    {
+      title: "Avaliações",
+      url: storeId ? `/app/stores/${storeId}/reviews` : "/app/diagnosis/welcome",
+      icon: Star,
+    },
+  ];
+
+  const secondary = [
+    { title: "Planos", url: "/app/planos", icon: Gem },
+    { title: "Configurações", url: "/app/configuracoes", icon: Settings },
+  ];
+
+  const adminItems = [
+    { title: "Painel Super Admin", url: "/app/admin", icon: Shield },
+    { title: "Todas as lojas", url: "/app/stores", icon: Store },
+    { title: "Radar de Prospects", url: "/app/prospects", icon: Target },
+    { title: "Base de conhecimento", url: "/app/knowledge", icon: BookOpen },
+  ];
 
   return (
     <Sidebar collapsible="icon">
@@ -88,13 +88,15 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Geral</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {general.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+              {main.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)} className="min-h-11">
+                    <NavLink to={item.url} onClick={closeOnMobile}>
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -102,71 +104,56 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {storeId && (
-          <>
-            <SidebarGroup>
-              <SidebarGroupLabel>Análise da minha loja</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {storeAnalysis(storeId).map((item) => (
-                    <SidebarMenuItem key={item.url}>
-                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+        <SidebarSeparator />
 
-            <SidebarGroup>
-              <SidebarGroupLabel>Operação</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {storeOperations(storeId).map((item) => (
-                    <SidebarMenuItem key={item.url}>
-                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                        <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-          </>
-        )}
-
-        {/* Super Admin — só visível para administradores */}
-        {isAdmin && (
         <SidebarGroup>
-          <SidebarGroupLabel>Super Admin</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {adminGeneral.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              {adminAll.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              {storeId && adminStore(storeId).map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
-                    <NavLink to={item.url} onClick={closeOnMobile}><item.icon className="h-4 w-4" />{!collapsed && <span>{item.title}</span>}</NavLink>
+              {secondary.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={isActive(item.url)} className="min-h-11">
+                    <NavLink to={item.url} onClick={closeOnMobile}>
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAdmin && (
+          <>
+            <SidebarSeparator />
+            <SidebarGroup>
+              <SidebarGroupLabel>Super Admin</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {adminItems.map((item) => (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                        <NavLink to={item.url} onClick={closeOnMobile}>
+                          <item.icon className="h-4 w-4" />
+                          {!collapsed && <span>{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                  {storeId && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive(`/app/stores/${storeId}/report/template`)}>
+                        <NavLink to={`/app/stores/${storeId}/report/template`} onClick={closeOnMobile}>
+                          <FileSliders className="h-4 w-4" />
+                          {!collapsed && <span>Template de relatório</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
         )}
       </SidebarContent>
 

@@ -66,6 +66,17 @@ function classifyObjetivo(a: any): typeof OBJETIVOS[number] {
   return "vender_mais";
 }
 
+function toolForAction(a: any, storeId: string): { label: string; url: string } | null {
+  const text = `${a.area || ""} ${a.title || ""} ${a.description || ""}`.toLowerCase();
+  if (/(pre[çc]o|margem|lucro|simulador)/.test(text)) return { label: "Simulador de preço", url: `/app/stores/${storeId}/pricing-simulator` };
+  if (/(nome|seo|t[íi]tulo|cardap|menu)/.test(text)) return { label: "Otimizador de nomes", url: `/app/stores/${storeId}/product-names` };
+  if (/(hor[áa]rio|abertura|funcionamento|hor[áa]rios)/.test(text)) return { label: "Melhor horário", url: `/app/stores/${storeId}/best-hours` };
+  if (/(foto|expectativa|imagem|descri[çc][ãa]o)/.test(text)) return { label: "Expectativa × Entrega", url: `/app/stores/${storeId}/expectation` };
+  if (/(meta|objetivo)/.test(text)) return { label: "Meta da loja", url: `/app/stores/${storeId}/goal` };
+  if (/(evolu[çc][ãa]o|hist[óo]rico|progresso)/.test(text)) return { label: "Evolução da loja", url: `/app/stores/${storeId}/evolution` };
+  return null;
+}
+
 export default function ActionPlan() {
   const { id } = useParams();
   const { actions, loading, reload } = useStoreData(id);
@@ -160,30 +171,40 @@ export default function ActionPlan() {
       ? OBJETIVOS.map((o) => ({ key: o, label: OBJETIVO_LABEL[o], items: sortByPriority(open.filter((a) => classifyObjetivo(a) === o)) }))
       : STATUSES.map((s) => ({ key: s, label: STATUS_LABEL[s], items: sortByPriority((actions || []).filter((a: any) => a.status === s)) }));
 
-  const renderAction = (a: any) => (
-    <Card key={a.id} className="p-4 shadow-card">
-      <div className="flex flex-wrap justify-between gap-3 items-start">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <PriorityBadge priority={a.priority} />
-            <span className="text-xs text-muted-foreground">{a.area}</span>
+  const renderAction = (a: any) => {
+    const tool = id ? toolForAction(a, id) : null;
+    return (
+      <Card key={a.id} className="p-4 shadow-card">
+        <div className="flex flex-wrap justify-between gap-3 items-start">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <PriorityBadge priority={a.priority} />
+              <span className="text-xs text-muted-foreground">{a.area}</span>
+            </div>
+            <Link to={`/app/stores/${id}/action-plan/${a.id}`} className="font-semibold hover:text-primary hover:underline">
+              {a.title}
+            </Link>
+            {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
+            <div className="text-xs text-muted-foreground mt-2 flex gap-3 flex-wrap">
+              {a.impact && <span>Impacto: {a.impact}</span>}
+              {a.effort && <span>Esforço: {a.effort}</span>}
+              {a.due_date && <span>Prazo: {new Date(a.due_date).toLocaleDateString("pt-BR")}</span>}
+            </div>
+            {tool && (
+              <div className="mt-3">
+                <Button asChild variant="secondary" size="sm">
+                  <Link to={tool.url}>Usar ferramenta: {tool.label}</Link>
+                </Button>
+              </div>
+            )}
           </div>
-          <Link to={`/app/stores/${id}/action-plan/${a.id}`} className="font-semibold hover:text-primary hover:underline">
-            {a.title}
-          </Link>
-          {a.description && <p className="text-sm text-muted-foreground mt-1">{a.description}</p>}
-          <div className="text-xs text-muted-foreground mt-2 flex gap-3 flex-wrap">
-            {a.impact && <span>Impacto: {a.impact}</span>}
-            {a.effort && <span>Esforço: {a.effort}</span>}
-            {a.due_date && <span>Prazo: {new Date(a.due_date).toLocaleDateString("pt-BR")}</span>}
-          </div>
+          <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
+            {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          </select>
         </div>
-        <select className="border rounded-md px-2 py-1 text-xs bg-background" value={a.status} onChange={(e) => change(a, e.target.value)}>
-          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-        </select>
-      </div>
-    </Card>
-  );
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-4">

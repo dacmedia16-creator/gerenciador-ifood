@@ -52,6 +52,8 @@ const Knowledge = lazy(() => import("./pages/app/Knowledge"));
 const StoreEvolution = lazy(() => import("./pages/app/StoreEvolution"));
 const Chat = lazy(() => import("./pages/app/Chat"));
 const Admin = lazy(() => import("./pages/app/Admin"));
+const Planos = lazy(() => import("./pages/app/Planos"));
+const Configuracoes = lazy(() => import("./pages/app/Configuracoes"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,6 +117,8 @@ const App = () => (
                 <Route path="prospects" element={<AdminRoute><Prospects /></AdminRoute>} />
                 <Route path="knowledge" element={<AdminRoute><Knowledge /></AdminRoute>} />
                 <Route path="chat" element={<Chat />} />
+                <Route path="planos" element={<Planos />} />
+                <Route path="configuracoes" element={<Configuracoes />} />
                 <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
               </Route>
               <Route path="*" element={<NotFound />} />

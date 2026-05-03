@@ -1,19 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { createSession, getDraftSession, type SessionRow } from "@/lib/diagnosis/session";
-import { supabase } from "@/integrations/supabase/client";
+import { getDraftSession, type SessionRow } from "@/lib/diagnosis/session";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Loader2, Sparkles, Clock, Save, Camera, CheckCircle2 } from "lucide-react";
-import { toast } from "sonner";
+import { Loader2, Sparkles, Clock, Save, ArrowRight } from "lucide-react";
 
 export default function DiagnosisWelcome() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
   const [draft, setDraft] = useState<SessionRow | null>(null);
 
   useEffect(() => {
@@ -22,39 +19,15 @@ export default function DiagnosisWelcome() {
       try {
         const d = await getDraftSession(user.id);
         setDraft(d);
-      } catch (e) {
-        // silencioso
       } finally {
         setLoading(false);
       }
     })();
   }, [user]);
 
-  const handleStart = async (mode: "prints" | "form" | "both" = "both") => {
-    if (!user) return;
-    setStarting(true);
-    try {
-      const session = draft ?? (await createSession(user.id, params.get("storeId")));
-      try { sessionStorage.setItem(`diagnosis:${session.id}:mode`, mode); } catch {}
-      navigate(`/app/diagnosis/${session.id}?mode=${mode}`);
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao iniciar diagnóstico");
-      setStarting(false);
-    }
-  };
-
-  const handleRestart = async () => {
-    if (!user || !draft) return;
-    if (!confirm("Recomeçar do zero? Suas respostas atuais serão descartadas.")) return;
-    setStarting(true);
-    try {
-      await supabase.from("diagnosis_sessions").delete().eq("id", draft.id);
-      const session = await createSession(user.id, params.get("storeId"));
-      navigate(`/app/diagnosis/${session.id}`);
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao recomeçar");
-      setStarting(false);
-    }
+  const goExpress = () => {
+    const qs = params.get("storeId") ? `?storeId=${params.get("storeId")}` : "";
+    navigate(`/app/diagnosis/express${qs}`);
   };
 
   if (loading) {
@@ -65,113 +38,46 @@ export default function DiagnosisWelcome() {
     );
   }
 
-  const topics = [
-    "Cardápio, fotos e produtos mais vendidos",
-    "Preço, lucro e valor por pedido",
-    "Operação, entrega e equipe",
-    "Avaliações, anúncios e fidelização",
-  ];
-
   return (
-    <div className="container max-w-3xl py-10">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-4">
-          <Sparkles className="h-3.5 w-3.5" /> Diagnóstico inteligente
+    <div className="container max-w-2xl py-6 md:py-10">
+      <Card className="p-6 md:p-10 space-y-6 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mx-auto">
+          <Sparkles className="h-3.5 w-3.5" /> Diagnóstico em 5 minutos
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold mb-3">Vamos diagnosticar sua loja</h1>
-        <p className="text-muted-foreground text-lg">
-          Algumas perguntas simples para entender sua operação e gerar recomendações personalizadas.
+        <h1 className="text-3xl md:text-4xl font-bold">Vamos entender sua loja</h1>
+        <p className="text-muted-foreground">
+          5 perguntas rápidas. No fim, você recebe um diagnóstico personalizado e um plano de ação.
         </p>
-      </div>
 
-      <Card className="p-6 md:p-8 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="flex items-start gap-2 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left text-sm pt-2">
+          <div className="flex items-start gap-2">
             <Clock className="h-4 w-4 mt-0.5 text-primary shrink-0" />
             <div>
-              <div className="font-medium">8–10 minutos</div>
-              <div className="text-muted-foreground text-xs">13 etapas curtas</div>
+              <div className="font-medium">5 minutos</div>
+              <div className="text-muted-foreground text-xs">Apenas 5 perguntas essenciais</div>
             </div>
           </div>
-          <div className="flex items-start gap-2 text-sm">
+          <div className="flex items-start gap-2">
             <Save className="h-4 w-4 mt-0.5 text-primary shrink-0" />
             <div>
               <div className="font-medium">Salva sozinho</div>
               <div className="text-muted-foreground text-xs">Pause e volte quando quiser</div>
             </div>
           </div>
-          <div className="flex items-start gap-2 text-sm">
-            <Camera className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-            <div>
-              <div className="font-medium">Envie prints</div>
-              <div className="text-muted-foreground text-xs">A IA extrai os dados pra você</div>
-            </div>
-          </div>
         </div>
 
-        <div className="border-t pt-6">
-          <p className="text-sm font-medium mb-3">O que vamos cobrir:</p>
-          <ul className="space-y-2">
-            {topics.map((t) => (
-              <li key={t} className="flex items-start gap-2 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-                {t}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {draft && (
-          <div className="rounded-md bg-muted/50 border border-border p-4 text-sm">
-            <p className="font-medium mb-1">Você tem um diagnóstico em andamento</p>
-            <p className="text-muted-foreground text-xs">
-              Progresso atual: {draft.completion_percentage}% — etapa {draft.current_step} de 13.
-            </p>
+        {draft && draft.current_step > 5 && (
+          <div className="rounded-md bg-muted/50 border border-border p-3 text-sm text-left">
+            Você tem um diagnóstico aprofundado em andamento ({draft.completion_percentage}%).{" "}
+            <button className="underline text-primary" onClick={() => navigate(`/app/diagnosis/${draft.id}`)}>
+              Continuar de onde parou
+            </button>
           </div>
         )}
 
-        {draft ? (
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
-            <Button onClick={() => handleStart("both")} disabled={starting} size="lg" className="flex-1">
-              {starting ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Abrindo…</>
-              ) : (
-                "Continuar de onde parei"
-              )}
-            </Button>
-            <Button variant="outline" onClick={handleRestart} disabled={starting} size="lg">
-              Recomeçar do zero
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3 pt-2">
-            <p className="text-sm font-medium">Como você prefere começar?</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Button
-                size="lg"
-                disabled={starting}
-                onClick={() => navigate(`/app/diagnosis/express${params.get("storeId") ? `?storeId=${params.get("storeId")}` : ""}`)}
-                className="h-auto py-4 flex-col items-start gap-1 text-left gradient-primary text-primary-foreground md:col-span-2"
-              >
-                <span className="font-semibold">⚡ Diagnóstico expresso (5 minutos)</span>
-                <span className="text-xs opacity-90 font-normal">Recomendado para começar — objetivo, prints e 5 perguntas</span>
-              </Button>
-              <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("prints")} className="h-auto py-4 flex-col items-start gap-1 text-left">
-                <span className="font-semibold">📸 Só prints</span>
-                <span className="text-xs text-muted-foreground font-normal">A IA extrai os dados das suas telas</span>
-              </Button>
-              <Button variant="outline" size="lg" disabled={starting} onClick={() => handleStart("both")} className="h-auto py-4 flex-col items-start gap-1 text-left">
-                <span className="font-semibold">📝 Diagnóstico completo</span>
-                <span className="text-xs text-muted-foreground font-normal">Funil de 13 etapas para análise mais profunda</span>
-              </Button>
-            </div>
-            {starting && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Abrindo diagnóstico…
-              </div>
-            )}
-          </div>
-        )}
+        <Button size="lg" onClick={goExpress} className="min-h-12 text-base px-8">
+          Começar agora <ArrowRight className="h-4 w-4 ml-1" />
+        </Button>
       </Card>
     </div>
   );
