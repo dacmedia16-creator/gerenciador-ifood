@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.apply_action_update_to_goals() FROM PUBLIC, anon, authenticated;
