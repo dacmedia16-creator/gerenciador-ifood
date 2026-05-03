@@ -66,12 +66,26 @@ export default function DiagnosisReview() {
     const st = statuses.find((x) => x.step_key === s.key);
     return !st?.is_completed;
   });
-  const missingRequired: string[] = Array.from(
+
+  // Labels de perguntas atualmente válidas no funil (por etapa)
+  const activeRequiredLabels = new Set(
+    STEPS.flatMap((s) => s.questions.filter((q) => q.required).map((q) => q.label)),
+  );
+
+  // Dados faltantes: união (sem duplicar) e filtra resíduo de schema antigo
+  const missingFromStatuses: string[] = Array.from(
     new Set(
       statuses.flatMap((s) =>
         Array.isArray(s.missing_required_fields) ? s.missing_required_fields : [],
       ),
     ),
+  ).filter((m) => activeRequiredLabels.has(m));
+
+  const allMissing = Array.from(
+    new Set([
+      ...missingFromStatuses,
+      ...missingFromEvidences.map((m) => m.replace(/_/g, " ")),
+    ]),
   );
 
   const handleGenerate = async () => {
