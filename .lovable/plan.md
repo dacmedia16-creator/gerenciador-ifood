@@ -1,60 +1,52 @@
 ## Objetivo
-Tudo que o usuário responde no formulário do diagnóstico passa a popular automaticamente as páginas da seção **Operação** e **Análise da minha loja** (Minha loja, Métricas, Meta da loja, Produtos, etc.).
 
-## Como vai funcionar
-A cada vez que o usuário avança uma etapa do wizard, sincronizamos as respostas daquela etapa para as tabelas operacionais corretas — fazendo merge (UPDATE quando já existe, INSERT quando novo). Nada é apagado.
+Quando o usuário enviar prints na etapa "prints" do diagnóstico, o sistema deve:
+1. Ler e analisar as imagens com IA (já funciona via `process-print`).
+2. **Preencher automaticamente** os campos detectados (sem precisar clicar em "Aplicar tudo").
+3. **Pular o usuário direto para a próxima etapa que ainda tem campos obrigatórios vazios**, em ordem.
 
-## Mapeamento etapa → tabela
+Hoje a IA já extrai os dados e o card `PrintProposalsCard` mostra os campos detectados, mas exige clique manual e não navega para os faltantes.
 
-### Etapa **basic** (Sobre a loja) → `stores`
-- `name` → `stores.name`
-- `category` → `stores.category`
-- `platform` → `stores.platform`
-- `city`, `neighborhood`, `opening_hours` → mesmas colunas
-- `monthly_orders` → `stores.monthly_orders`
-- `monthly_revenue` → `stores.monthly_revenue`
-- `average_ticket` → `stores.average_ticket`
+## Mudanças
 
-### Etapa **storefront** (Como o cliente vê) → `stores` + `metrics`
-- `rating` → `stores.rating`
-- `promised_delivery_time` → `stores.promised_delivery_time`
-- `delivery_fee` → `stores.delivery_fee`
-- Cria/atualiza linha em `metrics` do mês corrente com `rating`, `revenue` (se houver), `orders`, `average_ticket`.
+### 1. Auto-aplicar proposals quando prints terminam (`DiagnosisWizard.tsx`)
 
-### Etapa **delivery** (Entrega) → `stores` + `metrics`
-- `cancellation_rate` → `stores.cancellation_rate` e `metrics.cancellation_rate`
-- `real_time` → `metrics.average_delivery_time`
+- Adicionar um `useEffect` que observa `proposals` e `uploads`.
+- Quando todos os uploads tiverem `status === "processed"` (nenhum `pending`) e existirem proposals novas ainda não aplicadas, chamar a mesma lógica de `apply()` do `PrintProposalsCard` automaticamente.
+- Mostrar um toast: *"IA preencheu N campos a partir dos seus prints"*.
+- Marcar as proposals já aplicadas em um `Set` no estado (`appliedKeys`) para não reaplicar em loop.
+- Manter o card visual apenas como confirmação (ou esconder após auto-aplicar).
 
-### Etapa **products** (Top 3) → `products` ✅ (já feito)
+### 2. Pular para a primeira etapa incompleta (`DiagnosisWizard.tsx`)
 
-### Etapa **goal** (Meta principal) → `store_goals`
-- Cria/atualiza meta ativa: `goal_type`, `current_value`, `target_value`, `deadline` (em dias → soma a hoje).
+- Após auto-aplicar, calcular via `computeStepCompletion` qual é o **primeiro `activeSteps`** (depois do step "prints") que ainda tem `missing_required_fields.length > 0`.
+- Chamar `goTo(thatIndex)` para já levar o usuário até lá.
+- Se todas as etapas estiverem completas, ir direto para `/review`.
 
-### Etapas sem destino direto (continuam só no diagnóstico)
-- `menu`, `pricing`, `combos`, `operations`, `reviews`, `ads`, `loyalty`, `prints` — são respostas usadas pela IA para gerar o relatório/recomendações, não têm tabela de "estado da loja" equivalente.
-- **Concorrentes**: o diagnóstico só pergunta em texto livre (`top_competitors`), por isso não dá para criar linhas estruturadas em `competitors` automaticamente. A página continua aceitando cadastro manual.
+### 3. Helper de navegação (`src/lib/diagnosis/journey.ts` — já existe)
 
-## Implementação técnica
+- Adicionar (ou reusar) `findNextIncompleteStepIndex(activeSteps, allAnswers, fromIndex)` que percorre as etapas em ordem e devolve o índice da primeira com campos obrigatórios vazios.
 
-### 1. Novo arquivo: `src/lib/diagnosis/syncToStore.ts`
-Funções:
-- `syncStoreBasics(storeId, basicValues, storefrontValues, deliveryValues)` — UPDATE em `stores` com merge dos campos preenchidos (ignora vazio/`""`).
-- `syncMetricsSnapshot(storeId, values)` — INSERT em `metrics` para o mês atual (período = mês corrente) se houver dados novos; senão UPDATE da linha do mês.
-- `syncStoreGoal(storeId, userId, goalValues)` — UPSERT em `store_goals` (uma meta ativa por loja: encerra antiga, cria nova).
+### 4. Refator leve do `PrintProposalsCard`
 
-Helpers: `numOrNull(v)`, `pickFilled(obj, keys)`.
+- Aceitar prop opcional `autoApplied?: boolean`. Quando `true`, mostrar um badge "Preenchido automaticamente" em vez dos botões "Aplicar tudo / Revisar".
+- O botão de "Revisar/Editar" continua disponível para o usuário corrigir manualmente o que a IA inferiu.
 
-### 2. `src/pages/app/diagnosis/DiagnosisWizard.tsx`
-Estender o `onNext` (já fizemos isso para products). Quando avançar:
-- `basic` → `syncStoreBasics(storeId, values, …)` (lê apenas o que tem)
-- `storefront` → atualiza `stores` + chama `syncMetricsSnapshot`
-- `delivery` → atualiza `stores` + `syncMetricsSnapshot`
-- `goal` → `syncStoreGoal`
+## Fluxo final do usuário
 
-Tudo dentro de `try/catch` com `console.error`, sem bloquear navegação.
+```text
+1. Usuário envia 3 prints na etapa "Prints"
+2. process-print analisa cada um (badge "Analisando…" → "Analisado")
+3. Wizard detecta proposals → auto-aplica → toast "IA preencheu 7 campos"
+4. Wizard pula automaticamente para a próxima etapa com campos vazios
+   (ex: "Sobre a loja" se rating já veio dos prints mas falta horário)
+5. Usuário só preenche o que faltou; ao avançar, mesmo loop continua
+```
 
-### 3. Sem mudança de schema
-Todas as tabelas (`stores`, `metrics`, `store_goals`, `products`) já existem com RLS apropriada.
+## Arquivos afetados
 
-## Resultado
-Depois de preencher o diagnóstico, ao abrir **Minha loja**, **Métricas**, **Meta da loja** e **Produtos**, o usuário já encontra os dados preenchidos automaticamente — sem precisar repetir nada.
+- `src/pages/app/diagnosis/DiagnosisWizard.tsx` — auto-apply + auto-navegar
+- `src/components/diagnosis/PrintProposalsCard.tsx` — modo "autoApplied"
+- `src/lib/diagnosis/journey.ts` — helper `findNextIncompleteStepIndex`
+
+Sem mudanças no banco, no edge function `process-print` nem no mapper (`printMapper.ts` já cobre os campos suportados).
