@@ -107,6 +107,8 @@ const App = () => (
                 <Route path="stores/:id/pricing-simulator" element={<PricingSimulator />} />
                 <Route path="stores/:id/best-hours" element={<BestHours />} />
                 <Route path="stores/:id/evolution" element={<StoreEvolution />} />
+                <Route path="stores/:id/goal" element={<StoreGoal />} />
+                <Route path="stores/:id/action-plan/:actionId" element={<ActionDetail />} />
                 <Route path="prospects" element={<AdminRoute><Prospects /></AdminRoute>} />
                 <Route path="knowledge" element={<AdminRoute><Knowledge /></AdminRoute>} />
                 <Route path="chat" element={<Chat />} />
