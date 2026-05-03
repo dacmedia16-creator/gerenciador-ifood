@@ -36,7 +36,7 @@ export function useStoreData(storeId?: string) {
           .order("created_at", { ascending: false })
           .limit(50),
         supabase.from("action_plans")
-          .select("id, title, area, priority, status, impact, effort, description, created_at")
+          .select("id, title, area, priority, status, impact, effort, description, created_at, completed_at, impacto_financeiro, dificuldade, tempo_estimado, categoria, feedback_text, has_feedback, why_it_matters, how_to_apply, recommendation_id")
           .eq("store_id", storeId!)
           .order("created_at", { ascending: false })
           .limit(50),
