@@ -129,8 +129,14 @@ export async function syncStoreGoal(
   if (existing?.id) {
     await supabase.from("store_goals").update(payload).eq("id", existing.id);
   } else {
-    await supabase
-      .from("store_goals")
-      .insert({ store_id: storeId, user_id: userId, ...payload });
+    await supabase.from("store_goals").insert({
+      store_id: storeId,
+      user_id: userId,
+      goal_type,
+      current_value: current_value ?? undefined,
+      target_value: target_value ?? undefined,
+      deadline: deadline ?? undefined,
+      status: "ativa",
+    } as any);
   }
 }
