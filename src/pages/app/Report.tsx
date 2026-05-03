@@ -214,12 +214,17 @@ export default function Report() {
       </Dialog>
 
 
-      <Card className="p-8 shadow-elegant">
-        <header className="border-b pb-4 mb-6">
-          <h1 className="text-3xl font-bold">{store.name}</h1>
-          <p className="text-muted-foreground">{store.platform} · {store.city} · {store.neighborhood}</p>
-          <p className="text-xs text-muted-foreground mt-1">Gerado em {new Date().toLocaleDateString("pt-BR")}</p>
-        </header>
+      <details className="group">
+        <summary className="cursor-pointer list-none flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground py-2 no-print">
+          <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+          Ver relatório técnico completo (jornada, scores por área, 6 perguntas)
+        </summary>
+        <Card className="p-8 shadow-elegant mt-4">
+          <header className="border-b pb-4 mb-6">
+            <h1 className="text-3xl font-bold">{store.name}</h1>
+            <p className="text-muted-foreground">{store.platform} · {store.city} · {store.neighborhood}</p>
+            <p className="text-xs text-muted-foreground mt-1">Gerado em {new Date().toLocaleDateString("pt-BR")}</p>
+          </header>
 
         {/* Resumo executivo */}
         <section className="mb-8">
