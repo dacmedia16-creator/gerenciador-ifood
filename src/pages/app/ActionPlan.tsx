@@ -66,6 +66,16 @@ function classifyObjetivo(a: any): typeof OBJETIVOS[number] {
   return "vender_mais";
 }
 
+function toolForAction(a: any, storeId: string): { label: string; url: string } | null {
+  const text = `${a.area || ""} ${a.title || ""} ${a.description || ""}`.toLowerCase();
+  if (/(pre[çc]o|margem|lucro|simulador)/.test(text)) return { label: "Simulador de preço", url: `/app/stores/${storeId}/pricing-simulator` };
+  if (/(nome|seo|t[íi]tulo|cardap|menu)/.test(text)) return { label: "Otimizador de nomes", url: `/app/stores/${storeId}/product-names` };
+  if (/(hor[áa]rio|abertura|funcionamento|hor[áa]rios)/.test(text)) return { label: "Melhor horário", url: `/app/stores/${storeId}/best-hours` };
+  if (/(foto|expectativa|imagem|descri[çc][ãa]o)/.test(text)) return { label: "Expectativa × Entrega", url: `/app/stores/${storeId}/expectation` };
+  if (/(meta|objetivo)/.test(text)) return { label: "Meta da loja", url: `/app/stores/${storeId}/goal` };
+  if (/(evolu[çc][ãa]o|hist[óo]rico|progresso)/.test(text)) return { label: "Evolução da loja", url: `/app/stores/${storeId}/evolution` };
+  return null;
+
 export default function ActionPlan() {
   const { id } = useParams();
   const { actions, loading, reload } = useStoreData(id);
