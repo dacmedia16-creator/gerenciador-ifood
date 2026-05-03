@@ -94,14 +94,22 @@ export default function DiagnosisReview() {
     if (!user) return;
     setGenerating(true);
     try {
+      // 1) Geração local (cria store, sincroniza dados, calcula evidências, salva report base)
       const result = await generateDiagnosis(sessionId, user.id);
-      toast.success(`Diagnóstico gerado: ${result.diagnosticsCount} problemas identificados`);
-      // Dispara o Gestor IA já com a sessão (respostas do funil + prints)
-      // — não bloqueia a navegação se demorar; o Report recarrega quando concluir.
-      invokeAI<{ diagnosis: any }>("ai-consult", {
+
+      // 2) Dispara IA e AGUARDA antes de navegar — sem engolir erro.
+      //    Se a IA falhar, mostramos o erro mas seguimos para o resultado
+      //    (o usuário ainda vê os problemas da regra local).
+      const aiRes = await invokeAI<{ diagnosis: any }>("ai-consult", {
         storeId: result.storeId,
         sessionId,
-      }).catch(() => { /* silencioso: usuário pode rodar manual depois */ });
+      });
+
+      if (aiRes?.diagnosis) {
+        toast.success("Diagnóstico inteligente concluído");
+      } else {
+        toast.warning("Recomendações da IA indisponíveis no momento — exibindo análise básica");
+      }
       navigate(`/app/diagnosis/${sessionId}/result`);
     } catch (e: any) {
       toast.error(e.message || "Erro ao gerar diagnóstico");
