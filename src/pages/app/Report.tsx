@@ -48,7 +48,19 @@ export default function Report() {
   const runAIConsult = async () => {
     if (!id) return;
     setAiLoading(true);
-    const res = await invokeAI<{ diagnosis: any }>("ai-consult", { storeId: id });
+    // Busca a última sessão de diagnóstico desta loja para enriquecer a IA
+    // com as respostas do funil + dados extraídos dos prints.
+    const { data: sess } = await supabase
+      .from("diagnosis_sessions")
+      .select("id")
+      .eq("store_id", id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const res = await invokeAI<{ diagnosis: any }>("ai-consult", {
+      storeId: id,
+      sessionId: sess?.id ?? undefined,
+    });
     if (res?.diagnosis) {
       setAiConsult(res.diagnosis);
       toast.success("Relatório gerado!");

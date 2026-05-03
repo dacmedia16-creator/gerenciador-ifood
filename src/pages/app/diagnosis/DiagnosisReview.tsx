@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { answersAsMap, loadSession } from "@/lib/diagnosis/session";
 import { STEPS } from "@/lib/diagnosis/steps";
 import { generateDiagnosis } from "@/lib/diagnosis/generate";
+import { invokeAI } from "@/lib/ai/invokeAI";
 import { evidencesFromAnswers, type RuleEvidence } from "@/lib/diagnosis/evidences";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,12 @@ export default function DiagnosisReview() {
     try {
       const result = await generateDiagnosis(sessionId, user.id);
       toast.success(`Diagnóstico gerado: ${result.diagnosticsCount} problemas identificados`);
+      // Dispara o Gestor IA já com a sessão (respostas do funil + prints)
+      // — não bloqueia a navegação se demorar; o Report recarrega quando concluir.
+      invokeAI<{ diagnosis: any }>("ai-consult", {
+        storeId: result.storeId,
+        sessionId,
+      }).catch(() => { /* silencioso: usuário pode rodar manual depois */ });
       navigate(`/app/diagnosis/${sessionId}/result`);
     } catch (e: any) {
       toast.error(e.message || "Erro ao gerar diagnóstico");
