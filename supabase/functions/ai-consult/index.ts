@@ -412,6 +412,8 @@ Devolva o diagnóstico consultivo via tool calling, citando source/source_ref em
       knowledge_snippets_used: kbSnippets,
       validation: { dropped },
       rag_meta: ragMeta,
+      session_id: sessionId ?? null,
+      session_debug: sessionDebug,
     };
 
     // ===== Persistência =====
