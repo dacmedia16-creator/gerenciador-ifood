@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AppLayout from "./components/AppLayout";
 import AdminRoute from "./components/AdminRoute";
+import { RequireAuth } from "./components/RequireAuth";
 
 // Lazy-loaded routes — reduz bundle inicial
 const Contato = lazy(() => import("./pages/Contato"));
