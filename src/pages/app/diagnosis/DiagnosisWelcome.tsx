@@ -30,12 +30,13 @@ export default function DiagnosisWelcome() {
     })();
   }, [user]);
 
-  const handleStart = async () => {
+  const handleStart = async (mode: "prints" | "form" | "both" = "both") => {
     if (!user) return;
     setStarting(true);
     try {
       const session = draft ?? (await createSession(user.id, params.get("storeId")));
-      navigate(`/app/diagnosis/${session.id}`);
+      try { sessionStorage.setItem(`diagnosis:${session.id}:mode`, mode); } catch {}
+      navigate(`/app/diagnosis/${session.id}?mode=${mode}`);
     } catch (e: any) {
       toast.error(e.message || "Erro ao iniciar diagnóstico");
       setStarting(false);
