@@ -27,7 +27,7 @@ export default function DiagnosisResult() {
         navigate("/app/dashboard");
         return;
       }
-      const [s, m, p, r, c, ca, d, a] = await Promise.all([
+      const [s, m, p, r, c, ca, d, a, lastReport] = await Promise.all([
         supabase.from("stores").select("*").eq("id", session.store_id).single(),
         supabase.from("metrics").select("*").eq("store_id", session.store_id),
         supabase.from("products").select("*").eq("store_id", session.store_id),
@@ -36,7 +36,14 @@ export default function DiagnosisResult() {
         supabase.from("campaigns").select("*").eq("store_id", session.store_id),
         supabase.from("diagnostics").select("*").eq("store_id", session.store_id).order("created_at", { ascending: false }),
         supabase.from("action_plans").select("*").eq("store_id", session.store_id).order("created_at", { ascending: false }),
+        supabase.from("reports")
+          .select("id, report_data, general_score, executive_summary, created_at")
+          .eq("store_id", session.store_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
+      const aiConsult = (lastReport.data?.report_data as any)?.ai_consult ?? null;
       setData({
         store: s.data,
         store_id: session.store_id,
@@ -47,6 +54,8 @@ export default function DiagnosisResult() {
         campaigns: ca.data || [],
         diagnostics: d.data || [],
         actions: a.data || [],
+        aiConsult,
+        lastReport: lastReport.data,
       });
     })();
   }, [sessionId, navigate]);
