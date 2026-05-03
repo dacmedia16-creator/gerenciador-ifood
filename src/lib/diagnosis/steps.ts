@@ -801,16 +801,19 @@ export const STEPS: StepDef[] = [
       },
       {
         key: "current_value",
-        label: "Onde você está hoje? (ex.: faturamento atual, nota atual, pedidos/mês)",
+        label: "Onde você está hoje?",
         type: "number",
-        placeholder: "Valor atual",
+        placeholder: "Ex.: faturamento atual / nota atual / pedidos hoje",
+        tooltip:
+          "Para 'vender mais' use pedidos/mês. Para 'aumentar lucro' use faturamento (R$). Para 'melhorar nota' use a nota atual (0 a 5).",
       },
       {
         key: "target_value",
         label: "E onde quer chegar?",
         type: "number",
         essential: true,
-        placeholder: "Valor desejado",
+        placeholder: "Mesma unidade do valor atual",
+        tooltip: "Use a mesma unidade do campo 'onde você está hoje'.",
       },
       {
         key: "deadline",

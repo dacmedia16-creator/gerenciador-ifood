@@ -92,7 +92,13 @@ Deno.serve(async (req) => {
     if (dErr || !file) throw new Error("Falha ao baixar print do storage");
 
     const buf = new Uint8Array(await file.arrayBuffer());
-    const b64 = btoa(String.fromCharCode(...buf));
+    // Chunked base64 encoding to avoid stack overflow on large screenshots
+    let binary = "";
+    const CHUNK = 0x8000;
+    for (let i = 0; i < buf.length; i += CHUNK) {
+      binary += String.fromCharCode.apply(null, buf.subarray(i, i + CHUNK) as unknown as number[]);
+    }
+    const b64 = btoa(binary);
     const mime = upload.mime_type || "image/png";
     const dataUrl = `data:${mime};base64,${b64}`;
 
