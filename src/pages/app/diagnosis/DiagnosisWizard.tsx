@@ -7,6 +7,8 @@ import { STEPS, stepByIndex, shouldShowQuestion } from "@/lib/diagnosis/steps";
 import { useAutosave } from "@/lib/diagnosis/autosave";
 import { WizardShell } from "@/components/diagnosis/WizardShell";
 import { QuestionField } from "@/components/diagnosis/QuestionField";
+import { PrintProposalsCard } from "@/components/diagnosis/PrintProposalsCard";
+import { buildProposalsFromUploads, filterEmpty, type ProposedAnswer } from "@/lib/diagnosis/printMapper";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
@@ -37,6 +39,11 @@ export default function DiagnosisWizard() {
   const [statuses, setStatuses] = useState<any[]>([]);
   const [allAnswers, setAllAnswers] = useState<Record<string, Record<string, any>>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [uploads, setUploads] = useState<any[]>([]);
+  const ignoreKey = `diagnosis:proposals-ignored:${sessionId}`;
+  const [ignored, setIgnored] = useState<boolean>(() => {
+    try { return localStorage.getItem(ignoreKey) === "1"; } catch { return false; }
+  });
 
   const step = activeSteps[currentIndex];
   const values = step ? allAnswers[step.key] || {} : {};
@@ -69,6 +76,27 @@ export default function DiagnosisWizard() {
       }
     })();
   }, [sessionId, user, navigate, activeSteps]);
+
+  // Carrega uploads processados e atualiza a cada 5s enquanto houver pendentes
+  useEffect(() => {
+    if (!sessionId) return;
+    let stop = false;
+    const fetchUploads = async () => {
+      const { data } = await supabase
+        .from("diagnosis_uploads")
+        .select("*")
+        .eq("session_id", sessionId);
+      if (!stop) setUploads(data || []);
+    };
+    fetchUploads();
+    const t = window.setInterval(fetchUploads, 5000);
+    return () => { stop = true; window.clearInterval(t); };
+  }, [sessionId]);
+
+  const proposals = useMemo<ProposedAnswer[]>(() => {
+    if (ignored) return [];
+    return filterEmpty(buildProposalsFromUploads(uploads), allAnswers);
+  }, [uploads, allAnswers, ignored]);
 
   const { status: saveStatus } = useAutosave({
     sessionId,
@@ -122,6 +150,28 @@ export default function DiagnosisWizard() {
       onJump={(i) => goTo(i - 1)}
       headerActions={<ResetDiagnosisButton storeId={session?.store_id} size="sm" />}
     >
+      {proposals.length > 0 && user && (
+        <PrintProposalsCard
+          sessionId={sessionId}
+          userId={user.id}
+          storeId={session?.store_id}
+          proposals={proposals}
+          allAnswers={allAnswers}
+          onApplied={(applied) => {
+            setAllAnswers((prev) => {
+              const next = { ...prev };
+              for (const p of applied) {
+                next[p.stepKey] = { ...(next[p.stepKey] || {}), [p.questionKey]: p.value };
+              }
+              return next;
+            });
+          }}
+          onIgnore={() => {
+            try { localStorage.setItem(ignoreKey, "1"); } catch {}
+            setIgnored(true);
+          }}
+        />
+      )}
       <Card className="p-6 shadow-card">
         <div className="mb-6">
           <h1 className="text-2xl font-bold flex items-center gap-2">
