@@ -111,6 +111,85 @@ export default function DiagnosisResult() {
         </div>
       </Card>
 
+      {/* P1: Diagnóstico da IA (executive summary, plano 7d/30d, do not do, missing data) */}
+      {aiConsult && (
+        <Card className="p-6 border-primary/30 bg-primary/5 space-y-5">
+          <div className="flex items-start gap-3">
+            <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <h2 className="font-semibold text-lg">Análise inteligente</h2>
+              {aiConsult.executive_summary && (
+                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                  {aiConsult.executive_summary}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {Array.isArray(aiConsult.plan_7_days) && aiConsult.plan_7_days.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2 text-sm">Plano para os próximos 7 dias</h3>
+              <ol className="space-y-2">
+                {aiConsult.plan_7_days.map((p: any, i: number) => (
+                  <li key={i} className="text-sm border rounded-md p-3 bg-background">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px]">Dia {p.day}</Badge>
+                      <span className="font-medium">{p.title}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{p.action}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {Array.isArray(aiConsult.plan_30_days) && aiConsult.plan_30_days.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2 text-sm">Plano para 30 dias</h3>
+              <ol className="space-y-2">
+                {aiConsult.plan_30_days.map((p: any, i: number) => (
+                  <li key={i} className="text-sm border rounded-md p-3 bg-background">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px]">Semana {p.week}</Badge>
+                      <span className="font-medium">{p.title}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{p.action}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {Array.isArray(aiConsult.do_not_do_now) && aiConsult.do_not_do_now.length > 0 && (
+            <div>
+              <h3 className="font-semibold mb-2 text-sm">O que NÃO fazer agora</h3>
+              <ul className="space-y-1 text-sm">
+                {aiConsult.do_not_do_now.map((it: string, i: number) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="text-destructive">✕</span>
+                    <span className="text-muted-foreground">{it}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {Array.isArray(aiConsult.missing_data_for_better_diagnosis) && aiConsult.missing_data_for_better_diagnosis.length > 0 && (
+            <div className="text-xs text-muted-foreground border-t pt-3">
+              <span className="font-medium">Dados que melhorariam o diagnóstico: </span>
+              {aiConsult.missing_data_for_better_diagnosis.join(" · ")}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {!aiConsult && (
+        <Card className="p-4 border-dashed text-sm text-muted-foreground flex items-center gap-2">
+          <Info className="h-4 w-4 shrink-0" />
+          A análise inteligente não está disponível neste ciclo. Você pode rodá-la novamente no relatório completo.
+        </Card>
+      )}
+
       {lowDataMode && (
         <Card className="p-5 border-l-4 border-warning bg-warning/5">
           <div className="flex items-start gap-3">
