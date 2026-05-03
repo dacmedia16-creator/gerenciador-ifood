@@ -15,6 +15,7 @@ interface Props {
   onPrev?: () => void;
   onNext?: () => void;
   onJump?: (index: number) => void;
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
@@ -26,6 +27,7 @@ export function WizardShell({
   onPrev,
   onNext,
   onJump,
+  headerActions,
   children,
 }: Props) {
   const overallPct = Math.round((statuses.filter((s) => s.is_completed).length / STEPS.length) * 100);
@@ -48,6 +50,7 @@ export function WizardShell({
             </div>
             <Progress value={overallPct} className="h-1.5" />
           </div>
+          {headerActions}
         </div>
       </header>
 

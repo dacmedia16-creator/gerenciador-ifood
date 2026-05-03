@@ -23,20 +23,21 @@ import {
 import { toast } from "sonner";
 import { EvidenceCard } from "@/components/diagnosis/EvidenceCard";
 import { ReviewAnswerList } from "@/components/diagnosis/ReviewAnswerList";
+import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 
 export default function DiagnosisReview() {
   const { sessionId = "" } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [data, setData] = useState<{ answers: any[]; statuses: any[] } | null>(null);
+  const [data, setData] = useState<{ answers: any[]; statuses: any[]; storeId: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const { answers, statuses } = await loadSession(sessionId);
-        setData({ answers, statuses });
+        const { session, answers, statuses } = await loadSession(sessionId);
+        setData({ answers, statuses, storeId: session?.store_id ?? null });
       } catch {
         toast.error("Sessão não encontrada");
         navigate("/app/dashboard");
@@ -114,11 +115,14 @@ export default function DiagnosisReview() {
             Confira suas respostas, os problemas já detectados e o que ainda pode melhorar a precisão do seu diagnóstico.
           </p>
         </div>
-        <Button variant="ghost" asChild>
-          <Link to={`/app/diagnosis/${sessionId}`}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao funil
-          </Link>
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <ResetDiagnosisButton storeId={data?.storeId} />
+          <Button variant="ghost" asChild>
+            <Link to={`/app/diagnosis/${sessionId}`}>
+              <ArrowLeft className="h-4 w-4 mr-1" /> Voltar ao funil
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Resumo de prontidão */}

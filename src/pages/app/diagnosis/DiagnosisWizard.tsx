@@ -10,6 +10,7 @@ import { QuestionField } from "@/components/diagnosis/QuestionField";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 
 export default function DiagnosisWizard() {
   const { sessionId = "" } = useParams();
@@ -94,6 +95,7 @@ export default function DiagnosisWizard() {
       onPrev={() => goTo(currentIndex - 1)}
       onNext={onNext}
       onJump={(i) => goTo(i)}
+      headerActions={<ResetDiagnosisButton storeId={session?.store_id} size="sm" />}
     >
       <Card className="p-6 shadow-card">
         <div className="mb-6">
