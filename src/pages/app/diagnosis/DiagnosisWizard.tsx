@@ -39,6 +39,11 @@ export default function DiagnosisWizard() {
   const [statuses, setStatuses] = useState<any[]>([]);
   const [allAnswers, setAllAnswers] = useState<Record<string, Record<string, any>>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [uploads, setUploads] = useState<any[]>([]);
+  const ignoreKey = `diagnosis:proposals-ignored:${sessionId}`;
+  const [ignored, setIgnored] = useState<boolean>(() => {
+    try { return localStorage.getItem(ignoreKey) === "1"; } catch { return false; }
+  });
 
   const step = activeSteps[currentIndex];
   const values = step ? allAnswers[step.key] || {} : {};
