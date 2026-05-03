@@ -317,6 +317,42 @@ export async function generateDiagnosis(sessionId: string, userId: string) {
     .update({ status: "generated", generated_at: new Date().toISOString(), completed_at: new Date().toISOString(), store_id: storeId })
     .eq("id", sessionId);
 
+  // Snapshot de evolução: registra score atual + KPIs do dia para a aba "Evolução"
+  try {
+    const { calculateScore } = await import("@/lib/diagnostics/engine");
+    const [storeRow, metricsRows, productsRows, reviewsRows, competitorsRows, campaignsRows] = await Promise.all([
+      supabase.from("stores").select("*").eq("id", storeId).single(),
+      supabase.from("metrics").select("*").eq("store_id", storeId),
+      supabase.from("products").select("*").eq("store_id", storeId),
+      supabase.from("reviews").select("*").eq("store_id", storeId),
+      supabase.from("competitors").select("*").eq("store_id", storeId),
+      supabase.from("campaigns").select("*").eq("store_id", storeId),
+    ]);
+    const { overall, areas } = calculateScore({
+      store: storeRow.data,
+      metrics: metricsRows.data || [],
+      products: productsRows.data || [],
+      reviews: reviewsRows.data || [],
+      competitors: competitorsRows.data || [],
+      campaigns: campaignsRows.data || [],
+    });
+    const kpis = {
+      revenue: num(basic.monthly_revenue),
+      orders: num(basic.monthly_orders),
+      ticket: num(basic.average_ticket),
+      rating: num(front.rating),
+      cancellation_rate: num(delivery.cancellation_rate),
+    };
+    await supabase.from("evolution_snapshots").insert({
+      store_id: storeId,
+      score: overall,
+      scores_by_area: areas as any,
+      kpis: kpis as any,
+    });
+  } catch (e) {
+    console.warn("evolution_snapshot insert failed", e);
+  }
+
   // Camada 1 do aprendizado contínuo: grava casos-semente anônimos na case_library
   // para alimentar match_cases() de futuros diagnósticos. Roda em background — não bloqueia.
   supabase.functions.invoke("seed-cases-from-diagnosis", { body: { sessionId } })
