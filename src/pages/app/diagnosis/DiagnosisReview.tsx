@@ -167,7 +167,7 @@ export default function DiagnosisReview() {
       )}
 
       {/* Dados faltantes */}
-      {(missingRequired.length > 0 || missingFromEvidences.length > 0) && (
+      {allMissing.length > 0 && (
         <Card className="p-5 border-warning/40 bg-warning/5">
           <div className="flex items-start gap-3">
             <HelpCircle className="h-5 w-5 mt-0.5 text-warning shrink-0" />
@@ -177,10 +177,7 @@ export default function DiagnosisReview() {
                 Você pode gerar o plano mesmo assim, mas preencher esses pontos torna o diagnóstico bem mais certeiro.
               </p>
               <ul className="list-disc pl-5 text-sm space-y-1">
-                {missingRequired.slice(0, 8).map((m, i) => <li key={`r-${i}`}>{m}</li>)}
-                {missingFromEvidences.slice(0, 6).map((m, i) => (
-                  <li key={`e-${i}`} className="text-muted-foreground">{m.replace(/_/g, " ")}</li>
-                ))}
+                {allMissing.slice(0, 12).map((m, i) => <li key={`m-${i}`}>{m}</li>)}
               </ul>
             </div>
           </div>
