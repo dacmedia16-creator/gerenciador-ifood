@@ -15,6 +15,8 @@ import { Sparkles } from "lucide-react";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { syncDiagnosisProductsToStore } from "@/lib/diagnosis/syncProducts";
 import { syncStoreFromDiagnosis, syncMetricsSnapshot, syncStoreGoal } from "@/lib/diagnosis/syncToStore";
+import { findNextIncompleteStepIndex } from "@/lib/diagnosis/journey";
+
 
 function filterStepsByMode(mode: string | null) {
   if (mode === "prints") {
@@ -42,6 +44,8 @@ export default function DiagnosisWizard() {
   const [allAnswers, setAllAnswers] = useState<Record<string, Record<string, any>>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [uploads, setUploads] = useState<any[]>([]);
+  const [appliedKeys, setAppliedKeys] = useState<Set<string>>(new Set());
+  const [autoApplying, setAutoApplying] = useState(false);
   const ignoreKey = `diagnosis:proposals-ignored:${sessionId}`;
   const [ignored, setIgnored] = useState<boolean>(() => {
     try { return localStorage.getItem(ignoreKey) === "1"; } catch { return false; }
@@ -99,6 +103,83 @@ export default function DiagnosisWizard() {
     if (ignored) return [];
     return filterEmpty(buildProposalsFromUploads(uploads), allAnswers);
   }, [uploads, allAnswers, ignored]);
+
+  // Auto-aplica os dados extraídos pela IA assim que todos os prints terminarem
+  // de processar, e em seguida pula para a primeira etapa com campos pendentes.
+  useEffect(() => {
+    if (!user || !sessionId) return;
+    if (step?.key !== "prints") return;
+    if (autoApplying) return;
+    if (uploads.length === 0) return;
+    const stillProcessing = uploads.some((u) => u.status === "pending");
+    if (stillProcessing) return;
+    const fresh = proposals.filter((p) => !appliedKeys.has(`${p.stepKey}.${p.questionKey}`));
+    if (fresh.length === 0) return;
+
+    (async () => {
+      setAutoApplying(true);
+      try {
+        const rows = fresh.map((p) => ({
+          session_id: sessionId,
+          user_id: user.id,
+          store_id: session?.store_id ?? null,
+          step_key: p.stepKey,
+          question_key: p.questionKey,
+          answer_value: p.value as any,
+          answer_type: typeof p.value,
+        }));
+        const { error } = await supabase
+          .from("diagnosis_answers")
+          .upsert(rows, { onConflict: "session_id,step_key,question_key" });
+        if (error) throw error;
+
+        const merged: Record<string, Record<string, any>> = JSON.parse(JSON.stringify(allAnswers));
+        for (const p of fresh) {
+          merged[p.stepKey] = { ...(merged[p.stepKey] || {}), [p.questionKey]: p.value };
+        }
+        const stepsTouched = Array.from(new Set(fresh.map((p) => p.stepKey)));
+        for (const sk of stepsTouched) {
+          const info = computeStepCompletion(sk, merged[sk] || {});
+          await supabase.from("diagnosis_step_status").upsert(
+            {
+              session_id: sessionId,
+              step_key: sk,
+              completion_percentage: info.completion_percentage,
+              missing_required_fields: info.missing_required_fields,
+              is_completed: info.is_completed,
+            },
+            { onConflict: "session_id,step_key" },
+          );
+          setStatuses((prev) => {
+            const others = prev.filter((s) => s.step_key !== sk);
+            return [...others, { step_key: sk, ...info }];
+          });
+        }
+
+        setAllAnswers(merged);
+        setAppliedKeys((prev) => {
+          const n = new Set(prev);
+          fresh.forEach((p) => n.add(`${p.stepKey}.${p.questionKey}`));
+          return n;
+        });
+        toast.success(`IA preencheu ${fresh.length} ${fresh.length === 1 ? "campo" : "campos"} a partir dos prints.`);
+
+        // Pula direto para a primeira etapa com campos obrigatórios faltando
+        const nextIdx = findNextIncompleteStepIndex(activeSteps, merged, currentIndex + 1);
+        if (nextIdx === -1) {
+          navigate(`/app/diagnosis/${sessionId}/review`);
+        } else {
+          await goTo(nextIdx);
+        }
+      } catch (e: any) {
+        console.error("auto-apply error", e);
+        toast.error(e.message || "Erro ao aplicar dados dos prints");
+      } finally {
+        setAutoApplying(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploads, proposals, step?.key]);
 
   const { status: saveStatus } = useAutosave({
     sessionId,
