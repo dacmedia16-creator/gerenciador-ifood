@@ -29,6 +29,10 @@ import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButto
 
 export default function DiagnosisReview() {
   const { sessionId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  const modeParam = (searchParams.get("mode") as "prints" | "form" | "both" | null);
+  const storedMode = (typeof window !== "undefined" ? sessionStorage.getItem(`diagnosis:${sessionId}:mode`) : null) as "prints" | "form" | "both" | null;
+  const mode: "prints" | "form" | "both" = modeParam ?? storedMode ?? "both";
   const { user } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<{ answers: any[]; statuses: any[]; storeId: string | null } | null>(null);
