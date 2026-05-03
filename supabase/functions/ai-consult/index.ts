@@ -11,6 +11,8 @@ import {
 } from "../_shared/memory.ts";
 import { applyDiagnosisValidation } from "../_shared/validate-diagnosis.ts";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { buildCacheKey, getCached, putCached, invalidateDiagnosisCache, CACHE_TTL } from "../_shared/cache.ts";
+import { checkRateLimit, rateLimitResponse } from "../_shared/rate-limit.ts";
 
 const SYSTEM_PROMPT = `Você é um GESTOR DE DELIVERY EXPERIENTE atuando como consultor.
 
