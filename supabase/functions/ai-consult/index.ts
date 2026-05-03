@@ -218,13 +218,19 @@ Deno.serve(async (req) => {
     let sessionDebug: Record<string, any> = {};
     let printSnippets: Array<{ classification: string; text: string }> = [];
     if (sessionId) {
+      const useAnswers = mode !== "prints";
+      const useUploads = mode !== "form";
       const [answersR, uploadsR] = await Promise.all([
-        supabase.from("diagnosis_answers")
-          .select("step_key, question_key, answer_value")
-          .eq("session_id", sessionId),
-        supabase.from("diagnosis_uploads")
-          .select("status, classification, structured_data, extracted_text")
-          .eq("session_id", sessionId),
+        useAnswers
+          ? supabase.from("diagnosis_answers")
+              .select("step_key, question_key, answer_value")
+              .eq("session_id", sessionId)
+          : Promise.resolve({ data: [] as any[] }),
+        useUploads
+          ? supabase.from("diagnosis_uploads")
+              .select("status, classification, structured_data, extracted_text")
+              .eq("session_id", sessionId)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
       const { evidences } = evidencesFromSession(
         (answersR.data ?? []) as any,
@@ -239,6 +245,9 @@ Deno.serve(async (req) => {
           text: String(u.extracted_text).slice(0, 800),
         }));
       sessionDebug = {
+        mode,
+        used_answers: useAnswers,
+        used_uploads: useUploads,
         answers_count: answersR.data?.length ?? 0,
         uploads_count: uploadsR.data?.length ?? 0,
         session_evidences: evidences.length,
