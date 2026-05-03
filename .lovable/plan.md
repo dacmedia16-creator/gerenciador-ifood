@@ -1,49 +1,57 @@
-## Plano: Integrar Aula 4 (Montagem de Cardápio, Concorrência e Alavancagem) ao RAG
+## Plano: Integrar Aula 5 (Cupons, CAC, Taxa Grátis, Produto Isca e Alavancagem) ao RAG
 
-Mesmo padrão das Aulas 1, 2 e 3 já integradas. Vou adicionar os chunks da nova aula ao `knowledge_base`, gerar embeddings e validar.
+Mesmo padrão das Aulas 1–4. Vou adicionar os chunks desta aula ao `knowledge_base`, gerar embeddings e validar.
+
+### Observação importante sobre sobreposição
+
+O source existente `aula-ifood-listas-cupons` (73 chunks) já cobre parte deste conteúdo (campanha inteligente, subsidiada, cupom de primeiro cliente, CAC básico, plano completo vs básico, entrega grátis segmentada). Esta nova aula traz:
+
+- **Conteúdo já coberto** (vou ingerir mesmo assim como reforço/perspectiva diferente, em source separado, para o RAG ter mais "ângulos" de recuperação): tipos de cupons, campanha inteligente, cupom recorrente, primeiro cliente, Clube iFood, CAC 5%, plano básico vs completo.
+- **Conteúdo novo / mais detalhado** (principal valor agregado):
+  - **Fórmula de taxa grátis:** custo médio de entrega ÷ média de itens por venda
+  - **Cálculo de média de itens por venda** (excluindo bebidas)
+  - **Produto isca precificado para suportar campanhas** (cachorro-quente CMV R$3,80 cadastrado a R$22,90)
+  - **Caso hamburgueria:** ticket R$53 → R$28 → R$32 com faturamento subindo
+  - **Cupons do Clube iFood (25% off até R$10 / R$20)** como alavanca de recorrência
+  - **Taxa de entrega flexível** como ferramenta de CAC (raio ampliado só para novos clientes)
+  - **Fidelização dentro das regras:** bilhete, mimo, overdelivery, agradecimento via chat, **não pedir telefone, não tirar cliente da plataforma**
+  - **Anúncios iFood:** bons para branding, fracos para conversão direta vs cupom de CAC
+  - **R$308 bruto → R$107 líquido** como exemplo de alerta (>50% de desconto líquido)
+  - **Não copiar preço de concorrente sem números** (concorrente pode estar errado)
 
 ### Conteúdo a ingerir
-- **Source:** `aula-ifood-cardapio-concorrencia` (nova)
-- **Total estimado:** ~75 entradas
-  - 35 chunks RAG (vindos diretos da transcrição: RAG-001 a RAG-035)
-  - ~15 FAQ (perguntas explícitas dos chunks → respostas curtas)
-  - ~8 regras práticas (categoria de tração com 4–6 produtos, combo precisa de ficha técnica, etc.)
-  - ~5 checklists (análise de concorrente, montagem de cardápio para hamburgueria, complementos, lançamento de loja nova, revisão de descrição)
-  - ~5 diagnósticos (poucas opções para casal, descrição longa/IA crua, combo somando preços, ticket caindo na escala, ausência de produto isca)
-  - ~5 exemplos práticos (estimativa de pedidos por avaliações, estrutura de hamburgueria, "Leve mais e pague menos", combo família com escolha obrigatória, funil 3000 visitas)
-  - ~7 termos de glossário (categoria volante, dose dupla, super combo, produto isca, CAC, tração, complemento obrigatório)
+- **Source:** `aula-ifood-cupons-cac-alavancagem` (nova)
+- **Total estimado:** ~85 entradas
+  - 30 chunks RAG (RAG-001 a RAG-030 da transcrição)
+  - 15 FAQ
+  - 8 regras práticas
+  - 5 checklists (cupons, campanha inteligente, taxa grátis, produto isca, fidelização)
+  - 5 diagnósticos (líquido baixo, ticket alto sem volume, campanha inteligente ruim, novos não voltam, guerra de preço)
+  - 5 exemplos (hamburgueria, cachorro-quente, R$308→R$107, fórmula taxa grátis, bilhete+mimo)
+  - 13 termos de glossário (CAC, cupom recorrente, primeiro cliente, Clube iFood, campanha inteligente, subsidiada, taxa grátis, taxa flexível, produto isca, CMV, ticket médio, média de itens por venda, overdelivery)
+  - ~4 chunks de "validação" (cupons R$15/R$30, limite R$2.500, disponibilidade Clube iFood, anúncios variam)
 
-### Pontos críticos novos que a IA passará a recomendar
-- **Análise de concorrência obrigatória antes de mexer no cardápio** (3–5 concorrentes, simular pedidos em endereços diferentes)
-- **Estimativa de volume do concorrente** via avaliações (÷3 = média mensal; representa 10–20% dos pedidos)
-- **Primeira e segunda categorias** = área de maior impacto → produtos isca + ofertas + opções para 3 perfis
-- **3 perfis de cliente:** solteiro / casal / família — cardápio precisa cobrir os três
-- **Categoria de tração com 4–6 produtos** (preferir pares por UX mobile)
-- **Categoria volante** reutilizável para datas comemorativas (preserva histórico/algoritmo)
-- **Título de produto:** benefício + tipo + sabor + desconto (não só sabor)
-- **Descrição curta** + bloco de tags sem hashtag no final (algoritmo não lê símbolos)
-- **Combos exigem ficha técnica própria** — nunca somar preços avulsos
-- **Bebidas dentro de complemento** em hamburgueria evita pedido só de bebida com taxa grátis
-- **Fase nova ≠ lucro máximo:** investir em CAC; depois reduzir benefícios gradualmente
-- **Funil de referência:** 3.000 visitas × 10% conversão × R$30 ticket = R$9.000
-- **Queda de ticket médio na escala** pode ser saudável (mais clientes novos comprando barato primeiro)
-
-### Pontos marcados como "validar" (não afirmar como verdade absoluta)
-- Faixa "10–20% dos clientes avaliam" e "avaliações dos últimos ~90 dias" → marcar como **estimativa do instrutor, varia por loja/categoria**
-- Estrutura específica de hamburgueria (oferta da semana → artesanal → trio → super combo → bebida → volante) → marcar como **modelo inicial, adaptar ao nicho**
-- Recomendação de bebida só no complemento → marcar como **testar conforme público**
+### Marcações de cautela (não afirmar como verdade absoluta)
+- Cupons de R$15 e R$30 de primeiro cliente → **possivelmente descontinuados, validar no painel**
+- Limite R$2.500 da campanha inteligente → **varia por loja, conferir no painel**
+- 5% de faturamento para CAC → **diretriz inicial, ajustar à realidade**
+- Disponibilidade Clube iFood → **varia por loja/região/categoria**
+- Performance de anúncios → **caso a caso**
 
 ### Passos técnicos
-1. Gerar SQL `INSERT` em lote em `public.knowledge_base` (source=`aula-ifood-cardapio-concorrencia`, chunk_id único, area + tags corretas, status=`ativo`)
-2. Executar via migration
-3. Disparar Edge Function `embed-knowledge` em lotes até 100% com embedding
+1. Gerar SQL `INSERT` em lote em `public.knowledge_base` (source=`aula-ifood-cupons-cac-alavancagem`, chunk_id único, area + tags coerentes com convenção existente, status=`ativo`).
+2. Executar via tool de insert.
+3. Disparar Edge Function `embed-knowledge` em lotes até 100% com embedding (versão 2, gemini-embedding-001).
 4. Validar:
-   - Total passa de 831 → ~906
+   - Total passa de 930 → ~1015
    - Todos os novos com `embedding IS NOT NULL` e `embedding_version = 2`
    - Busca semântica retorna chunks novos para queries como:
-     - "como montar cardápio de hamburgueria"
-     - "estimar vendas do concorrente pelas avaliações"
-     - "combo família com complemento obrigatório"
-     - "categoria volante datas comemorativas"
+     - "como calcular taxa grátis no iFood"
+     - "média de itens por venda fórmula"
+     - "produto isca precificação cachorro-quente"
+     - "quanto investir em CAC"
+     - "ticket médio alto faturamento baixo hamburgueria"
+     - "como fidelizar cliente sem pedir telefone"
+     - "anúncio iFood vale a pena"
 
 Aprovando, executo a ingestão + embeddings e te confirmo o total final.
