@@ -65,14 +65,15 @@ export function WizardShell({
         {/* Sidebar checklist */}
         <aside className="hidden lg:block">
           <div className="sticky top-24 space-y-1">
-            {STEPS.map((s) => {
+            {stepList.map((s, i) => {
               const st = statuses.find((x) => x.step_key === s.key);
-              const active = s.index === currentStepIndex;
+              const displayIndex = i + 1;
+              const active = displayIndex === currentStepIndex;
               const Icon = st?.is_completed ? CheckCircle2 : (st?.completion_percentage ?? 0) > 0 ? AlertCircle : Circle;
               return (
                 <button
                   key={s.key}
-                  onClick={() => onJump?.(s.index)}
+                  onClick={() => onJump?.(displayIndex)}
                   className={cn(
                     "w-full text-left flex items-start gap-2 px-3 py-2 rounded-md text-sm transition-colors",
                     active ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
@@ -85,7 +86,7 @@ export function WizardShell({
                     )}
                   />
                   <span>
-                    <span className="block leading-tight">{s.index}. {s.title}</span>
+                    <span className="block leading-tight">{displayIndex}. {s.title}</span>
                     {st && st.completion_percentage > 0 && !st.is_completed && (
                       <span className="text-xs text-muted-foreground">{st.completion_percentage}%</span>
                     )}
