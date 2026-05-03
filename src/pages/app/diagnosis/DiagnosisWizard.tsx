@@ -13,7 +13,12 @@ import { Sparkles } from "lucide-react";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 
 function filterStepsByMode(mode: string | null) {
-  if (mode === "prints") return STEPS.filter((s) => ["basic", "prints", "goal"].includes(s.key));
+  if (mode === "prints") {
+    const order = ["prints", "basic", "goal"];
+    return order
+      .map((k) => STEPS.find((s) => s.key === k))
+      .filter(Boolean) as typeof STEPS;
+  }
   if (mode === "form") return STEPS.filter((s) => s.key !== "prints");
   return STEPS;
 }
