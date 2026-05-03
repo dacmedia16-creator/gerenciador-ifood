@@ -15,6 +15,7 @@ interface Props {
   onPrev?: () => void;
   onNext?: () => void;
   onJump?: (index: number) => void;
+  headerActions?: ReactNode;
   children: ReactNode;
 }
 
@@ -26,6 +27,7 @@ export function WizardShell({
   onPrev,
   onNext,
   onJump,
+  headerActions,
   children,
 }: Props) {
   const overallPct = Math.round((statuses.filter((s) => s.is_completed).length / STEPS.length) * 100);
