@@ -15,7 +15,7 @@ import logoGD from "@/assets/logo-gestor-delivery.png";
 
 const general = [
   { title: "Painel do Dono", url: "/app/dashboard", icon: LayoutDashboard },
-  { title: "Meu Diagnóstico", url: "/app/diagnosis/new", icon: Sparkles },
+  { title: "Meu Diagnóstico", url: "/app/diagnosis/welcome", icon: Sparkles },
   { title: "Minha loja", url: "/app/store", icon: Store },
   { title: "Gestor IA (Chat)", url: "/app/chat", icon: MessageSquare },
 ];
@@ -29,6 +29,7 @@ const storeAnalysis = (id: string) => [
   { title: "Diagnóstico", url: `/app/stores/${id}/diagnostics`, icon: Stethoscope },
   { title: "Score", url: `/app/stores/${id}/score`, icon: Gauge },
   { title: "Plano de melhoria", url: `/app/stores/${id}/action-plan`, icon: ListTodo },
+  { title: "Meta da loja", url: `/app/stores/${id}/goal`, icon: Target },
   { title: "Evolução da loja", url: `/app/stores/${id}/evolution`, icon: TrendingUp },
   { title: "Relatório da minha loja", url: `/app/stores/${id}/report`, icon: FileText },
 ];
