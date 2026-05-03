@@ -276,7 +276,29 @@ export function QuestionField({ question, value, onChange }: FieldProps) {
     return <FilesField value={value} onChange={onChange} />;
   }
 
+  if (q.type === "prints") {
+    return <PrintsField />;
+  }
+
   return null;
+}
+
+import { PrintUploader } from "./PrintUploader";
+import { useEffect as _useEffect, useState as _useState } from "react";
+import { supabase as _supabase } from "@/integrations/supabase/client";
+
+function PrintsField() {
+  const params = useParams();
+  const sessionId = (params.sessionId as string) || "";
+  const [storeId, setStoreId] = _useState<string | null>(null);
+
+  _useEffect(() => {
+    if (!sessionId) return;
+    _supabase.from("diagnosis_sessions").select("store_id").eq("id", sessionId).maybeSingle()
+      .then(({ data }) => setStoreId(data?.store_id ?? null));
+  }, [sessionId]);
+
+  return <PrintUploader sessionId={sessionId} storeId={storeId} />;
 }
 
 import { useState } from "react";
