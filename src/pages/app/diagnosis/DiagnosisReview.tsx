@@ -23,20 +23,21 @@ import {
 import { toast } from "sonner";
 import { EvidenceCard } from "@/components/diagnosis/EvidenceCard";
 import { ReviewAnswerList } from "@/components/diagnosis/ReviewAnswerList";
+import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 
 export default function DiagnosisReview() {
   const { sessionId = "" } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [data, setData] = useState<{ answers: any[]; statuses: any[] } | null>(null);
+  const [data, setData] = useState<{ answers: any[]; statuses: any[]; storeId: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const { answers, statuses } = await loadSession(sessionId);
-        setData({ answers, statuses });
+        const { session, answers, statuses } = await loadSession(sessionId);
+        setData({ answers, statuses, storeId: session?.store_id ?? null });
       } catch {
         toast.error("Sessão não encontrada");
         navigate("/app/dashboard");
