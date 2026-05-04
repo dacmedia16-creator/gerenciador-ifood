@@ -14,6 +14,7 @@ import { WeeklyCheckinCard } from "@/components/dashboard/WeeklyCheckinCard";
 import { ScoreImpactBlocks } from "@/components/dashboard/ScoreImpactBlocks";
 import { WeekActionsBlock } from "@/components/dashboard/WeekActionsBlock";
 import { ToolsGrid } from "@/components/dashboard/ToolsGrid";
+import { PendingOutcomeCard } from "@/components/dashboard/PendingOutcomeCard";
 
 const TERMINAL = ["aplicada", "ignorada", "rejeitada", "completed"];
 
@@ -189,6 +190,9 @@ export default function Dashboard() {
           </div>
         </Card>
       )}
+
+      {/* Follow-up de ações concluídas há 7 dias */}
+      <PendingOutcomeCard />
 
       {/* Bloco A — Reavaliação semanal */}
       <WeeklyCheckinCard storeId={store.id} currentScore={overall} />
