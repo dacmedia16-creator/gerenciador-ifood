@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge, SeverityBadge } from "@/components/StatusBadges";
-import { ArrowRight, Sparkles, ChevronRight, Info, ListTodo, MapPin } from "lucide-react";
+import { ArrowRight, Sparkles, ChevronRight, Info, ListTodo, MapPin, AlertTriangle } from "lucide-react";
 import { ProblemDetailSheet } from "@/components/diagnosis/ProblemDetailSheet";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { getBenchmark } from "@/lib/benchmarks";
+import { QuickActionCard } from "@/components/diagnosis/QuickActionCard";
+import { ChatCTACard } from "@/components/diagnosis/ChatCTACard";
+import { SocialProofRow } from "@/components/diagnosis/SocialProofRow";
+import { useCategoryBenchmark } from "@/hooks/useCategoryBenchmark";
 
 const severityRank = (s: string) => (s === "critico" ? 0 : s === "atencao" ? 1 : 2);
 
@@ -137,6 +141,26 @@ export default function DiagnosisResult() {
         <ResetDiagnosisButton storeId={data.store_id} />
       </div>
 
+      {/* BANNER DE IMPACTO FINANCEIRO */}
+      {totalLeak > 0 && (
+        <Card className="p-6 border-2 border-red-200 bg-red-50 text-red-900 text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="text-sm font-medium">Você pode estar perdendo</p>
+          </div>
+          <p className="text-4xl sm:text-5xl font-bold leading-tight">
+            {fmtBRL(totalLeak)} <span className="text-base font-medium">por mês</span>
+          </p>
+          {criticalCount > 0 && (
+            <p className="text-sm mt-3">
+              Identificamos <span className="font-bold">{criticalCount}</span>{" "}
+              {criticalCount === 1 ? "problema crítico" : "problemas críticos"} que explicam esse valor.
+              Veja o que resolver primeiro ↓
+            </p>
+          )}
+        </Card>
+      )}
+
       {/* SCORE GERAL */}
       <Card className="p-6 shadow-elegant">
         <div className="text-center space-y-3">
@@ -161,11 +185,6 @@ export default function DiagnosisResult() {
             <span className="font-medium">{benchmark.label}s</span> ({benchmark.avgScore} pts)
           </p>
         </div>
-        {totalLeak > 0 && (
-          <div className="mt-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-center text-sm">
-            💸 Você pode estar perdendo <span className="font-bold">~{fmtBRL(totalLeak)}/mês</span>
-          </div>
-        )}
       </Card>
 
 
