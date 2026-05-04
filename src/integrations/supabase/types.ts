@@ -824,6 +824,42 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          email_weekly: boolean
+          id: string
+          updated_at: string
+          user_id: string
+          weekly_day: string
+          weekly_time: string
+          whatsapp_number: string | null
+          whatsapp_weekly: boolean
+        }
+        Insert: {
+          created_at?: string
+          email_weekly?: boolean
+          id?: string
+          updated_at?: string
+          user_id: string
+          weekly_day?: string
+          weekly_time?: string
+          whatsapp_number?: string | null
+          whatsapp_weekly?: boolean
+        }
+        Update: {
+          created_at?: string
+          email_weekly?: boolean
+          id?: string
+          updated_at?: string
+          user_id?: string
+          weekly_day?: string
+          weekly_time?: string
+          whatsapp_number?: string | null
+          whatsapp_weekly?: boolean
+        }
+        Relationships: []
+      }
       print_jobs: {
         Row: {
           attempts: number
@@ -958,6 +994,7 @@ export type Database = {
           email: string | null
           id: string
           name: string | null
+          plan: string
           updated_at: string
           user_id: string
         }
@@ -966,6 +1003,7 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string | null
+          plan?: string
           updated_at?: string
           user_id: string
         }
@@ -974,6 +1012,7 @@ export type Database = {
           email?: string | null
           id?: string
           name?: string | null
+          plan?: string
           updated_at?: string
           user_id?: string
         }
@@ -1571,8 +1610,12 @@ export type Database = {
       }
       weekly_snapshots: {
         Row: {
+          actions_completed: number
+          avg_ticket: number | null
           cancellation_rate: number | null
           created_at: string
+          diagnosis_id: string | null
+          estimated_revenue: number | null
           id: string
           rating: number | null
           score: number | null
@@ -1582,8 +1625,12 @@ export type Database = {
           weekly_revenue: number | null
         }
         Insert: {
+          actions_completed?: number
+          avg_ticket?: number | null
           cancellation_rate?: number | null
           created_at?: string
+          diagnosis_id?: string | null
+          estimated_revenue?: number | null
           id?: string
           rating?: number | null
           score?: number | null
@@ -1593,8 +1640,12 @@ export type Database = {
           weekly_revenue?: number | null
         }
         Update: {
+          actions_completed?: number
+          avg_ticket?: number | null
           cancellation_rate?: number | null
           created_at?: string
+          diagnosis_id?: string | null
+          estimated_revenue?: number | null
           id?: string
           rating?: number | null
           score?: number | null
@@ -1603,7 +1654,15 @@ export type Database = {
           week_start?: string
           weekly_revenue?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "weekly_snapshots_diagnosis_id_fkey"
+            columns: ["diagnosis_id"]
+            isOneToOne: false
+            referencedRelation: "diagnostics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
