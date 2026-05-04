@@ -472,7 +472,18 @@ export default function DiagnosisResult() {
         </div>
       </div>
 
-      <ProblemDetailSheet diagnostic={selected} open={open} onOpenChange={setOpen} />
+      <ProblemDetailSheet
+        diagnostic={selected}
+        open={open}
+        onOpenChange={setOpen}
+        storeContext={{
+          delivery_time: store?.promised_delivery_time,
+          cancellation_rate: store?.cancellation_rate,
+          rating: store?.rating,
+          monthly_orders: store?.monthly_orders,
+          average_ticket: store?.average_ticket,
+        }}
+      />
     </div>
   );
 }
