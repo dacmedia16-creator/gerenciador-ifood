@@ -137,67 +137,37 @@ export default function DiagnosisResult() {
         <ResetDiagnosisButton storeId={data.store_id} />
       </div>
 
-      {/* SCORE COM CONTEXTO */}
+      {/* SCORE GERAL */}
       <Card className="p-6 shadow-elegant">
-        <div className="grid md:grid-cols-2 gap-6 items-center">
-          <div className="text-center md:text-left">
-            <p className="text-sm text-muted-foreground mb-1">Score da sua loja</p>
-            <div className="flex items-baseline gap-2 justify-center md:justify-start">
-              <span className="text-7xl font-bold text-gradient leading-none">{overall}</span>
-              <span className="text-2xl text-muted-foreground">/100</span>
-            </div>
-            <div className="mt-2 flex items-center gap-2 justify-center md:justify-start flex-wrap">
-              <ScoreBadge score={overall} />
-              {delta !== null && delta !== 0 && (
-                <span className={`text-sm font-medium flex items-center gap-1 ${delta > 0 ? "text-success" : "text-destructive"}`}>
-                  {delta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {delta > 0 ? "+" : ""}{delta} vs último diagnóstico
-                </span>
-              )}
-            </div>
+        <div className="text-center space-y-3">
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-7xl sm:text-8xl font-bold text-gradient leading-none">{overall}</span>
           </div>
-          <div className="space-y-3">
-            <div className={`flex items-start gap-2 p-3 rounded-md border ${benchDelta < -5 ? "border-destructive/40 bg-destructive/5" : benchDelta > 5 ? "border-success/40 bg-success/5" : "border-muted bg-muted/30"}`}>
-              <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${benchDelta < -5 ? "text-destructive" : "text-muted-foreground"}`} />
-              <p className="text-sm">
-                {benchDelta < -5 ? "Abaixo" : benchDelta > 5 ? "Acima" : "Próximo"} da média de{" "}
-                <span className="font-semibold">{benchmark.label}s</span> ({benchmark.avgScore} pontos)
-              </p>
-            </div>
-            {totalLeak > 0 && (
-              <div className="flex items-start gap-2 p-3 rounded-md border border-orange-500/40 bg-orange-500/5">
-                <span className="text-orange-600 text-lg leading-none">💸</span>
-                <p className="text-sm">
-                  Você está deixando <span className="font-bold text-orange-700">~{fmtBRL(totalLeak)}/mês</span> na mesa.
-                  <span className="text-muted-foreground"> Veja o que resolver primeiro abaixo.</span>
-                </p>
-              </div>
+          <p className="text-sm text-muted-foreground">de 100 pontos possíveis</p>
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <ScoreBadge score={overall} />
+            {delta !== null && delta !== 0 && (
+              <span
+                className={`inline-flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded-full ${
+                  delta > 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                }`}
+              >
+                {delta > 0 ? "▲" : "▼"} {delta > 0 ? "+" : ""}{delta} esta semana
+              </span>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            {benchDelta < -5 ? "Abaixo" : benchDelta > 5 ? "Acima" : "Próximo"} da média de{" "}
+            <span className="font-medium">{benchmark.label}s</span> ({benchmark.avgScore} pts)
+          </p>
         </div>
+        {totalLeak > 0 && (
+          <div className="mt-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-center text-sm">
+            💸 Você pode estar perdendo <span className="font-bold">~{fmtBRL(totalLeak)}/mês</span>
+          </div>
+        )}
       </Card>
 
-      {/* CARD MELHORAR DIAGNÓSTICO (topo) */}
-      {missingData.length > 0 && (
-        <Card className="p-5 border-primary/40 bg-primary/5">
-          <div className="flex items-start gap-3">
-            <Lightbulb className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold mb-1">Melhore a precisão do diagnóstico</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Adicionando {missingData.slice(0, 3).join(", ")}
-                {missingData.length > 3 ? ` e mais ${missingData.length - 3}` : ""}, a IA consegue
-                calcular seu lucro real e dar recomendações mais específicas.
-              </p>
-              <Button size="sm" asChild>
-                <Link to={`/app/diagnosis/${sessionId}`}>
-                  Adicionar mais dados <ArrowRight className="h-4 w-4 ml-1" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* SCORE POR ÁREA — agrupado por impacto */}
       <Card className="p-5 shadow-card">
