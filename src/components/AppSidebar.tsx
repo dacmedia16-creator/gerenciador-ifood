@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, Search, CheckCircle2, UtensilsCrossed, Star, Gem, Settings, LogOut, Shield, Store, Target, BookOpen, FileSliders } from "lucide-react";
+import { Home, Search, CheckCircle2, UtensilsCrossed, Star, Gem, Settings, LogOut, Shield, Store, Target, BookOpen, FileSliders, MessageCircle } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
