@@ -115,7 +115,7 @@ export default function Dashboard() {
     });
   }, [data]);
 
-  if (loadingStores) return <DashboardSkeleton />;
+  if (loadingStores || !storesFetched) return <DashboardSkeleton />;
   if (!stores.length) return <Navigate to="/app/onboarding" replace />;
   if (!data || !data.store || !score) return <DashboardSkeleton />;
 
