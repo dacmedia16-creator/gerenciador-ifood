@@ -6,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge, SeverityBadge } from "@/components/StatusBadges";
-import { ArrowRight, Sparkles, ChevronRight, Info, ListTodo, MapPin } from "lucide-react";
+import { ArrowRight, Sparkles, ChevronRight, Info, ListTodo, MapPin, AlertTriangle } from "lucide-react";
 import { ProblemDetailSheet } from "@/components/diagnosis/ProblemDetailSheet";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { getBenchmark } from "@/lib/benchmarks";
+import { QuickActionCard } from "@/components/diagnosis/QuickActionCard";
+import { ChatCTACard } from "@/components/diagnosis/ChatCTACard";
+import { SocialProofRow } from "@/components/diagnosis/SocialProofRow";
+import { useCategoryBenchmark } from "@/hooks/useCategoryBenchmark";
 
 const severityRank = (s: string) => (s === "critico" ? 0 : s === "atencao" ? 1 : 2);
 
@@ -90,6 +94,8 @@ export default function DiagnosisResult() {
     })();
   }, [sessionId, navigate]);
 
+  const categoryBenchmark = useCategoryBenchmark(data?.store?.category);
+
   if (!data) return <div className="p-8 text-muted-foreground">Carregando resultado…</div>;
 
   const { store, products, reviews, competitors, campaigns, metrics, diagnostics, aiConsult, previousScore } = data;
@@ -103,6 +109,7 @@ export default function DiagnosisResult() {
 
   const moneyLeaks: any[] = Array.isArray(aiConsult?.money_leaks) ? aiConsult.money_leaks : [];
   const totalLeak = moneyLeaks.reduce((s, l) => s + (Number(l.monthly_estimate_brl) || 0), 0);
+  const criticalCount = (diagnostics as any[]).filter((d) => d.severity === "critico").length;
 
   // Agrupar áreas por urgência
   const areaEntries = Object.entries(areas).map(([area, score]) => ({
@@ -122,6 +129,20 @@ export default function DiagnosisResult() {
     ? aiConsult.missing_data_for_better_diagnosis
     : [];
 
+  // Inferir problem_type do problema #1 (mais severo) para prova social
+  const topArea = (sortedProblems[0]?.area || "").toLowerCase();
+  const problemType: "cancelamento" | "entrega" | "avaliacao" | "cardapio" | null =
+    topArea.includes("cancel") ? "cancelamento" :
+    topArea.includes("entrega") || topArea.includes("tempo") ? "entrega" :
+    topArea.includes("avalia") || topArea.includes("nota") ? "avaliacao" :
+    topArea.includes("cardap") || topArea.includes("menu") || topArea.includes("preço") || topArea.includes("preco") ? "cardapio" :
+    null;
+
+  // Primeiro item do plano de 7 dias (FAÇA AGORA)
+  const plan7: any[] = Array.isArray(aiConsult?.plan_7_days) ? aiConsult.plan_7_days : [];
+  const day1 = plan7.find((p: any) => p.day === 1) || plan7[0] || null;
+  const restOfPlan = plan7.filter((p: any) => p !== day1);
+
   const openProblem = (d: any) => {
     setSelected(d);
     setOpen(true);
@@ -136,6 +157,26 @@ export default function DiagnosisResult() {
         </div>
         <ResetDiagnosisButton storeId={data.store_id} />
       </div>
+
+      {/* BANNER DE IMPACTO FINANCEIRO */}
+      {totalLeak > 0 && (
+        <Card className="p-6 border-2 border-red-200 bg-red-50 text-red-900 text-center">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <AlertTriangle className="h-5 w-5" />
+            <p className="text-sm font-medium">Você pode estar perdendo</p>
+          </div>
+          <p className="text-4xl sm:text-5xl font-bold leading-tight">
+            {fmtBRL(totalLeak)} <span className="text-base font-medium">por mês</span>
+          </p>
+          {criticalCount > 0 && (
+            <p className="text-sm mt-3">
+              Identificamos <span className="font-bold">{criticalCount}</span>{" "}
+              {criticalCount === 1 ? "problema crítico" : "problemas críticos"} que explicam esse valor.
+              Veja o que resolver primeiro ↓
+            </p>
+          )}
+        </Card>
+      )}
 
       {/* SCORE GERAL */}
       <Card className="p-6 shadow-elegant">
@@ -161,11 +202,6 @@ export default function DiagnosisResult() {
             <span className="font-medium">{benchmark.label}s</span> ({benchmark.avgScore} pts)
           </p>
         </div>
-        {totalLeak > 0 && (
-          <div className="mt-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-center text-sm">
-            💸 Você pode estar perdendo <span className="font-bold">~{fmtBRL(totalLeak)}/mês</span>
-          </div>
-        )}
       </Card>
 
 
@@ -178,14 +214,17 @@ export default function DiagnosisResult() {
               <p className="text-xs font-bold text-destructive uppercase tracking-wide mb-2">🔴 Resolver agora</p>
               <ul className="space-y-1.5">
                 {urgent.map((e) => (
-                  <li key={e.area} className="flex items-center justify-between gap-2 p-2 rounded border border-destructive/30 bg-destructive/5">
-                    <span className="text-sm font-medium">{e.area}</span>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="font-bold text-destructive">{e.score}</span>
-                      {e.leak > 0 && (
-                        <span className="text-xs text-orange-700 font-medium">custa ~{fmtBRL(e.leak)}/mês</span>
-                      )}
+                  <li key={e.area} className="p-2 rounded border border-destructive/30 bg-destructive/5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{e.area}</span>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="font-bold text-destructive">{e.score}</span>
+                        {e.leak > 0 && (
+                          <span className="text-xs text-orange-700 font-medium">custa ~{fmtBRL(e.leak)}/mês</span>
+                        )}
+                      </div>
                     </div>
+                    <BenchmarkLine area={e.area} bench={categoryBenchmark} />
                   </li>
                 ))}
               </ul>
@@ -196,9 +235,12 @@ export default function DiagnosisResult() {
               <p className="text-xs font-bold text-warning uppercase tracking-wide mb-2">🟡 Melhorar em breve</p>
               <ul className="grid sm:grid-cols-2 gap-1.5">
                 {improving.map((e) => (
-                  <li key={e.area} className="flex items-center justify-between gap-2 p-2 rounded border bg-warning/5">
-                    <span className="text-sm">{e.area}</span>
-                    <span className="font-semibold text-warning">{e.score}</span>
+                  <li key={e.area} className="p-2 rounded border bg-warning/5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm">{e.area}</span>
+                      <span className="font-semibold text-warning">{e.score}</span>
+                    </div>
+                    <BenchmarkLine area={e.area} bench={categoryBenchmark} />
                   </li>
                 ))}
               </ul>
@@ -260,7 +302,16 @@ export default function DiagnosisResult() {
             </div>
           </div>
 
-          {Array.isArray(aiConsult.plan_7_days) && aiConsult.plan_7_days.length > 0 && (
+          <SocialProofRow problemType={problemType} />
+
+          {day1 && (
+            <div>
+              <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
+              <QuickActionCard day1={day1} />
+            </div>
+          )}
+
+          {restOfPlan.length > 0 && (
             <div>
               <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
               <ol className="space-y-3">
@@ -423,3 +474,13 @@ export default function DiagnosisResult() {
     </div>
   );
 }
+
+function BenchmarkLine({ area, bench }: { area: string; bench: { scoresByArea: Record<string, number>; hasEnoughData: boolean } }) {
+  const cat = bench.hasEnoughData ? bench.scoresByArea[area] : undefined;
+  return (
+    <p className="text-[11px] text-muted-foreground mt-1">
+      Meta: 70+{typeof cat === "number" ? ` · Sua categoria: ${cat}` : ""}
+    </p>
+  );
+}
+
