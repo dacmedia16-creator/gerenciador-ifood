@@ -4,9 +4,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SeverityBadge, PriorityBadge } from "@/components/StatusBadges";
-import { Sparkles, RotateCw, AlertTriangle, Lightbulb, Target, ListChecks, BookOpen } from "lucide-react";
+import { Sparkles, RotateCw, AlertTriangle, Lightbulb, Target, ListChecks, BookOpen, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { ProblemFeedback } from "./ProblemFeedback";
+import { leakForArea } from "@/lib/diagnostics/leak-math";
 
 interface DetailedSolution {
   executive_summary: string;
@@ -24,9 +25,16 @@ interface Props {
   diagnostic: any | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  storeContext?: {
+    delivery_time?: number | null;
+    cancellation_rate?: number | null;
+    rating?: number | null;
+    monthly_orders?: number | null;
+    average_ticket?: number | null;
+  };
 }
 
-export function ProblemDetailSheet({ diagnostic, open, onOpenChange }: Props) {
+export function ProblemDetailSheet({ diagnostic, open, onOpenChange, storeContext }: Props) {
   const [loading, setLoading] = useState(false);
   const [detailed, setDetailed] = useState<DetailedSolution | null>(null);
 
@@ -85,6 +93,23 @@ export function ProblemDetailSheet({ diagnostic, open, onOpenChange }: Props) {
           {diagnostic.business_impact && (
             <Section icon={<AlertTriangle className="h-4 w-4 text-destructive" />} title="Impacto no negócio">
               <p className="text-sm">{diagnostic.business_impact}</p>
+              {storeContext && (() => {
+                const leak = leakForArea(diagnostic.area || "", storeContext);
+                if (!leak) return null;
+                return (
+                  <details className="mt-3 group rounded-md border border-border bg-muted/30 p-3">
+                    <summary className="cursor-pointer text-xs font-medium text-primary select-none list-none flex items-center gap-1.5">
+                      <Calculator className="h-3.5 w-3.5" />
+                      Ver a conta
+                      <span className="group-open:hidden">▾</span>
+                      <span className="hidden group-open:inline">▴</span>
+                    </summary>
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {leak.lines.map((l, i) => (<li key={i}>{l}</li>))}
+                    </ul>
+                  </details>
+                );
+              })()}
             </Section>
           )}
 

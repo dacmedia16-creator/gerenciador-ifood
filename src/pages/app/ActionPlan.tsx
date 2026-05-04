@@ -13,6 +13,8 @@ import {
   ActionCompletionModal,
   CompletionAction,
 } from "@/components/actions/ActionCompletionModal";
+import { markActionComplete } from "@/lib/actions/markComplete";
+import { useAuth } from "@/hooks/useAuth";
 
 const TERMINAL = new Set(["aplicada", "ignorada", "rejeitada", "completed"]);
 
@@ -50,6 +52,7 @@ function truncate(s: string, words = 8) {
 export default function ActionPlan() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { actions, loading, reload } = useStoreData(id);
   const [filter, setFilter] = useState<Filter>("todas");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -73,11 +76,23 @@ export default function ActionPlan() {
   });
 
   const handleComplete = async (a: any) => {
-    const { error } = await supabase
-      .from("action_plans")
-      .update({ status: "aplicada", completed_at: new Date().toISOString() })
-      .eq("id", a.id);
-    if (error) return toast.error(error.message);
+    if (!user || !a.store_id) {
+      const { error } = await supabase
+        .from("action_plans")
+        .update({ status: "aplicada", completed_at: new Date().toISOString() })
+        .eq("id", a.id);
+      if (error) return toast.error(error.message);
+    } else {
+      try {
+        await markActionComplete({
+          action_id: a.id,
+          store_id: a.store_id,
+          user_id: user.id,
+        });
+      } catch (e: any) {
+        return toast.error(e.message || "Erro ao concluir");
+      }
+    }
     setCompleting({
       id: a.id,
       title: a.title,

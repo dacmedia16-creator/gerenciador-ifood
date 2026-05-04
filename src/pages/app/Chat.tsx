@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,9 +46,27 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  // Auto-envia pergunta vinda via ?q=
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    if (autoSentRef.current) return;
+    const q = searchParams.get("q");
+    if (q && q.trim()) {
+      autoSentRef.current = true;
+      // remove o parâmetro da URL para evitar reenvio em refresh
+      const next = new URLSearchParams(searchParams);
+      next.delete("q");
+      setSearchParams(next, { replace: true });
+      send(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;

@@ -315,7 +315,7 @@ export default function DiagnosisResult() {
             <div>
               <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
               <ol className="space-y-3">
-                {aiConsult.plan_7_days.map((p: any, i: number) => {
+                {restOfPlan.map((p: any, i: number) => {
                   const steps: string[] = Array.isArray(p.steps) ? p.steps : [];
                   const where = p.where_to_do || p.onde_fazer;
                   return (
@@ -395,6 +395,8 @@ export default function DiagnosisResult() {
               </ul>
             </div>
           )}
+
+          <ChatCTACard diagnosisId={sessionId} />
         </Card>
       ) : (
         <Card className="p-4 border-dashed text-sm text-muted-foreground flex items-center gap-2">
@@ -470,7 +472,18 @@ export default function DiagnosisResult() {
         </div>
       </div>
 
-      <ProblemDetailSheet diagnostic={selected} open={open} onOpenChange={setOpen} />
+      <ProblemDetailSheet
+        diagnostic={selected}
+        open={open}
+        onOpenChange={setOpen}
+        storeContext={{
+          delivery_time: store?.promised_delivery_time,
+          cancellation_rate: store?.cancellation_rate,
+          rating: store?.rating,
+          monthly_orders: store?.monthly_orders,
+          average_ticket: store?.average_ticket,
+        }}
+      />
     </div>
   );
 }
