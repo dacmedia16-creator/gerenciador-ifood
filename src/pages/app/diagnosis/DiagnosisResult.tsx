@@ -465,3 +465,13 @@ export default function DiagnosisResult() {
     </div>
   );
 }
+
+function BenchmarkLine({ area, bench }: { area: string; bench: { scoresByArea: Record<string, number>; hasEnoughData: boolean } }) {
+  const cat = bench.hasEnoughData ? bench.scoresByArea[area] : undefined;
+  return (
+    <p className="text-[11px] text-muted-foreground mt-1">
+      Meta: 70+{typeof cat === "number" ? ` · Sua categoria: ${cat}` : ""}
+    </p>
+  );
+}
+
