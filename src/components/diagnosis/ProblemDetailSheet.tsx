@@ -4,9 +4,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SeverityBadge, PriorityBadge } from "@/components/StatusBadges";
-import { Sparkles, RotateCw, AlertTriangle, Lightbulb, Target, ListChecks, BookOpen } from "lucide-react";
+import { Sparkles, RotateCw, AlertTriangle, Lightbulb, Target, ListChecks, BookOpen, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { ProblemFeedback } from "./ProblemFeedback";
+import { leakForArea } from "@/lib/diagnostics/leak-math";
 
 interface DetailedSolution {
   executive_summary: string;
