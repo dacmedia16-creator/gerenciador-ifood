@@ -50,6 +50,8 @@ export default function DiagnosisExpress() {
   const [showPrintScreen, setShowPrintScreen] = useState(false);
   const [printFile, setPrintFile] = useState<File | null>(null);
   const [printPreview, setPrintPreview] = useState<string | null>(null);
+  const [printJobId, setPrintJobId] = useState<string | null>(null);
+  const [uploadingPrint, setUploadingPrint] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState<FormState>({
     revenue_range: "",
