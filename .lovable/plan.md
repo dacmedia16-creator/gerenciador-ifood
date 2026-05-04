@@ -1,57 +1,128 @@
-# Plano — Melhorias visuais em `DiagnosisResult.tsx`
+# Plano — 7 melhorias de conversão e retenção
 
-Arquivo único: `src/pages/app/diagnosis/DiagnosisResult.tsx`. Schema do JSON da IA já compatível (campos `money_leaks`, `executive_summary`, `plan_7_days[].steps/time_minutes/expected_impact`, `missing_data_for_better_diagnosis`). Nenhuma mudança no edge function necessária.
+## Migrações (executar primeiro via migration tool)
 
-## Bloco 1 — Score geral (reescrita do card)
-- Layout em coluna única, centralizado:
-  - Número grande (`text-7xl`/`text-8xl`) `{overall}`
-  - Subtítulo `text-sm text-muted-foreground`: "de 100 pontos possíveis"
-  - Badge variação semanal: usa `delta` já calculado (`previousScore`). Se `delta != null`: "▲ +N esta semana" (text-success/bg-success/10) ou "▼ -N esta semana" (text-destructive/bg-destructive/10). Se `delta === null`: ocultar.
-  - Linha em destaque (fundo âmbar, `bg-amber-50 border-amber-200 text-amber-900`) abaixo: "Você pode estar perdendo ~{fmtBRL(totalLeak)}/mês". Só renderiza se `totalLeak > 0`.
-- Manter benchmark? Sim, mas mover para dentro como linha pequena secundária abaixo do score (não tirar valor já existente).
+### M1 — `action_outcomes`
+```sql
+create table public.action_outcomes (
+  id uuid primary key default gen_random_uuid(),
+  action_id uuid not null,            -- referencia action_plans.id (ação concluída)
+  store_id uuid not null,
+  user_id uuid not null,
+  completed_at timestamptz not null,
+  followup_at timestamptz not null,   -- completed_at + 7 dias
+  rating_changed text check (rating_changed in ('up','same','down')),
+  orders_changed text check (orders_changed in ('up','same','down')),
+  notes text,
+  responded_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.action_outcomes enable row level security;
+create policy "outcomes_all_own" on public.action_outcomes
+  for all to authenticated
+  using (user_id = auth.uid() and has_store_access(store_id))
+  with check (user_id = auth.uid() and has_store_access(store_id));
+create index on public.action_outcomes(user_id, responded_at, followup_at);
+```
+Nota: `action_id` referencia `action_plans` (não `action_updates`, que registra updates) — alinhado ao padrão atual onde `action_plans` é a tabela de ações.
 
-## Bloco 2 — Score por área (3 seções)
-- Reagrupar critério conforme spec exato:
-  - urgent: `score < 50` → "🔴 Resolver agora" (mostra score + `~R$ X/mês` em vermelho se `leak > 0`)
-  - improving: `score >= 50 && score < 75` → "🟡 Melhorar em breve" (só score amarelo)
-  - ok: `score >= 75` → "🟢 Está bem" (score verde compacto, grid 2 colunas)
-- Ordenar urgent por `leak desc, score asc`.
+### M2 — `case_testimonials`
+```sql
+create table public.case_testimonials (
+  id uuid primary key default gen_random_uuid(),
+  category text not null,
+  city text not null,
+  metric_before text not null,
+  metric_after text not null,
+  timeframe text not null,
+  problem_type text not null check (problem_type in ('cancelamento','entrega','avaliacao','cardapio')),
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.case_testimonials enable row level security;
+create policy "testimonials_read_all" on public.case_testimonials
+  for select to anon, authenticated using (active = true);
+create policy "testimonials_admin_write" on public.case_testimonials
+  for all to authenticated
+  using (has_role(auth.uid(),'admin'))
+  with check (has_role(auth.uid(),'admin'));
+```
 
-## Bloco 5 (movido para cima — entre score por área e análise)
-- Card `bg-blue-50 border-blue-200`:
-  - Ícone 💡 + título "Melhore a precisão do diagnóstico"
-  - Texto fixo: "Adicionando mais dados, a IA consegue calcular seu lucro real e dar recomendações mais específicas."
-  - Lista `<ul className="list-disc">` dos itens de `missingData`.
-  - Botão "Adicionar dados →" linkando para `/app/diagnosis/${sessionId}` (rota atual de coleta).
-- Remove o bloco "missing data" duplicado de cima.
+## Frontend
 
-## Bloco 3 — Análise inteligente
-- `executive_summary`: classe `text-base` (16px) `leading-relaxed`. Primeira frase já vem com R$ pelo prompt.
-- Antes do plano de 7 dias, adicionar `<p className="font-bold text-base">O que fazer agora — em ordem de prioridade:</p>`.
+### Melhoria 1 — Banner impacto financeiro (topo de DiagnosisResult)
+- Card `bg-red-50 border-red-200 text-red-900` ANTES de tudo (acima do score).
+- VALOR = soma de `aiConsult.money_leaks[].monthly_estimate_brl` (campo já existente). Fallback: somar `diagnostics[].business_impact` parseado quando não houver aiConsult.
+- N = `diagnostics.filter(d => d.severity === 'critico').length`.
+- Não renderizar se VALOR ≤ 0.
+- Remove a linha âmbar duplicada que existe hoje no card de score (mantém só o banner novo no topo).
 
-## Bloco 4 — Cards do plano 7 dias
-- Cada item:
-  - Badge "Dia X" (mantém)
-  - Título em negrito `text-base`
-  - `where_to_do` (campo: tentamos `p.where_to_do || p.onde_fazer`): linha cinza pequena com ícone `MapPin`: "📍 {where}"
-  - `steps` (array): collapse via `<details>` nativo (sem dependência nova) — `<summary>Ver passo a passo ▾</summary>` + `<ol className="list-decimal">`. Fechado por padrão.
-  - `time_minutes`: badge pequeno `<Badge variant="secondary">⏱ {n} min</Badge>`
-  - `expected_impact`: `<p className="text-success italic text-sm">Resultado esperado: {…}</p>`
+### Melhoria 2 — Conta transparente
+- Adicionar dentro de `ProblemDetailSheet.tsx` (já é onde se abre o detalhe), bloco `<details>` "Ver a conta ▾".
+- Detector por área: `entrega` → fórmula tempo; `cancelamentos` → fórmula cancel; `avaliações` → fórmula nota.
+- Helper `lib/diagnostics/leak-math.ts` com 3 funções puras que recebem `{store, metrics}` e retornam `{lines: string[], total_brl: number}`.
+- Cálculos:
+  - **Tempo:** `desistentes_por_100 = clamp(round((delivery_time-35)/2),0,40)`; impacto usa `monthly_orders × ticket × (desistentes/100)`.
+  - **Cancelamento:** `cancelados = orders × cancellation_rate/100`; impacto = `cancelados × ticket`.
+  - **Avaliação:** se rating < 4.5, `pedidos_perdidos_pct = (4.5 - rating) × 0.15`; impacto = `orders × ticket × pct`.
 
-## Bloco 6 — Rodapé
-- Substituir bloco atual por:
-  - Botão primário largura total no mobile (`w-full sm:w-auto`): "Ir para o Plano de Ação →" → `/app/stores/{store_id}/action-plan`
-  - Linha de 3 links text-sm centralizados separados por `·`:
-    - "Relatório completo" → `/app/stores/{store_id}/report`
-    - "Evolução da loja" → `/app/stores/{store_id}/evolution` (verificar rota existente; fallback `/app/dashboard` se não existir)
-    - "Dashboard" → `/app/dashboard`
-- Remover quaisquer botões "Ver minha meta" / "Ir para a loja" (já não estão presentes no rodapé atual; nada a remover além do bloco antigo).
+### Melhoria 3 — Card "FAÇA AGORA"
+- Em DiagnosisResult, antes do `<ol>` do plano de 7 dias.
+- Pega `plan_7_days.find(p => p.day === 1)` (ou primeiro item).
+- Card `bg-green-50 border-green-300` maior (p-5, shadow), badge ⚡ "FAÇA AGORA — 10 minutos", título grande, lista numerada de `steps`, badge ⏱, expected_impact em verde itálico.
+- Os demais dias do plano renderizam menores como hoje.
 
-## Detalhes técnicos
-- Tipos: tratar campos opcionais do plano com `as { where_to_do?: string; ... }`; sem `any` novos.
-- Mobile-first: classes `text-center md:text-left`, grid colapsa em 1 col ≤ sm.
-- Manter ordem final: Header → Score → Score por área → Card "Melhore precisão" → Análise IA → Lista de problemas → Rodapé.
-- Sem novas libs, só shadcn (`Card`, `Badge`, `Button`) + `<details>` nativo para collapse.
+### Melhoria 4 — Card de chat
+- Após bloco "do_not_do_now" e antes do rodapé.
+- Card com gradient `from-blue-50 to-indigo-50 border-blue-200`.
+- 3 chips clicáveis (`Button variant="outline" size="sm"`) — ao clicar, navega para `/app/chat?q=<encoded>&diagnosis=<sessionId>`.
+- Botão primário "Conversar com o consultor →" → `/app/chat?diagnosis=<sessionId>`.
+- Em `Chat.tsx`: ler `useSearchParams()` para `q` (pré-preencher input) e `diagnosis` (anexar contexto na primeira mensagem ou só logar). Mínimo: pré-preencher input quando `q` existir.
 
-## Verificação rota "evolution"
-Vou checar `App.tsx` durante implementação; se rota não existir, link aponta para `/app/stores/{id}/report` ou outra existente equivalente.
+### Melhoria 5 — Follow-up outcomes
+
+**Trigger de criação:** quando ação muda para concluída em ActionPlan/ActionDetail (atualmente seta `action_plans.status = 'concluida'` + `completed_at`), inserir em paralelo `action_outcomes` com `followup_at = completed_at + 7 days`. Centralizar num helper `lib/actions/markComplete.ts` se houver múltiplos call sites.
+
+**Card no Dashboard:**
+- Componente `<PendingOutcomeCard />` montado no topo de Dashboard.
+- Query: `select id, action_id, action_plans(title) from action_outcomes where user_id = auth.uid() and responded_at is null and followup_at <= now() order by followup_at asc limit 1`.
+- Card âmbar com 2 grupos de 3 botões (subiu/igual/caiu) usando `<ToggleGroup>`, textarea opcional, botão "Salvar resposta".
+- Salvar: `update action_outcomes set rating_changed, orders_changed, notes, responded_at = now()`. Em seguida, invocar edge function `record-feedback` (já existe) com payload `{outcome_id, rating_changed, orders_changed, notes, store_id}`. Toast de sucesso e remoção do card via `queryClient.invalidateQueries`.
+
+### Melhoria 6 — Prova social
+- Em DiagnosisResult, dentro do bloco da "Análise inteligente", antes do plano de 7 dias.
+- Inferir `problem_type` a partir do problema #1 (severidade crítica / topo da lista): mapear área para enum (`entrega → entrega`, `cancelamentos → cancelamento`, `avaliações → avaliacao`, `cardápio/preço → cardapio`).
+- Query: `select * from case_testimonials where active and problem_type = X limit 3`.
+- Render: `flex overflow-x-auto snap-x` no mobile; cards 220px com emoji de categoria, "{Categoria} em {Cidade}", `metric_before → metric_after`, `timeframe`.
+- Sem dados → não renderizar nada (sem empty state).
+
+### Melhoria 7 — Benchmark por área no Score por Área
+- Hook `useCategoryBenchmark(storeCategory)` que faz uma query agregada UMA vez:
+  - `select area, avg((... )) ...` — como `diagnostics` não tem score por área persistido, calcular via Edge Function `category-benchmark` ou via materialização: usar `evolution_snapshots.scores_by_area` (jsonb) já agregando.
+  - SQL via RPC ou inline: `select scores_by_area from evolution_snapshots e join stores s on s.id = e.store_id where s.category = $1 and e.created_at > now() - interval '90 days'`. Calcular médias por chave em JS.
+- Mostrar abaixo do score de cada área: linha pequena `Meta: 70+ • Sua categoria: 65`. Se < 3 lojas: mostrar só "Meta: 70+".
+
+## Arquivos novos
+- `src/lib/diagnostics/leak-math.ts` — fórmulas
+- `src/components/dashboard/PendingOutcomeCard.tsx`
+- `src/components/diagnosis/QuickActionCard.tsx`
+- `src/components/diagnosis/ChatCTACard.tsx`
+- `src/components/diagnosis/SocialProofRow.tsx`
+- `src/hooks/useCategoryBenchmark.ts`
+- `src/lib/actions/markComplete.ts` (helper centralizado)
+- 2 migrations SQL
+
+## Arquivos editados
+- `src/pages/app/diagnosis/DiagnosisResult.tsx` — banner topo, FAÇA AGORA, prova social, chat CTA, benchmark por área
+- `src/components/diagnosis/ProblemDetailSheet.tsx` — bloco "Ver a conta"
+- `src/pages/app/Dashboard.tsx` — montar `<PendingOutcomeCard />` no topo
+- `src/pages/app/Chat.tsx` — ler `?q=` e `?diagnosis=` da URL
+- `src/pages/app/ActionDetail.tsx` e/ou `ActionPlan.tsx` — usar helper `markComplete` que cria `action_outcomes`
+
+## Riscos & mitigações
+- **R1**: Trigger duplicado de outcome — usar `unique(action_id)` (ou check + upsert) para evitar 2 follow-ups por ação se concluída → reaberta → concluída.
+- **R2**: Banner R$ duplicado com bloco existente — remover o duplicado no card de score.
+- **R3**: Benchmark sem `evolution_snapshots` populados retorna vazio — fallback graceful (esconde linha "Sua categoria").
+- **R4**: Edge function `record-feedback` pode não aceitar payload novo — passar dados em `comment` JSON serializado caso o schema seja rígido (verificar antes de chamar).
+
+Sem features fora do escopo. TypeScript estrito, mobile-first, design tokens existentes (vou usar `bg-red-50` etc. — são classes Tailwind nativas, não tokens semânticos do projeto, mas o briefing exige essas cores específicas).

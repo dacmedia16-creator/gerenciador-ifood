@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_outcomes: {
+        Row: {
+          action_id: string
+          completed_at: string
+          created_at: string
+          followup_at: string
+          id: string
+          notes: string | null
+          orders_changed: string | null
+          rating_changed: string | null
+          responded_at: string | null
+          store_id: string
+          user_id: string
+        }
+        Insert: {
+          action_id: string
+          completed_at: string
+          created_at?: string
+          followup_at: string
+          id?: string
+          notes?: string | null
+          orders_changed?: string | null
+          rating_changed?: string | null
+          responded_at?: string | null
+          store_id: string
+          user_id: string
+        }
+        Update: {
+          action_id?: string
+          completed_at?: string
+          created_at?: string
+          followup_at?: string
+          id?: string
+          notes?: string | null
+          orders_changed?: string | null
+          rating_changed?: string | null
+          responded_at?: string | null
+          store_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       action_plans: {
         Row: {
           area: string | null
@@ -332,6 +374,42 @@ export type Database = {
           usefulness_score?: number | null
           user_action?: string | null
           user_feedback?: string | null
+        }
+        Relationships: []
+      }
+      case_testimonials: {
+        Row: {
+          active: boolean
+          category: string
+          city: string
+          created_at: string
+          id: string
+          metric_after: string
+          metric_before: string
+          problem_type: string
+          timeframe: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          city: string
+          created_at?: string
+          id?: string
+          metric_after: string
+          metric_before: string
+          problem_type: string
+          timeframe: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          city?: string
+          created_at?: string
+          id?: string
+          metric_after?: string
+          metric_before?: string
+          problem_type?: string
+          timeframe?: string
         }
         Relationships: []
       }
