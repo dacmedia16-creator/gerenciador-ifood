@@ -302,7 +302,16 @@ export default function DiagnosisResult() {
             </div>
           </div>
 
-          {Array.isArray(aiConsult.plan_7_days) && aiConsult.plan_7_days.length > 0 && (
+          <SocialProofRow problemType={problemType} />
+
+          {day1 && (
+            <div>
+              <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
+              <QuickActionCard day1={day1} />
+            </div>
+          )}
+
+          {restOfPlan.length > 0 && (
             <div>
               <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
               <ol className="space-y-3">
