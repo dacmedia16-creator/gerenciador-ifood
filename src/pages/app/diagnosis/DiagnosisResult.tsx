@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge, SeverityBadge } from "@/components/StatusBadges";
-import { ArrowRight, FileText, Sparkles, ChevronRight, Info, ListTodo, AlertTriangle, Lightbulb, Clock, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowRight, Sparkles, ChevronRight, Info, ListTodo, MapPin } from "lucide-react";
 import { ProblemDetailSheet } from "@/components/diagnosis/ProblemDetailSheet";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { getBenchmark } from "@/lib/benchmarks";
@@ -110,9 +110,9 @@ export default function DiagnosisResult() {
     score: score as number,
     leak: findLeakForArea(area, moneyLeaks),
   }));
-  const urgent = areaEntries.filter((e) => e.score < 50 || e.leak > 0).sort((a, b) => b.leak - a.leak || a.score - b.score);
-  const improving = areaEntries.filter((e) => !urgent.includes(e) && e.score < 70).sort((a, b) => a.score - b.score);
-  const ok = areaEntries.filter((e) => !urgent.includes(e) && !improving.includes(e)).sort((a, b) => b.score - a.score);
+  const urgent = areaEntries.filter((e) => e.score < 50).sort((a, b) => b.leak - a.leak || a.score - b.score);
+  const improving = areaEntries.filter((e) => e.score >= 50 && e.score < 75).sort((a, b) => a.score - b.score);
+  const ok = areaEntries.filter((e) => e.score >= 75).sort((a, b) => b.score - a.score);
 
   const sortedProblems = [...diagnostics].sort(
     (a: any, b: any) => severityRank(a.severity) - severityRank(b.severity),
@@ -137,67 +137,37 @@ export default function DiagnosisResult() {
         <ResetDiagnosisButton storeId={data.store_id} />
       </div>
 
-      {/* SCORE COM CONTEXTO */}
+      {/* SCORE GERAL */}
       <Card className="p-6 shadow-elegant">
-        <div className="grid md:grid-cols-2 gap-6 items-center">
-          <div className="text-center md:text-left">
-            <p className="text-sm text-muted-foreground mb-1">Score da sua loja</p>
-            <div className="flex items-baseline gap-2 justify-center md:justify-start">
-              <span className="text-7xl font-bold text-gradient leading-none">{overall}</span>
-              <span className="text-2xl text-muted-foreground">/100</span>
-            </div>
-            <div className="mt-2 flex items-center gap-2 justify-center md:justify-start flex-wrap">
-              <ScoreBadge score={overall} />
-              {delta !== null && delta !== 0 && (
-                <span className={`text-sm font-medium flex items-center gap-1 ${delta > 0 ? "text-success" : "text-destructive"}`}>
-                  {delta > 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {delta > 0 ? "+" : ""}{delta} vs último diagnóstico
-                </span>
-              )}
-            </div>
+        <div className="text-center space-y-3">
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-7xl sm:text-8xl font-bold text-gradient leading-none">{overall}</span>
           </div>
-          <div className="space-y-3">
-            <div className={`flex items-start gap-2 p-3 rounded-md border ${benchDelta < -5 ? "border-destructive/40 bg-destructive/5" : benchDelta > 5 ? "border-success/40 bg-success/5" : "border-muted bg-muted/30"}`}>
-              <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${benchDelta < -5 ? "text-destructive" : "text-muted-foreground"}`} />
-              <p className="text-sm">
-                {benchDelta < -5 ? "Abaixo" : benchDelta > 5 ? "Acima" : "Próximo"} da média de{" "}
-                <span className="font-semibold">{benchmark.label}s</span> ({benchmark.avgScore} pontos)
-              </p>
-            </div>
-            {totalLeak > 0 && (
-              <div className="flex items-start gap-2 p-3 rounded-md border border-orange-500/40 bg-orange-500/5">
-                <span className="text-orange-600 text-lg leading-none">💸</span>
-                <p className="text-sm">
-                  Você está deixando <span className="font-bold text-orange-700">~{fmtBRL(totalLeak)}/mês</span> na mesa.
-                  <span className="text-muted-foreground"> Veja o que resolver primeiro abaixo.</span>
-                </p>
-              </div>
+          <p className="text-sm text-muted-foreground">de 100 pontos possíveis</p>
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <ScoreBadge score={overall} />
+            {delta !== null && delta !== 0 && (
+              <span
+                className={`inline-flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded-full ${
+                  delta > 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                }`}
+              >
+                {delta > 0 ? "▲" : "▼"} {delta > 0 ? "+" : ""}{delta} esta semana
+              </span>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            {benchDelta < -5 ? "Abaixo" : benchDelta > 5 ? "Acima" : "Próximo"} da média de{" "}
+            <span className="font-medium">{benchmark.label}s</span> ({benchmark.avgScore} pts)
+          </p>
         </div>
+        {totalLeak > 0 && (
+          <div className="mt-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-center text-sm">
+            💸 Você pode estar perdendo <span className="font-bold">~{fmtBRL(totalLeak)}/mês</span>
+          </div>
+        )}
       </Card>
 
-      {/* CARD MELHORAR DIAGNÓSTICO (topo) */}
-      {missingData.length > 0 && (
-        <Card className="p-5 border-primary/40 bg-primary/5">
-          <div className="flex items-start gap-3">
-            <Lightbulb className="h-5 w-5 text-primary mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold mb-1">Melhore a precisão do diagnóstico</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Adicionando {missingData.slice(0, 3).join(", ")}
-                {missingData.length > 3 ? ` e mais ${missingData.length - 3}` : ""}, a IA consegue
-                calcular seu lucro real e dar recomendações mais específicas.
-              </p>
-              <Button size="sm" asChild>
-                <Link to={`/app/diagnosis/${sessionId}`}>
-                  Adicionar mais dados <ArrowRight className="h-4 w-4 ml-1" />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* SCORE POR ÁREA — agrupado por impacto */}
       <Card className="p-5 shadow-card">
@@ -250,6 +220,31 @@ export default function DiagnosisResult() {
         </div>
       </Card>
 
+      {/* MELHORE A PRECISÃO DO DIAGNÓSTICO */}
+      {missingData.length > 0 && (
+        <Card className="p-5 border-blue-200 bg-blue-50">
+          <div className="flex items-start gap-3">
+            <span className="text-xl leading-none">💡</span>
+            <div className="flex-1">
+              <h3 className="font-semibold mb-1 text-blue-900">Melhore a precisão do diagnóstico</h3>
+              <p className="text-sm text-blue-900/80 mb-3">
+                Adicionando mais dados, a IA consegue calcular seu lucro real e dar recomendações mais específicas.
+              </p>
+              <ul className="list-disc list-inside text-sm text-blue-900/80 mb-3 space-y-0.5">
+                {missingData.slice(0, 5).map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+              <Button size="sm" asChild>
+                <Link to={`/app/diagnosis/${sessionId}`}>
+                  Adicionar dados <ArrowRight className="h-4 w-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* ANÁLISE INTELIGENTE */}
       {aiConsult ? (
         <Card className="p-6 border-primary/30 bg-primary/5 space-y-5">
@@ -258,7 +253,7 @@ export default function DiagnosisResult() {
             <div className="flex-1">
               <h2 className="font-semibold text-lg">Análise do consultor</h2>
               {aiConsult.executive_summary && (
-                <p className="text-[15px] mt-2 whitespace-pre-wrap leading-relaxed">
+                <p className="text-base mt-2 whitespace-pre-wrap leading-relaxed">
                   {aiConsult.executive_summary}
                 </p>
               )}
@@ -267,31 +262,42 @@ export default function DiagnosisResult() {
 
           {Array.isArray(aiConsult.plan_7_days) && aiConsult.plan_7_days.length > 0 && (
             <div>
-              <h3 className="font-semibold mb-2 text-sm">Plano para os próximos 7 dias</h3>
+              <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
               <ol className="space-y-3">
                 {aiConsult.plan_7_days.map((p: any, i: number) => {
                   const steps: string[] = Array.isArray(p.steps) ? p.steps : [];
+                  const where = p.where_to_do || p.onde_fazer;
                   return (
                     <li key={i} className="text-sm border rounded-md p-3 bg-background">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <Badge variant="outline" className="text-[10px]">Dia {p.day}</Badge>
-                        <span className="font-medium">{p.title}</span>
+                        <span className="font-bold text-base">{p.title}</span>
+                        {p.time_minutes ? (
+                          <Badge variant="secondary" className="text-[10px]">⏱ {p.time_minutes} min</Badge>
+                        ) : null}
                       </div>
+                      {where && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
+                          <MapPin className="h-3 w-3" /> {where}
+                        </p>
+                      )}
                       {steps.length > 0 ? (
-                        <ol className="space-y-1 text-sm list-decimal list-inside text-muted-foreground">
-                          {steps.map((s, j) => <li key={j}>{s}</li>)}
-                        </ol>
+                        <details className="group">
+                          <summary className="cursor-pointer text-xs text-primary font-medium select-none list-none">
+                            Ver passo a passo <span className="group-open:hidden">▾</span><span className="hidden group-open:inline">▴</span>
+                          </summary>
+                          <ol className="mt-2 space-y-1 text-sm list-decimal list-inside text-muted-foreground">
+                            {steps.map((s, j) => <li key={j}>{s}</li>)}
+                          </ol>
+                        </details>
                       ) : (
                         <p className="text-xs text-muted-foreground">{p.action}</p>
                       )}
-                      <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground border-t pt-2">
-                        {p.time_minutes ? (
-                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {p.time_minutes} min</span>
-                        ) : null}
-                        {p.expected_impact && (
-                          <span className="text-success font-medium">Impacto: {p.expected_impact}</span>
-                        )}
-                      </div>
+                      {p.expected_impact && (
+                        <p className="text-success italic text-sm mt-2">
+                          Resultado esperado: {p.expected_impact}
+                        </p>
+                      )}
                     </li>
                   );
                 })}
@@ -391,20 +397,24 @@ export default function DiagnosisResult() {
         )}
       </Card>
 
-      {/* CTA — 1 botão primário */}
+      {/* RODAPÉ DE NAVEGAÇÃO */}
       <div className="flex flex-col items-center gap-3 pt-2">
         <Button asChild size="lg" className="w-full sm:w-auto sm:min-w-[280px] h-14 text-base gradient-primary text-primary-foreground shadow-elegant">
           <Link to={`/app/stores/${data.store_id}/action-plan`}>
-            <ListTodo className="h-5 w-5 mr-2" /> Ir para o Plano de Ação
+            <ListTodo className="h-5 w-5 mr-2" /> Ir para o Plano de Ação <ArrowRight className="h-4 w-4 ml-1" />
           </Link>
         </Button>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to={`/app/stores/${data.store_id}/report`} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-            <FileText className="h-4 w-4" /> Ver relatório completo
+        <div className="flex items-center gap-3 text-sm flex-wrap justify-center">
+          <Link to={`/app/stores/${data.store_id}/report`} className="text-muted-foreground hover:text-foreground">
+            Relatório completo
+          </Link>
+          <span className="text-muted-foreground">·</span>
+          <Link to={`/app/stores/${data.store_id}/evolution`} className="text-muted-foreground hover:text-foreground">
+            Evolução da loja
           </Link>
           <span className="text-muted-foreground">·</span>
           <Link to="/app/dashboard" className="text-muted-foreground hover:text-foreground">
-            Voltar ao dashboard
+            Dashboard
           </Link>
         </div>
       </div>
