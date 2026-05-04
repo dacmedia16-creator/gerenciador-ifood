@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { Loader2, Sparkles, ArrowRight, ArrowLeft, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { uploadPrintJob } from "@/lib/prints/uploadPrintJob";
+import { PrintJobStatus } from "@/components/prints/PrintJobStatus";
 
 const TOTAL_STEPS = 5;
 
