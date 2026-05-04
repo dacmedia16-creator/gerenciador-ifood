@@ -24,9 +24,16 @@ interface Props {
   diagnostic: any | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  storeContext?: {
+    delivery_time?: number | null;
+    cancellation_rate?: number | null;
+    rating?: number | null;
+    monthly_orders?: number | null;
+    average_ticket?: number | null;
+  };
 }
 
-export function ProblemDetailSheet({ diagnostic, open, onOpenChange }: Props) {
+export function ProblemDetailSheet({ diagnostic, open, onOpenChange, storeContext }: Props) {
   const [loading, setLoading] = useState(false);
   const [detailed, setDetailed] = useState<DetailedSolution | null>(null);
 
