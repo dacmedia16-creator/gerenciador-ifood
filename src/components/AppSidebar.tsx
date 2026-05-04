@@ -60,6 +60,7 @@ export function AppSidebar() {
       url: storeId ? `/app/stores/${storeId}/reviews` : "/app/diagnosis/welcome",
       icon: Star,
     },
+    { title: "Chat com IA", url: "/app/chat", icon: MessageCircle },
   ];
 
   const secondary = [
