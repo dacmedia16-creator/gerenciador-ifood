@@ -4,10 +4,10 @@ import { useStoreData } from "@/hooks/useStoreData";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { LoadingState } from "@/components/LoadingState";
-import { EmptyState } from "@/components/EmptyState";
 import { invokeAI } from "@/lib/ai/invokeAI";
-import { Sparkles, Package, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight, Package } from "lucide-react";
 import { toast } from "sonner";
 
 interface Suggestion {
@@ -24,32 +24,39 @@ export default function ProductNameAnalyzer() {
   const { products, store, loading } = useStoreData(id);
   const [busy, setBusy] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [manualNames, setManualNames] = useState("");
 
   if (loading) return <LoadingState />;
-  if (!products?.length) {
-    return (
-      <EmptyState
-        icon={Package}
-        title="Cadastre produtos para analisar"
-        description="Adicione produtos para que possamos analisar e sugerir nomes mais atrativos."
-        action={<Button asChild className="gradient-primary text-primary-foreground"><Link to={`/app/stores/${id}/products`}>Ir para produtos</Link></Button>}
-      />
-    );
-  }
 
-  const generic = products.filter((p: any) => p.name && wordsCount(p.name) < 3);
+  const hasProducts = !!products?.length;
+  const generic = (products || []).filter((p: any) => p.name && wordsCount(p.name) < 3);
 
-  const analyze = async () => {
+  const analyze = async (source: "db" | "manual") => {
     setBusy(true);
     try {
-      const payload = products.slice(0, 20).map((p: any) => ({
-        name: p.name,
-        category: p.category,
-        ingredients: p.description,
-      }));
+      let payload: Array<{ name: string; category?: string; ingredients?: string }> = [];
+      if (source === "db") {
+        payload = products.slice(0, 20).map((p: any) => ({
+          name: p.name,
+          category: p.category,
+          ingredients: p.description,
+        }));
+      } else {
+        payload = manualNames
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(0, 20)
+          .map((name) => ({ name, category: store?.category }));
+        if (payload.length === 0) {
+          toast.error("Digite ao menos um nome de produto");
+          setBusy(false);
+          return;
+        }
+      }
       const res = await invokeAI<{ suggestions: Suggestion[] }>("suggest-product-names", {
         products: payload,
-        segment: store.category,
+        segment: store?.category,
       });
       setSuggestions(res.suggestions || []);
       toast.success(`${res.suggestions?.length || 0} sugestões geradas`);
@@ -67,21 +74,49 @@ export default function ProductNameAnalyzer() {
         <p className="text-sm text-muted-foreground">SEO interno do cardápio: nomes claros, atrativos e com palavras-chave.</p>
       </div>
 
-      <Card className="p-4 shadow-card">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-sm">
-              <strong>{generic.length}</strong> produto(s) com nome genérico (menos de 3 palavras) detectados.
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Regra: nome ideal tem categoria + ingrediente + diferencial.</p>
+      {hasProducts ? (
+        <Card className="p-4 shadow-card">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-sm">
+                <strong>{generic.length}</strong> produto(s) com nome genérico (menos de 3 palavras) detectados.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Regra: nome ideal tem categoria + ingrediente + diferencial.</p>
+            </div>
+            <Button onClick={() => analyze("db")} disabled={busy} className="gradient-primary text-primary-foreground">
+              <Sparkles className="h-4 w-4 mr-1" /> {busy ? "Gerando…" : "Sugerir nomes com IA"}
+            </Button>
           </div>
-          <Button onClick={analyze} disabled={busy} className="gradient-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4 mr-1" /> {busy ? "Gerando…" : "Sugerir nomes com IA"}
+        </Card>
+      ) : (
+        <Card className="p-4 shadow-card border-dashed">
+          <div className="flex items-start gap-3 mb-3">
+            <Package className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Você ainda não tem produtos cadastrados.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Digite abaixo os nomes que quer otimizar (um por linha) ou{" "}
+                <Link to={`/app/stores/${id}/products`} className="underline text-primary">
+                  cadastre seus produtos
+                </Link>{" "}
+                para análise completa.
+              </p>
+            </div>
+          </div>
+          <Textarea
+            value={manualNames}
+            onChange={(e) => setManualNames(e.target.value)}
+            placeholder={"Ex.:\nX-Burger\nBatata frita\nRefrigerante 350ml"}
+            rows={6}
+            className="mb-3"
+          />
+          <Button onClick={() => analyze("manual")} disabled={busy} className="gradient-primary text-primary-foreground">
+            <Sparkles className="h-4 w-4 mr-1" /> {busy ? "Gerando…" : "Otimizar com IA"}
           </Button>
-        </div>
-      </Card>
+        </Card>
+      )}
 
-      {generic.length > 0 && (
+      {hasProducts && generic.length > 0 && (
         <Card className="p-4 shadow-card">
           <h2 className="font-semibold mb-3">Detectados como genéricos</h2>
           <ul className="space-y-1 text-sm">
