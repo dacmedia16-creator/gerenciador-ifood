@@ -220,6 +220,31 @@ export default function DiagnosisResult() {
         </div>
       </Card>
 
+      {/* MELHORE A PRECISÃO DO DIAGNÓSTICO */}
+      {missingData.length > 0 && (
+        <Card className="p-5 border-blue-200 bg-blue-50">
+          <div className="flex items-start gap-3">
+            <span className="text-xl leading-none">💡</span>
+            <div className="flex-1">
+              <h3 className="font-semibold mb-1 text-blue-900">Melhore a precisão do diagnóstico</h3>
+              <p className="text-sm text-blue-900/80 mb-3">
+                Adicionando mais dados, a IA consegue calcular seu lucro real e dar recomendações mais específicas.
+              </p>
+              <ul className="list-disc list-inside text-sm text-blue-900/80 mb-3 space-y-0.5">
+                {missingData.slice(0, 5).map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+              <Button size="sm" asChild>
+                <Link to={`/app/diagnosis/${sessionId}`}>
+                  Adicionar dados <ArrowRight className="h-4 w-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* ANÁLISE INTELIGENTE */}
       {aiConsult ? (
         <Card className="p-6 border-primary/30 bg-primary/5 space-y-5">
@@ -228,7 +253,7 @@ export default function DiagnosisResult() {
             <div className="flex-1">
               <h2 className="font-semibold text-lg">Análise do consultor</h2>
               {aiConsult.executive_summary && (
-                <p className="text-[15px] mt-2 whitespace-pre-wrap leading-relaxed">
+                <p className="text-base mt-2 whitespace-pre-wrap leading-relaxed">
                   {aiConsult.executive_summary}
                 </p>
               )}
@@ -237,31 +262,42 @@ export default function DiagnosisResult() {
 
           {Array.isArray(aiConsult.plan_7_days) && aiConsult.plan_7_days.length > 0 && (
             <div>
-              <h3 className="font-semibold mb-2 text-sm">Plano para os próximos 7 dias</h3>
+              <p className="font-bold text-base mb-3">O que fazer agora — em ordem de prioridade:</p>
               <ol className="space-y-3">
                 {aiConsult.plan_7_days.map((p: any, i: number) => {
                   const steps: string[] = Array.isArray(p.steps) ? p.steps : [];
+                  const where = p.where_to_do || p.onde_fazer;
                   return (
                     <li key={i} className="text-sm border rounded-md p-3 bg-background">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <Badge variant="outline" className="text-[10px]">Dia {p.day}</Badge>
-                        <span className="font-medium">{p.title}</span>
+                        <span className="font-bold text-base">{p.title}</span>
+                        {p.time_minutes ? (
+                          <Badge variant="secondary" className="text-[10px]">⏱ {p.time_minutes} min</Badge>
+                        ) : null}
                       </div>
+                      {where && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
+                          <MapPin className="h-3 w-3" /> {where}
+                        </p>
+                      )}
                       {steps.length > 0 ? (
-                        <ol className="space-y-1 text-sm list-decimal list-inside text-muted-foreground">
-                          {steps.map((s, j) => <li key={j}>{s}</li>)}
-                        </ol>
+                        <details className="group">
+                          <summary className="cursor-pointer text-xs text-primary font-medium select-none list-none">
+                            Ver passo a passo <span className="group-open:hidden">▾</span><span className="hidden group-open:inline">▴</span>
+                          </summary>
+                          <ol className="mt-2 space-y-1 text-sm list-decimal list-inside text-muted-foreground">
+                            {steps.map((s, j) => <li key={j}>{s}</li>)}
+                          </ol>
+                        </details>
                       ) : (
                         <p className="text-xs text-muted-foreground">{p.action}</p>
                       )}
-                      <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground border-t pt-2">
-                        {p.time_minutes ? (
-                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {p.time_minutes} min</span>
-                        ) : null}
-                        {p.expected_impact && (
-                          <span className="text-success font-medium">Impacto: {p.expected_impact}</span>
-                        )}
-                      </div>
+                      {p.expected_impact && (
+                        <p className="text-success italic text-sm mt-2">
+                          Resultado esperado: {p.expected_impact}
+                        </p>
+                      )}
                     </li>
                   );
                 })}
