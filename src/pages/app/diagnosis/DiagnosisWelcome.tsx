@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { getDraftSession, type SessionRow } from "@/lib/diagnosis/session";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,13 +18,26 @@ export default function DiagnosisWelcome() {
     if (!user) return;
     (async () => {
       try {
+        const { data: generated } = await supabase
+          .from("diagnosis_sessions")
+          .select("id")
+          .eq("user_id", user.id)
+          .in("status", ["generated", "completed"])
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (generated?.id) {
+          navigate(`/app/diagnosis/${generated.id}/result`, { replace: true });
+          return;
+        }
         const d = await getDraftSession(user.id);
         setDraft(d);
       } finally {
         setLoading(false);
       }
     })();
-  }, [user]);
+  }, [user, navigate]);
+
 
   const goExpress = () => {
     const qs = params.get("storeId") ? `?storeId=${params.get("storeId")}` : "";
