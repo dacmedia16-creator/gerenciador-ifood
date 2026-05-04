@@ -13,6 +13,8 @@ import {
   ActionCompletionModal,
   CompletionAction,
 } from "@/components/actions/ActionCompletionModal";
+import { markActionComplete } from "@/lib/actions/markComplete";
+import { useAuth } from "@/hooks/useAuth";
 
 const TERMINAL = new Set(["aplicada", "ignorada", "rejeitada", "completed"]);
 
