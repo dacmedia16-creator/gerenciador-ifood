@@ -217,36 +217,33 @@ export default function DiagnosisExpress() {
     }
   };
 
-  const handlePrintSelect = (file: File | null) => {
+  const handlePrintSelect = async (file: File | null) => {
     setPrintFile(file);
+    setPrintJobId(null);
     if (printPreview) URL.revokeObjectURL(printPreview);
     setPrintPreview(file ? URL.createObjectURL(file) : null);
+    if (file && user) {
+      setUploadingPrint(true);
+      try {
+        const { jobId } = await uploadPrintJob({
+          file,
+          userId: user.id,
+          storeId,
+          diagnosisSessionId: session?.id ?? null,
+        });
+        setPrintJobId(jobId);
+      } catch (e: any) {
+        toast.error(e?.message ?? "Falha no upload do print");
+        setPrintFile(null);
+        if (printPreview) URL.revokeObjectURL(printPreview);
+        setPrintPreview(null);
+      } finally {
+        setUploadingPrint(false);
+      }
+    }
   };
 
-  const uploadPrintIfAny = async () => {
-    if (!printFile || !user || !session || !storeId) return;
-    const path = `${user.id}/${storeId}/${session.id}/${Date.now()}-${printFile.name}`;
-    const { error: upErr } = await supabase.storage.from("diagnosis-uploads").upload(path, printFile);
-    if (upErr) throw upErr;
-    const { data: ins, error: insErr } = await supabase
-      .from("diagnosis_uploads")
-      .insert({
-        session_id: session.id,
-        store_id: storeId,
-        user_id: user.id,
-        storage_path: path,
-        mime_type: printFile.type,
-        classification: "indicadores",
-        status: "pending",
-      })
-      .select()
-      .single();
-    if (insErr) throw insErr;
-    // Processa em background — não bloqueia
-    supabase.functions.invoke("process-print", { body: { upload_id: ins.id } });
-  };
-
-  const generate = async (withPrint: boolean) => {
+  const generate = async (_withPrint: boolean) => {
     if (!storeId || !session) return;
     setGenerating(true);
     try {
