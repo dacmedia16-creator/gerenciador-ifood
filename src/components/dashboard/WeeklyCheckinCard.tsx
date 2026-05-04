@@ -85,6 +85,10 @@ export function WeeklyCheckinCard({ storeId, currentScore }: Props) {
           : null;
       setDelta({ score: scoreDelta, rating: ratingDelta });
       qc.invalidateQueries({ queryKey: ["weeklySnapshots", storeId] });
+      // Invalida cache de IA para forçar diagnóstico fresco com novos dados
+      supabase.functions
+        .invoke("invalidate-diagnosis-cache", { body: { store_id: storeId } })
+        .catch((e) => console.warn("invalidate-diagnosis-cache", e));
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar");
     } finally {
