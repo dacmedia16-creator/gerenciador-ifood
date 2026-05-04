@@ -71,7 +71,7 @@ export default function Dashboard() {
     },
   });
 
-  const { data: stores = [], isLoading: loadingStores } = useQuery({
+  const { data: stores = [], isLoading: loadingStores, isFetched: storesFetched } = useQuery({
     queryKey: ["dashboardStores"],
     staleTime: 5 * 60_000,
     queryFn: async () => {
@@ -115,7 +115,7 @@ export default function Dashboard() {
     });
   }, [data]);
 
-  if (loadingStores) return <DashboardSkeleton />;
+  if (loadingStores || !storesFetched) return <DashboardSkeleton />;
   if (!stores.length) return <Navigate to="/app/onboarding" replace />;
   if (!data || !data.store || !score) return <DashboardSkeleton />;
 
