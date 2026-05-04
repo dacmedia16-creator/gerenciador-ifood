@@ -1,71 +1,41 @@
-## Reformular tela de Resultado do Diagnóstico
+## Reescrever o prompt do consultor IA com as novas regras
 
-Vou refatorar `src/pages/app/diagnosis/DiagnosisResult.tsx` (e ajustar o prompt do `ai-consult`) para resolver os 7 problemas apontados. A arquitetura geral (score → análise → plano 7d → plano 30d → não fazer → problemas) é mantida; o que muda é a forma de apresentação e a profundidade dos textos gerados pela IA.
+Vou substituir o `SYSTEM_PROMPT` da edge function `supabase/functions/ai-consult/index.ts` para incorporar as regras que você definiu:
 
-### 1. Score com contexto (Problema 1)
+### O que muda no prompt
 
-Substituir o bloco "Score geral 62" por um card com 3 elementos:
-- Score grande + "/100" + delta vs. último diagnóstico (`reports` ordenados por data → diferença de `general_score`).
-- Linha de benchmark: "Abaixo da média de [categoria] (74 pontos)" — usar média fixa por categoria como baseline inicial (tabela simples em `src/lib/benchmarks.ts`, com fallback "média geral 70").
-- Tradução em dinheiro: somar `money_leaks[].monthly_estimate_brl` do `aiConsult` → "Você está deixando ~R$ X/mês na mesa".
+**Identidade**: troca de "gestor de delivery experiente" para "consultor especializado em delivery no Brasil com 10 anos de iFood/Rappi/Uber Eats, em reunião de 30 minutos com o dono".
 
-### 2. Score por área agrupado por impacto (Problema 2)
+**Novas proibições explícitas de linguagem**: lista negra de frases ("melhore seu atendimento", "invista em marketing", "foque na qualidade", "sua loja tem potencial", "robusto", "estratégico", "alavancar", "otimizar"). Forçar `você` em vez de `sua loja`. Proibir recomendar marketing antes de resolver operação.
 
-Substituir a grade de 8 áreas por 3 grupos visuais (vermelho/amarelo/verde), ordenados por impacto financeiro quando disponível:
-- 🔴 RESOLVER AGORA: áreas com score < 50 OU presentes em `money_leaks` com estimativa > 0. Mostrar "custa ~R$ X/mês" ao lado.
-- 🟡 MELHORAR EM BREVE: score 50–69.
-- 🟢 ESTÁ BEM — MANTER: score ≥ 70.
+**Cálculo obrigatório de impacto financeiro** com fórmulas explícitas:
+- Cancelamento: `orders × (cancellation_rate/100) × avg_ticket`
+- Nota < 4.5: 15-25% de redução de pedidos × ticket
+- Tempo > 40 min: 20-30% de abandono × ticket
+- Margem baixa: `(margem_ideal - margem_atual) × revenue`
 
-Mapear nome da área → entrada de `money_leaks` por keyword matching (entrega→"Entrega/tempo", cardápio→"Cardápio", etc.).
+Cada causa quantificável vira obrigatoriamente um `money_leaks[]` com `monthly_estimate_brl`.
 
-### 3. Card de melhoria de diagnóstico no topo (Problema 7)
+**Ordem de prioridade obrigatória**: (1) maior sangria de dinheiro; (2) mais fácil de resolver; (3) o resto.
 
-Mover `missing_data_for_better_diagnosis` do rodapé para um card destacado logo abaixo do score, com CTA "Adicionar mais dados →" linkando para `/app/diagnosis/${sessionId}` (review). Só aparece se houver itens faltantes.
+**executive_summary**: linha 1 começa SEMPRE com R$/mês perdido; linhas 2-3 mostram a conta; aponta UMA causa-raiz; termina com frase imperativa. Máximo 6 linhas.
 
-### 4. Análise inteligente em tom de consultor (Problema 3)
+**plan_7_days**: title máx 5 palavras com verbo; `steps` sempre 3 passos imperativos citando o caminho real do painel (iFood Parceiros → Relatórios → Cancelados, conforme `platform` da loja); `time_minutes` realista; `expected_impact` com número.
 
-Atualizar o prompt de `supabase/functions/ai-consult/index.ts` para que `executive_summary`:
-- Comece com o número de prejuízo estimado na primeira linha.
-- Explique a conta (pedidos × ticket × % perda).
-- Aponte a causa-raiz única.
-- Termine com uma frase imperativa ("Resolva isso primeiro. O resto vem depois.").
-- Linguagem de WhatsApp, frases curtas, sem jargão corporativo. Máximo ~6 linhas.
+**plan_30_days**: 4 semanas — semana 1 conclui o 7d, 2 e 3 com 1 objective + máx 2 actions, semana 4 sempre "Medir".
 
-Renderizar com `whitespace-pre-wrap` (já está) e fonte um pouco maior.
+**do_not_do_now**: 2-3 itens com motivo explicativo embutido.
 
-### 5. Plano 7 dias com passo-a-passo (Problema 4)
+### Mantém
 
-Estender o schema da tool `consultive_diagnosis` em `plan_7_days[]`:
-- `steps: string[]` (3 passos numerados, cada um começa com verbo no imperativo e cita onde clicar — ex: "iFood Parceiros → Relatórios → Pedidos Cancelados").
-- `time_minutes: number`
-- `expected_impact: string` (1 frase com R$ ou %).
+- Schema da tool `consultive_diagnosis` (já tem `steps`, `time_minutes`, `expected_impact`, `objective`, `actions`, `money_leaks` — adicionados na rodada anterior).
+- Regras de aprendizado (memória, casos similares, knowledge base, source/source_ref).
+- Regras anti-alucinação (só comentar evidências de RULE_EVIDENCES).
 
-Atualizar o prompt para exigir esse nível de detalhe (referenciar painel iFood/Rappi conforme `store.platform`). Renderizar como lista numerada + linhas "Tempo: X min" / "Impacto esperado: …".
+### Arquivo afetado
 
-### 6. Plano 30 dias enxuto e ordenado (Problema 5)
+- `supabase/functions/ai-consult/index.ts` — apenas a constante `SYSTEM_PROMPT` (linhas ~17-63). Sem mudanças no schema nem no código de invocação.
 
-No prompt:
-- Semana 1 sempre = continuação/conclusão do plano de 7 dias (não introduz tema novo).
-- Semanas 2 e 3 = 1 objetivo + no máximo 2 ações cada.
-- Semana 4 = sempre "medir resultado" (comparar KPI da semana 1 com KPI atual).
+### Observação sobre os campos do JSON
 
-Adicionar campos `objective: string` e `actions: string[]` (max 2). Renderizar com objetivo em destaque e bullets curtos.
-
-### 7. Rodapé com 1 CTA primário (Problema 6)
-
-Substituir os 6 botões por:
-- 1 botão grande primário: "Ir para o Plano de Ação" → `/app/stores/${id}/action-plan`.
-- 2 links secundários discretos abaixo: "Ver relatório completo" e "Voltar ao dashboard".
-
-Os outros 3 destinos (meta, evolução, ir para a loja) continuam acessíveis via sidebar/StoreOverview, então podem sair desta tela.
-
-### Arquivos afetados
-
-- `src/pages/app/diagnosis/DiagnosisResult.tsx` — refatoração principal.
-- `src/lib/benchmarks.ts` — novo, mapa categoria → score médio + ticket médio (valores iniciais conservadores).
-- `supabase/functions/ai-consult/index.ts` — atualizar `SYSTEM_PROMPT`, schema (`plan_7_days.steps/time_minutes/expected_impact`, `plan_30_days.objective/actions`).
-- Possível ajuste em `src/components/report/AIConsultReport.tsx` para refletir os novos campos no relatório completo (mantendo backwards compat: campos antigos continuam sendo lidos como fallback).
-
-### Compatibilidade
-
-Diagnósticos antigos sem os novos campos continuam exibindo o formato anterior (fallback por `?.` e checagem de array). Nenhuma migração de dados é necessária.
+Seu spec usa nomes em português (`resumo_executivo`, `scores_por_area`, `problemas`, `plano_7_dias`, etc). Vou manter os nomes em inglês do schema atual (`executive_summary`, `plan_7_days`, etc) porque o frontend (`DiagnosisResult.tsx`, `AIConsultReport.tsx`) e os testes já consomem esses nomes — renomear quebraria a tela inteira. As REGRAS de conteúdo (cálculos, tom, formato) são todas aplicadas.
