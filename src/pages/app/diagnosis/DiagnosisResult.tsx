@@ -214,14 +214,17 @@ export default function DiagnosisResult() {
               <p className="text-xs font-bold text-destructive uppercase tracking-wide mb-2">🔴 Resolver agora</p>
               <ul className="space-y-1.5">
                 {urgent.map((e) => (
-                  <li key={e.area} className="flex items-center justify-between gap-2 p-2 rounded border border-destructive/30 bg-destructive/5">
-                    <span className="text-sm font-medium">{e.area}</span>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="font-bold text-destructive">{e.score}</span>
-                      {e.leak > 0 && (
-                        <span className="text-xs text-orange-700 font-medium">custa ~{fmtBRL(e.leak)}/mês</span>
-                      )}
+                  <li key={e.area} className="p-2 rounded border border-destructive/30 bg-destructive/5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{e.area}</span>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="font-bold text-destructive">{e.score}</span>
+                        {e.leak > 0 && (
+                          <span className="text-xs text-orange-700 font-medium">custa ~{fmtBRL(e.leak)}/mês</span>
+                        )}
+                      </div>
                     </div>
+                    <BenchmarkLine area={e.area} bench={categoryBenchmark} />
                   </li>
                 ))}
               </ul>
@@ -232,9 +235,12 @@ export default function DiagnosisResult() {
               <p className="text-xs font-bold text-warning uppercase tracking-wide mb-2">🟡 Melhorar em breve</p>
               <ul className="grid sm:grid-cols-2 gap-1.5">
                 {improving.map((e) => (
-                  <li key={e.area} className="flex items-center justify-between gap-2 p-2 rounded border bg-warning/5">
-                    <span className="text-sm">{e.area}</span>
-                    <span className="font-semibold text-warning">{e.score}</span>
+                  <li key={e.area} className="p-2 rounded border bg-warning/5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm">{e.area}</span>
+                      <span className="font-semibold text-warning">{e.score}</span>
+                    </div>
+                    <BenchmarkLine area={e.area} bench={categoryBenchmark} />
                   </li>
                 ))}
               </ul>
