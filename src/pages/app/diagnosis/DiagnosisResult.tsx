@@ -94,6 +94,8 @@ export default function DiagnosisResult() {
     })();
   }, [sessionId, navigate]);
 
+  const categoryBenchmark = useCategoryBenchmark(data?.store?.category);
+
   if (!data) return <div className="p-8 text-muted-foreground">Carregando resultado…</div>;
 
   const { store, products, reviews, competitors, campaigns, metrics, diagnostics, aiConsult, previousScore } = data;
@@ -107,6 +109,7 @@ export default function DiagnosisResult() {
 
   const moneyLeaks: any[] = Array.isArray(aiConsult?.money_leaks) ? aiConsult.money_leaks : [];
   const totalLeak = moneyLeaks.reduce((s, l) => s + (Number(l.monthly_estimate_brl) || 0), 0);
+  const criticalCount = (diagnostics as any[]).filter((d) => d.severity === "critico").length;
 
   // Agrupar áreas por urgência
   const areaEntries = Object.entries(areas).map(([area, score]) => ({
@@ -125,6 +128,20 @@ export default function DiagnosisResult() {
   const missingData: string[] = Array.isArray(aiConsult?.missing_data_for_better_diagnosis)
     ? aiConsult.missing_data_for_better_diagnosis
     : [];
+
+  // Inferir problem_type do problema #1 (mais severo) para prova social
+  const topArea = (sortedProblems[0]?.area || "").toLowerCase();
+  const problemType: "cancelamento" | "entrega" | "avaliacao" | "cardapio" | null =
+    topArea.includes("cancel") ? "cancelamento" :
+    topArea.includes("entrega") || topArea.includes("tempo") ? "entrega" :
+    topArea.includes("avalia") || topArea.includes("nota") ? "avaliacao" :
+    topArea.includes("cardap") || topArea.includes("menu") || topArea.includes("preço") || topArea.includes("preco") ? "cardapio" :
+    null;
+
+  // Primeiro item do plano de 7 dias (FAÇA AGORA)
+  const plan7: any[] = Array.isArray(aiConsult?.plan_7_days) ? aiConsult.plan_7_days : [];
+  const day1 = plan7.find((p: any) => p.day === 1) || plan7[0] || null;
+  const restOfPlan = plan7.filter((p: any) => p !== day1);
 
   const openProblem = (d: any) => {
     setSelected(d);
