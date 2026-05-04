@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { calculateScore } from "@/lib/diagnostics/engine";
 import { ScoreBadge, SeverityBadge } from "@/components/StatusBadges";
-import { ArrowRight, FileText, Sparkles, ChevronRight, Info, ListTodo, AlertTriangle, Lightbulb, Clock, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowRight, Sparkles, ChevronRight, Info, ListTodo, MapPin } from "lucide-react";
 import { ProblemDetailSheet } from "@/components/diagnosis/ProblemDetailSheet";
 import { ResetDiagnosisButton } from "@/components/diagnosis/ResetDiagnosisButton";
 import { getBenchmark } from "@/lib/benchmarks";
