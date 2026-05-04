@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { invokeAI } from "@/lib/ai/invokeAI";
 import { Loader2, Sparkles, ArrowRight, ArrowLeft, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { uploadPrintJob } from "@/lib/prints/uploadPrintJob";
+import { PrintJobStatus } from "@/components/prints/PrintJobStatus";
 
 const TOTAL_STEPS = 5;
 
@@ -48,6 +50,8 @@ export default function DiagnosisExpress() {
   const [showPrintScreen, setShowPrintScreen] = useState(false);
   const [printFile, setPrintFile] = useState<File | null>(null);
   const [printPreview, setPrintPreview] = useState<string | null>(null);
+  const [printJobId, setPrintJobId] = useState<string | null>(null);
+  const [uploadingPrint, setUploadingPrint] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [form, setForm] = useState<FormState>({
     revenue_range: "",
@@ -213,42 +217,38 @@ export default function DiagnosisExpress() {
     }
   };
 
-  const handlePrintSelect = (file: File | null) => {
+  const handlePrintSelect = async (file: File | null) => {
     setPrintFile(file);
+    setPrintJobId(null);
     if (printPreview) URL.revokeObjectURL(printPreview);
     setPrintPreview(file ? URL.createObjectURL(file) : null);
+    if (file && user) {
+      setUploadingPrint(true);
+      try {
+        const { jobId } = await uploadPrintJob({
+          file,
+          userId: user.id,
+          storeId,
+          diagnosisSessionId: session?.id ?? null,
+        });
+        setPrintJobId(jobId);
+      } catch (e: any) {
+        toast.error(e?.message ?? "Falha no upload do print");
+        setPrintFile(null);
+        if (printPreview) URL.revokeObjectURL(printPreview);
+        setPrintPreview(null);
+      } finally {
+        setUploadingPrint(false);
+      }
+    }
   };
 
-  const uploadPrintIfAny = async () => {
-    if (!printFile || !user || !session || !storeId) return;
-    const path = `${user.id}/${storeId}/${session.id}/${Date.now()}-${printFile.name}`;
-    const { error: upErr } = await supabase.storage.from("diagnosis-uploads").upload(path, printFile);
-    if (upErr) throw upErr;
-    const { data: ins, error: insErr } = await supabase
-      .from("diagnosis_uploads")
-      .insert({
-        session_id: session.id,
-        store_id: storeId,
-        user_id: user.id,
-        storage_path: path,
-        mime_type: printFile.type,
-        classification: "indicadores",
-        status: "pending",
-      })
-      .select()
-      .single();
-    if (insErr) throw insErr;
-    // Processa em background — não bloqueia
-    supabase.functions.invoke("process-print", { body: { upload_id: ins.id } });
-  };
-
-  const generate = async (withPrint: boolean) => {
+  const generate = async (_withPrint: boolean) => {
     if (!storeId || !session) return;
     setGenerating(true);
     try {
-      if (withPrint && printFile) {
-        await uploadPrintIfAny();
-      }
+      // O upload do print já foi disparado de forma assíncrona (uploadPrintJob)
+      // Não bloqueamos a geração esperando a extração — ela atualiza dados depois.
       const res = await invokeAI<{ diagnosis: any }>("ai-consult", {
         storeId,
         sessionId: session.id,
@@ -308,23 +308,32 @@ export default function DiagnosisExpress() {
               />
             </label>
           ) : (
-            <div className="relative rounded-lg overflow-hidden border">
-              <img src={printPreview} alt="Pré-visualização do print" className="w-full max-h-80 object-contain bg-muted" />
-              <Button
-                variant="secondary"
-                size="sm"
-                className="absolute top-2 right-2"
-                onClick={() => handlePrintSelect(null)}
-              >
-                <X className="h-4 w-4 mr-1" /> Trocar
-              </Button>
+            <div className="space-y-3">
+              <div className="relative rounded-lg overflow-hidden border">
+                <img src={printPreview} alt="Pré-visualização do print" className="w-full max-h-80 object-contain bg-muted" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute top-2 right-2"
+                  onClick={() => handlePrintSelect(null)}
+                  disabled={uploadingPrint}
+                >
+                  <X className="h-4 w-4 mr-1" /> Trocar
+                </Button>
+              </div>
+              {uploadingPrint && (
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando print…
+                </p>
+              )}
+              {printJobId && <PrintJobStatus jobId={printJobId} />}
             </div>
           )}
 
           <div className="space-y-3">
             <Button
               onClick={() => generate(true)}
-              disabled={generating || !printFile}
+              disabled={generating || !printFile || uploadingPrint}
               className="w-full min-h-12 text-base"
               size="lg"
             >

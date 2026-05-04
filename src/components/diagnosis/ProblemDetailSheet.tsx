@@ -47,8 +47,14 @@ export function ProblemDetailSheet({ diagnostic, open, onOpenChange }: Props) {
         body: { diagnosticId: diagnostic.id, force },
       });
       if (error) throw error;
-      if (data?.detailed) setDetailed(data.detailed);
-      else toast.error("Não foi possível gerar a solução agora");
+      if (data?.detailed) {
+        setDetailed(data.detailed);
+        if (force && diagnostic.store_id) {
+          supabase.functions
+            .invoke("invalidate-diagnosis-cache", { body: { store_id: diagnostic.store_id } })
+            .catch((e) => console.warn("invalidate-diagnosis-cache", e));
+        }
+      } else toast.error("Não foi possível gerar a solução agora");
     } catch (e: any) {
       toast.error(e.message || "Erro ao consultar a IA");
     } finally {
