@@ -110,9 +110,9 @@ export default function DiagnosisResult() {
     score: score as number,
     leak: findLeakForArea(area, moneyLeaks),
   }));
-  const urgent = areaEntries.filter((e) => e.score < 50 || e.leak > 0).sort((a, b) => b.leak - a.leak || a.score - b.score);
-  const improving = areaEntries.filter((e) => !urgent.includes(e) && e.score < 70).sort((a, b) => a.score - b.score);
-  const ok = areaEntries.filter((e) => !urgent.includes(e) && !improving.includes(e)).sort((a, b) => b.score - a.score);
+  const urgent = areaEntries.filter((e) => e.score < 50).sort((a, b) => b.leak - a.leak || a.score - b.score);
+  const improving = areaEntries.filter((e) => e.score >= 50 && e.score < 75).sort((a, b) => a.score - b.score);
+  const ok = areaEntries.filter((e) => e.score >= 75).sort((a, b) => b.score - a.score);
 
   const sortedProblems = [...diagnostics].sort(
     (a: any, b: any) => severityRank(a.severity) - severityRank(b.severity),
