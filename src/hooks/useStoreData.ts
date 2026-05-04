@@ -31,7 +31,7 @@ export function useStoreData(storeId?: string) {
         supabase.from("competitors").select("*").eq("store_id", storeId!),
         supabase.from("campaigns").select("*").eq("store_id", storeId!),
         supabase.from("diagnostics")
-          .select("id, area, problem, severity, recommendation, created_at")
+          .select("id, area, problem, severity, recommended_solution, business_impact, created_at")
           .eq("store_id", storeId!)
           .order("created_at", { ascending: false })
           .limit(50),
