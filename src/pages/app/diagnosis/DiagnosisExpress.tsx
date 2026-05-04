@@ -247,9 +247,8 @@ export default function DiagnosisExpress() {
     if (!storeId || !session) return;
     setGenerating(true);
     try {
-      if (withPrint && printFile) {
-        await uploadPrintIfAny();
-      }
+      // O upload do print já foi disparado de forma assíncrona (uploadPrintJob)
+      // Não bloqueamos a geração esperando a extração — ela atualiza dados depois.
       const res = await invokeAI<{ diagnosis: any }>("ai-consult", {
         storeId,
         sessionId: session.id,
