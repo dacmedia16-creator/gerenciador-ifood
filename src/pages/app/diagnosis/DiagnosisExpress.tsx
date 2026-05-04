@@ -308,23 +308,32 @@ export default function DiagnosisExpress() {
               />
             </label>
           ) : (
-            <div className="relative rounded-lg overflow-hidden border">
-              <img src={printPreview} alt="Pré-visualização do print" className="w-full max-h-80 object-contain bg-muted" />
-              <Button
-                variant="secondary"
-                size="sm"
-                className="absolute top-2 right-2"
-                onClick={() => handlePrintSelect(null)}
-              >
-                <X className="h-4 w-4 mr-1" /> Trocar
-              </Button>
+            <div className="space-y-3">
+              <div className="relative rounded-lg overflow-hidden border">
+                <img src={printPreview} alt="Pré-visualização do print" className="w-full max-h-80 object-contain bg-muted" />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute top-2 right-2"
+                  onClick={() => handlePrintSelect(null)}
+                  disabled={uploadingPrint}
+                >
+                  <X className="h-4 w-4 mr-1" /> Trocar
+                </Button>
+              </div>
+              {uploadingPrint && (
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Enviando print…
+                </p>
+              )}
+              {printJobId && <PrintJobStatus jobId={printJobId} />}
             </div>
           )}
 
           <div className="space-y-3">
             <Button
               onClick={() => generate(true)}
-              disabled={generating || !printFile}
+              disabled={generating || !printFile || uploadingPrint}
               className="w-full min-h-12 text-base"
               size="lg"
             >
