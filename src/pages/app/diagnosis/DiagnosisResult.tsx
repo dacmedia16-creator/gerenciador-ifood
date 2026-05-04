@@ -397,20 +397,24 @@ export default function DiagnosisResult() {
         )}
       </Card>
 
-      {/* CTA — 1 botão primário */}
+      {/* RODAPÉ DE NAVEGAÇÃO */}
       <div className="flex flex-col items-center gap-3 pt-2">
         <Button asChild size="lg" className="w-full sm:w-auto sm:min-w-[280px] h-14 text-base gradient-primary text-primary-foreground shadow-elegant">
           <Link to={`/app/stores/${data.store_id}/action-plan`}>
-            <ListTodo className="h-5 w-5 mr-2" /> Ir para o Plano de Ação
+            <ListTodo className="h-5 w-5 mr-2" /> Ir para o Plano de Ação <ArrowRight className="h-4 w-4 ml-1" />
           </Link>
         </Button>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to={`/app/stores/${data.store_id}/report`} className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
-            <FileText className="h-4 w-4" /> Ver relatório completo
+        <div className="flex items-center gap-3 text-sm flex-wrap justify-center">
+          <Link to={`/app/stores/${data.store_id}/report`} className="text-muted-foreground hover:text-foreground">
+            Relatório completo
+          </Link>
+          <span className="text-muted-foreground">·</span>
+          <Link to={`/app/stores/${data.store_id}/evolution`} className="text-muted-foreground hover:text-foreground">
+            Evolução da loja
           </Link>
           <span className="text-muted-foreground">·</span>
           <Link to="/app/dashboard" className="text-muted-foreground hover:text-foreground">
-            Voltar ao dashboard
+            Dashboard
           </Link>
         </div>
       </div>
