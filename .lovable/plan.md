@@ -1,32 +1,15 @@
 ## Problema
 
-A rota `/app/onboarding` (`src/pages/app/Onboarding.tsx`) renderiza o `OnboardingWizard` sem checar se o usuário já tem loja cadastrada. Como o sidebar não tem link para essa rota, o usuário só chega lá via:
+A tela `/app/diagnosis/welcome` (acessada pelo item "Diagnóstico" do sidebar) sempre mostra o card "Vamos entender sua loja — Começar agora", mesmo para usuários que já completaram um diagnóstico. O componente `DiagnosisWelcome` só busca sessões com status `draft` e não verifica se já existe diagnóstico `generated`/`completed`.
 
-1. Redirect do `Dashboard.tsx` linha 119: `if (!stores.length) return <Navigate to="/app/onboarding" />` — disparado quando a query de stores devolve lista vazia (pode acontecer em race condition de cache, sessão expirada momentaneamente, ou RLS retornando vazio antes do `useAuth` resolver).
-2. Refresh manual da URL.
-
-Resultado: mesmo quem já tem loja + diagnóstico vê o wizard "Bem-vindo ao Gestor IA de Delivery".
+Confirmado no banco: o usuário tem uma sessão com `status = 'generated'`, `completion_percentage = 100`, `generated_at` preenchido, mas a tela ainda renderiza o convite inicial.
 
 ## Correção
 
-Tornar `/app/onboarding` idempotente: se o usuário já tem loja, redirecionar direto para a loja dele; só renderiza o wizard quando realmente não houver loja.
+Em `src/pages/app/diagnosis/DiagnosisWelcome.tsx`, antes de renderizar a tela de boas-vindas:
 
-### Mudança em `src/pages/app/Onboarding.tsx`
+1. Buscar a sessão mais recente do usuário com status `generated` ou `completed`.
+2. Se existir → `navigate(`/app/diagnosis/${id}/result`, { replace: true })`.
+3. Caso contrário, manter o comportamento atual (carregar draft, mostrar card "Começar agora").
 
-Reaproveitar a lógica que já existe em `src/pages/app/MyStore.tsx`:
-
-- Usar `useAuth` + `getUserStore(user.id)`.
-- Enquanto carrega: `<LoadingState />`.
-- Se houver loja: `navigate(`/app/stores/${store.id}`, { replace: true })`.
-- Se não houver: renderizar `<OnboardingWizard />`.
-
-### Endurecer o redirect do Dashboard
-
-Em `src/pages/app/Dashboard.tsx` linha 119, só redirecionar para `/app/onboarding` depois de garantir que a query de stores foi executada com sucesso (usar `isFetched` da query além de `loadingStores`) — isso evita falso positivo quando o cache vem vazio temporariamente.
-
-## Arquivos afetados
-
-- `src/pages/app/Onboarding.tsx` — adicionar guarda de loja existente.
-- `src/pages/app/Dashboard.tsx` — usar `isFetched` antes de assumir "sem lojas".
-
-Sem mudanças de banco, sem novas dependências.
+Sem mudanças de banco, apenas no componente.
