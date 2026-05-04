@@ -45,6 +45,21 @@ REGRAS DE APRENDIZADO (memória, casos e conhecimento):
 15. Quando usar KNOWLEDGE_SNIPPETS, mencione o título do tópico ("Princípio de combos: ...").
 16. Se RULE_EVIDENCES vazio, devolva apenas executive_summary curto + missing_data_for_better_diagnosis. Não invente.
 
+REGRAS DE FORMATO (OBRIGATÓRIAS — não cumprir = resposta inválida):
+17. executive_summary: tom de CONSULTOR DIRETO conversando no WhatsApp com o dono da loja. NÃO é relatório corporativo.
+    - Linha 1: comece com o número de prejuízo estimado, em R$ ("Você está perdendo aproximadamente R$ X/mês só por causa de Y.").
+    - Linhas 2-3: explique a CONTA (ex: "Com 1.200 pedidos e 6% de cancelamento, são 72 pedidos perdidos. No seu ticket de R$ 18,75 isso some R$ 1.350 do seu bolso.").
+    - Linhas 4-5: aponte a CAUSA-RAIZ ÚNICA (não liste 5 problemas — escolha o que mais sangra).
+    - Linha final: frase imperativa curta ("Resolva isso primeiro. O resto vem depois.").
+    - Máximo 6 linhas curtas. Sem jargão. Sem "potencial sólido", sem "robusto", sem "estratégico".
+18. plan_7_days[].steps: SEMPRE 3 passos. Cada passo começa com verbo imperativo e cita ONDE clicar no painel real (iFood Parceiros / Rappi / etc conforme a plataforma da loja). Exemplo bom: "Abra o iFood Parceiros → Relatórios → Pedidos Cancelados". Exemplo ruim: "Identifique cancelamentos".
+19. plan_7_days[].time_minutes: estimativa realista (5-30 min para ações de 1 dia).
+20. plan_7_days[].expected_impact: 1 frase com número (R$/mês ou %).
+21. plan_30_days: exatamente 4 itens (semana 1, 2, 3, 4).
+    - Semana 1 = continuar/concluir o plano de 7 dias (NÃO introduz tema novo).
+    - Semanas 2 e 3 = 1 objetivo + no MÁXIMO 2 ações concretas. Nada mais.
+    - Semana 4 = SEMPRE "medir resultado" (comparar KPI da semana 1 com KPI atual). objective começa com "Medir".
+
 Você responde SEMPRE chamando a função consultive_diagnosis com TODOS os campos preenchidos.`;
 
 const TOOL_SCHEMA = {
@@ -98,11 +113,18 @@ const TOOL_SCHEMA = {
             type: "object",
             properties: {
               day: { type: "number" },
-              title: { type: "string" },
-              action: { type: "string" },
+              title: { type: "string", description: "Título curto e direto, começa com verbo (ex: 'Descobrir por que estão cancelando')." },
+              action: { type: "string", description: "Resumo em 1 frase. Use 'steps' para o passo a passo real." },
+              steps: {
+                type: "array",
+                description: "3 passos numerados, cada um começa com verbo no imperativo e cita ONDE clicar (ex: 'iFood Parceiros → Relatórios → Pedidos Cancelados'). Adapte ao painel: iFood Parceiros, Rappi Partner Portal, etc.",
+                items: { type: "string" },
+              },
+              time_minutes: { type: "number", description: "Tempo estimado para executar, em minutos." },
+              expected_impact: { type: "string", description: "1 frase com R$ ou % esperado (ex: 'reativar ~15% dos clientes que compraram uma vez')." },
               rule_id: { type: "string" },
             },
-            required: ["day", "title", "action", "rule_id"],
+            required: ["day", "title", "action", "steps", "time_minutes", "expected_impact", "rule_id"],
             additionalProperties: false,
           },
         },
@@ -113,10 +135,17 @@ const TOOL_SCHEMA = {
             properties: {
               week: { type: "number" },
               title: { type: "string" },
-              action: { type: "string" },
+              objective: { type: "string", description: "1 objetivo principal da semana, em linguagem do dono. Semana 1 = consolidar plano de 7 dias. Semana 4 = sempre 'medir resultado'." },
+              actions: {
+                type: "array",
+                description: "MÁXIMO 2 ações concretas para a semana. Nada mais.",
+                items: { type: "string" },
+                maxItems: 2,
+              },
+              action: { type: "string", description: "Resumo em 1 frase (legacy). Use 'objective' + 'actions' para a versão estruturada." },
               rule_id: { type: "string" },
             },
-            required: ["week", "title", "action", "rule_id"],
+            required: ["week", "title", "objective", "actions", "action", "rule_id"],
             additionalProperties: false,
           },
         },
